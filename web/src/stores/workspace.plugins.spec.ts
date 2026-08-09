@@ -415,7 +415,7 @@ describe("workspace store plugin flows", () => {
       createPluginDetails({
         installation: {
           id: "plugin-installation-2",
-          repoUrl: "https://github.com/MilkTeaFun/Ink-plugin.git",
+          repoUrl: "https://github.com/example/ink-plugin.git",
           repoRef: "main",
           repoSubdir: "plugins/hello-node",
         },
@@ -426,7 +426,7 @@ describe("workspace store plugin flows", () => {
         createPluginDetails({
           installation: {
             id: "plugin-installation-2",
-            repoUrl: "https://github.com/MilkTeaFun/Ink-plugin.git",
+            repoUrl: "https://github.com/example/ink-plugin.git",
             repoRef: "main",
             repoSubdir: "plugins/hello-node",
           },
@@ -435,14 +435,14 @@ describe("workspace store plugin flows", () => {
     });
 
     const installed = await store.installPluginRepository({
-      repoUrl: "https://github.com/MilkTeaFun/Ink-plugin.git",
+      repoUrl: "https://github.com/example/ink-plugin.git",
       repoRef: "main",
       repoSubdir: "plugins/hello-node",
     });
 
     expect(installed?.installation.repoSubdir).toBe("plugins/hello-node");
     expect(pluginService.installPluginFromGit).toHaveBeenCalledWith("access-token", {
-      repoUrl: "https://github.com/MilkTeaFun/Ink-plugin.git",
+      repoUrl: "https://github.com/example/ink-plugin.git",
       repoRef: "main",
       repoSubdir: "plugins/hello-node",
     });

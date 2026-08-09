@@ -30,13 +30,16 @@ func NewFetchRunner(processor FetchProcessor, logger *slog.Logger, interval time
 	}
 }
 
-func (r *FetchRunner) Start(ctx context.Context) {
+func (r *FetchRunner) Start(ctx context.Context) <-chan struct{} {
+	done := make(chan struct{})
 	if r.processor == nil || r.interval <= 0 {
-		return
+		close(done)
+		return done
 	}
 
 	ticker := time.NewTicker(r.interval)
 	go func() {
+		defer close(done)
 		defer ticker.Stop()
 
 		r.runOnce(ctx)
@@ -49,6 +52,7 @@ func (r *FetchRunner) Start(ctx context.Context) {
 			}
 		}
 	}()
+	return done
 }
 
 func (r *FetchRunner) runOnce(ctx context.Context) {

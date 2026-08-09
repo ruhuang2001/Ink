@@ -287,6 +287,26 @@ type fakePrinterRepo struct {
 	jobs     map[string]Job
 }
 
+func TestCreatePrintJobForUserReusesInternalJobID(t *testing.T) {
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	repo := newFakePrinterRepo()
+	repo.bindings["device-1"] = Binding{ID: "device-1", UserID: "user-1", Status: workspace.DeviceStatusConnected}
+	service := NewService(repo, fakeAuthenticator{}, fakeIDGenerator{}, fakeClock{now: now}, "", "", time.Second)
+	input := CreateJobInput{JobID: "delivery-stable", Title: "Scheduled", Content: "content", PrinterBindingID: "device-1"}
+
+	first, err := service.CreatePrintJobForUser(context.Background(), "user-1", input)
+	if err != nil {
+		t.Fatalf("create first job: %v", err)
+	}
+	second, err := service.CreatePrintJobForUser(context.Background(), "user-1", input)
+	if err != nil {
+		t.Fatalf("create repeated job: %v", err)
+	}
+	if first.ID != input.JobID || second.ID != first.ID || len(repo.jobs) != 1 {
+		t.Fatalf("expected one stable job, first=%+v second=%+v jobs=%d", first, second, len(repo.jobs))
+	}
+}
+
 func newFakePrinterRepo() *fakePrinterRepo {
 	return &fakePrinterRepo{
 		bindings: map[string]Binding{},

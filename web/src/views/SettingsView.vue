@@ -1336,6 +1336,19 @@ void closeAccountCreationDialog;
               @close="closePluginAddDialog"
             >
               <div class="space-y-4">
+                <aside
+                  role="note"
+                  class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                >
+                  <p class="font-medium">{{ t("settings.plugins.addDialog.securityTitle") }}</p>
+                  <p class="mt-1 leading-6">
+                    {{ t("settings.plugins.addDialog.securityWarning") }}
+                  </p>
+                  <p class="mt-1 leading-6">
+                    {{ t("settings.plugins.addDialog.permissionsWarning") }}
+                  </p>
+                </aside>
+
                 <div class="grid grid-cols-2 gap-2">
                   <button
                     type="button"

@@ -32,7 +32,7 @@ func deliveryKey(scheduleID string, itemID string) string {
 	return scheduleID + ":" + itemID
 }
 
-func (r *memoryRepo) ListFailedBySchedule(_ context.Context, scheduleID string, limit int) ([]DeliveryItem, error) {
+func (r *memoryRepo) ListRetryableBySchedule(_ context.Context, scheduleID string, limit int) ([]DeliveryItem, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -41,10 +41,13 @@ func (r *memoryRepo) ListFailedBySchedule(_ context.Context, scheduleID string, 
 		if delivery.PrintScheduleID != scheduleID {
 			continue
 		}
-		if delivery.Status != DeliveryStatusFailed {
+		if delivery.Status != DeliveryStatusFailed && delivery.Status != DeliveryStatusReserved {
 			continue
 		}
-		if delivery.AttemptCount >= MaxDeliveryAttempts {
+		if delivery.Status == DeliveryStatusFailed && delivery.AttemptCount >= MaxDeliveryAttempts {
+			continue
+		}
+		if delivery.Status == DeliveryStatusReserved && (delivery.LeaseUntil == nil || delivery.LeaseUntil.After(time.Now())) {
 			continue
 		}
 
@@ -64,6 +67,33 @@ func (r *memoryRepo) ListFailedBySchedule(_ context.Context, scheduleID string, 
 		result = result[:limit]
 	}
 	return result, nil
+}
+
+func (r *memoryRepo) ClaimDelivery(_ context.Context, candidate Delivery, leaseUntil time.Time) (Delivery, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	key := deliveryKey(candidate.PrintScheduleID, candidate.PluginItemID)
+	delivery, exists := r.deliveries[key]
+	now := leaseUntil.Add(-ReservationLease)
+	if exists {
+		if delivery.Status == DeliveryStatusPrinted ||
+			(delivery.Status == DeliveryStatusFailed && delivery.AttemptCount >= MaxDeliveryAttempts) ||
+			(delivery.Status == DeliveryStatusReserved && (delivery.LeaseUntil == nil || delivery.LeaseUntil.After(now))) {
+			return Delivery{}, false, nil
+		}
+	} else {
+		delivery = candidate
+	}
+	delivery.Status = DeliveryStatusReserved
+	delivery.AttemptCount++
+	delivery.LastError = nil
+	delivery.PrintJobID = nil
+	delivery.DeliveredAt = nil
+	delivery.LeaseUntil = &leaseUntil
+	delivery.UpdatedAt = now
+	r.deliveries[key] = delivery
+	return delivery, true, nil
 }
 
 func (r *memoryRepo) ListUndeliveredBySchedule(_ context.Context, scheduleID string, bindingID string, limit int) ([]inbox.Item, error) {
@@ -161,8 +191,11 @@ func (p *stubPrinter) CreatePrintJobForUser(_ context.Context, _ string, input p
 		return workspace.PrintJob{}, err
 	}
 
-	p.nextID++
 	p.created = append(p.created, input)
+	if input.JobID != "" {
+		return workspace.PrintJob{ID: input.JobID}, nil
+	}
+	p.nextID++
 	return workspace.PrintJob{ID: fmt.Sprintf("job-%d", p.nextID)}, nil
 }
 
@@ -308,5 +341,73 @@ func TestRunScheduleRetriesFailedDeliveriesWithoutDuplicatingRows(t *testing.T) 
 	}
 	if len(repo.deliveries) != 1 {
 		t.Fatalf("expected one delivery row after retry, got %d", len(repo.deliveries))
+	}
+}
+
+func TestConcurrentRunScheduleClaimsOnce(t *testing.T) {
+	now := time.Now().UTC()
+	repo := newMemoryRepo()
+	repo.items["item-1"] = buildItem("item-1", "binding-1", "Once", now.Add(-time.Minute))
+	printerStub := &stubPrinter{}
+	service := newService(now, repo, printerStub)
+	input := buildScheduleRunInput("schedule-1", 1)
+
+	start := make(chan struct{})
+	results := make(chan ScheduleRunResult, 2)
+	errs := make(chan error, 2)
+	for range 2 {
+		go func() {
+			<-start
+			result, err := service.RunSchedule(context.Background(), input)
+			results <- result
+			errs <- err
+		}()
+	}
+	close(start)
+	printed := 0
+	for range 2 {
+		printed += (<-results).Printed
+		if err := <-errs; err != nil {
+			t.Fatalf("run schedule: %v", err)
+		}
+	}
+	if printed != 1 || len(printerStub.created) != 1 || len(repo.deliveries) != 1 {
+		t.Fatalf("expected one claim and print, printed=%d jobs=%d deliveries=%d", printed, len(printerStub.created), len(repo.deliveries))
+	}
+}
+
+func TestDispatchOneSkipsActiveReservation(t *testing.T) {
+	now := time.Now().UTC()
+	repo := newMemoryRepo()
+	item := buildItem("item-1", "binding-1", "Reserved", now.Add(-time.Minute))
+	lease := now.Add(time.Minute)
+	delivery := Delivery{ID: "delivery-stable", PrintScheduleID: "schedule-1", PluginItemID: item.ID, Status: DeliveryStatusReserved, AttemptCount: 1, LeaseUntil: &lease, CreatedAt: now, UpdatedAt: now}
+	repo.items[item.ID] = item
+	repo.deliveries[deliveryKey("schedule-1", item.ID)] = delivery
+	printerStub := &stubPrinter{}
+	service := newService(now, repo, printerStub)
+
+	outcome, _, err := service.dispatchOne(context.Background(), buildScheduleRunInput("schedule-1", 1), DeliveryItem{Delivery: delivery, Item: item}, true)
+	if err != nil || outcome != "" || len(printerStub.created) != 0 {
+		t.Fatalf("active reservation was not skipped: outcome=%q jobs=%d err=%v", outcome, len(printerStub.created), err)
+	}
+}
+
+func TestRunScheduleReclaimsExpiredReservationWithStableID(t *testing.T) {
+	now := time.Now().UTC()
+	repo := newMemoryRepo()
+	item := buildItem("item-1", "binding-1", "Recover", now.Add(-time.Minute))
+	expired := now.Add(-time.Minute)
+	delivery := Delivery{ID: "delivery-stable", PrintScheduleID: "schedule-1", PluginItemID: item.ID, Status: DeliveryStatusReserved, AttemptCount: 1, LeaseUntil: &expired, CreatedAt: now.Add(-time.Hour), UpdatedAt: expired}
+	repo.items[item.ID] = item
+	repo.deliveries[deliveryKey("schedule-1", item.ID)] = delivery
+	printerStub := &stubPrinter{}
+	service := newService(now, repo, printerStub)
+
+	result := mustRunSchedule(t, service, buildScheduleRunInput("schedule-1", 1))
+	assertRunCounts(t, result, 1, 0, 0)
+	got := repo.deliveries[deliveryKey("schedule-1", item.ID)]
+	if got.ID != delivery.ID || got.AttemptCount != 2 || len(printerStub.created) != 1 || printerStub.created[0].JobID != delivery.ID {
+		t.Fatalf("expired reservation not stably reclaimed: delivery=%+v jobs=%+v", got, printerStub.created)
 	}
 }

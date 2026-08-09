@@ -2,12 +2,6 @@ name: dependency-review
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/dependency-review.yml"
-      - ".github/workflows/web-quality.yml"
-      - ".github/dependabot.yml"
-      - "web/package.json"
-      - "web/pnpm-lock.yaml"
 
 permissions:
   contents: read
@@ -25,4 +19,4 @@ jobs:
 
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v4
         with:
-          fail-on-severity: high
+          fail-on-severity: moderate

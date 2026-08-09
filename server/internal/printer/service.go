@@ -102,6 +102,7 @@ type BindInput struct {
 }
 
 type CreateJobInput struct {
+	JobID             string `json:"-"`
 	Title             string `json:"title"`
 	Source            string `json:"source"`
 	Content           string `json:"content"`
@@ -314,6 +315,30 @@ func (s *Service) CreatePrintJobForUser(ctx context.Context, userID string, inpu
 }
 
 func (s *Service) createPrintJobForUser(ctx context.Context, userID string, input CreateJobInput) (workspace.PrintJob, error) {
+	jobID := strings.TrimSpace(input.JobID)
+	if jobID != "" {
+		existing, err := s.repo.FindJobByID(ctx, userID, jobID)
+		if err != nil {
+			return workspace.PrintJob{}, err
+		}
+		if existing != nil {
+			if input.SubmitImmediately && existing.Status == workspace.PrintStatusFailed {
+				binding, err := s.repo.FindBindingByID(ctx, userID, existing.PrinterBindingID)
+				if err != nil {
+					return workspace.PrintJob{}, err
+				}
+				if binding == nil {
+					return workspace.PrintJob{}, ErrNotFound
+				}
+				submitted, err := s.submitJob(ctx, *binding, *existing)
+				if err != nil {
+					return workspace.PrintJob{}, err
+				}
+				return mapJob(submitted), nil
+			}
+			return mapJob(*existing), nil
+		}
+	}
 	title := strings.TrimSpace(input.Title)
 	content := strings.TrimSpace(input.Content)
 	source := strings.TrimSpace(input.Source)
@@ -333,9 +358,11 @@ func (s *Service) createPrintJobForUser(ctx context.Context, userID string, inpu
 		return workspace.PrintJob{}, ErrInvalidInput
 	}
 
-	jobID, err := s.ids.New("print")
-	if err != nil {
-		return workspace.PrintJob{}, err
+	if jobID == "" {
+		jobID, err = s.ids.New("print")
+		if err != nil {
+			return workspace.PrintJob{}, err
+		}
 	}
 
 	now := s.clock.Now()

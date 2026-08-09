@@ -2,12 +2,6 @@ name: web-quality
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/web-quality.yml"
-      - ".github/workflows/dependency-review.yml"
-      - ".github/dependabot.yml"
-      - "Makefile"
-      - "web/**"
   push:
     branches:
       - main
@@ -48,5 +42,6 @@ jobs:
           pnpm --version
 
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level moderate
       - run: pnpm format:check
       - run: pnpm check

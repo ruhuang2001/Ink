@@ -622,6 +622,10 @@ const zhCN = {
       disable: "停用",
       addDialog: {
         title: "添加插件",
+        securityTitle: "仅安装可信插件",
+        securityWarning:
+          "插件及其依赖会在服务端执行，并拥有服务器进程的权限。请只安装来自可信来源的插件。",
+        permissionsWarning: "请求的权限徽章仅是插件声明，并不代表由沙箱强制执行的授权。",
         zipUpload: "ZIP 上传",
         githubImport: "GitHub 导入",
         chooseZip: "选择 ZIP 文件",
@@ -631,7 +635,7 @@ const zhCN = {
         repoRef: "分支",
         repoSubdir: "子目录",
         placeholders: {
-          repoUrl: "例如：https://github.com/MilkTeaFun/Ink-plugin.git",
+          repoUrl: "例如：https://github.com/example/ink-plugin.git",
           repoRef: "默认 main",
           repoSubdir: "例如：plugins/acme-source",
         },

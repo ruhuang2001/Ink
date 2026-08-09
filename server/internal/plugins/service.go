@@ -1072,7 +1072,10 @@ func (s *Service) installPlugin(ctx context.Context, pluginDir string, manifest 
 	var command []string
 	switch manifest.Runtime.Type {
 	case "node":
-		command = []string{"pnpm", "install", "--frozen-lockfile"}
+		command = []string{"pnpm", "install", "--frozen-lockfile", "--ignore-scripts"}
+		if manifest.Permissions != nil && manifest.Permissions.InstallScripts {
+			command = []string{"pnpm", "install", "--frozen-lockfile"}
+		}
 	case "python":
 		command = []string{"uv", "sync", "--frozen"}
 	default:

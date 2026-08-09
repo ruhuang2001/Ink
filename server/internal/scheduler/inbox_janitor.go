@@ -47,13 +47,16 @@ func NewInboxJanitor(purger InboxPurger, clock Clock, logger *slog.Logger, inter
 	}
 }
 
-func (j *InboxJanitor) Start(ctx context.Context) {
+func (j *InboxJanitor) Start(ctx context.Context) <-chan struct{} {
+	done := make(chan struct{})
 	if j.purger == nil || j.interval <= 0 || j.retention <= 0 {
-		return
+		close(done)
+		return done
 	}
 
 	ticker := time.NewTicker(j.interval)
 	go func() {
+		defer close(done)
 		defer ticker.Stop()
 
 		j.runOnce(ctx)
@@ -66,6 +69,7 @@ func (j *InboxJanitor) Start(ctx context.Context) {
 			}
 		}
 	}()
+	return done
 }
 
 func (j *InboxJanitor) runOnce(ctx context.Context) {

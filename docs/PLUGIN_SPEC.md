@@ -220,7 +220,7 @@ Plugins should emit only simple, already-sanitized printable content.
 
 Recommended local checks for plugin authors:
 
-- run the manifest schema validation from the template repository
+- run the manifest validation and plugin tests provided by this monorepo (and use future in-repo plugin tooling when available)
 - execute `validate` with a fixture payload and assert `valid: true`
 - execute `fetch` with a fixture payload and validate every emitted item and block
 
@@ -236,7 +236,7 @@ Operators can tune these with the `PLUGIN_OUTPUT_MAX_BYTES`, `PLUGIN_FETCH_MAX_I
 
 ## Permissions
 
-`permissions` is a capability declaration. It lets plugin authors state what the plugin expects and lets administrators review risk before enabling it. The current local runner uses this for visibility and validation; network sandbox enforcement should be added by a stricter runner before exposing untrusted public plugin installation.
+`permissions` is a capability declaration. It lets plugin authors state what the plugin expects and lets administrators review risk before enabling it. Permission badges and manifest values are declarations, not sandbox grants: the current local runner does not enforce network or filesystem restrictions from them. A stricter runner must enforce capabilities before Ink can expose untrusted public plugin installation.
 
 Network modes:
 
@@ -267,7 +267,9 @@ Filesystem flags:
 - `temp`: plugin expects invocation-scoped temporary storage
 - `cache`: plugin expects persistent cache storage; the local trusted runner currently gives invocation-scoped cache only
 
-`installScripts` should be `true` only when dependency installation requires package lifecycle scripts or build hooks.
+For Node plugins, omitted or `false` `installScripts` makes Ink run `pnpm install --frozen-lockfile --ignore-scripts`. Setting it to `true` runs `pnpm install --frozen-lockfile`, allowing package lifecycle scripts. This reduces accidental Node install-time execution by default, but it is not a sandbox and does not make plugin code or dependencies trustworthy.
+
+Python plugins always install with `uv sync --frozen`. Python package build hooks may execute during that operation regardless of `installScripts`; the flag does not claim to control Python builds. Operators must therefore trust Python plugins and their full dependency chains.
 
 ## Binding Fetch State
 
@@ -344,7 +346,9 @@ Delivery order is fixed to oldest-first.
 
 ## Security Model
 
-Ink currently treats installed plugins as trusted server-side code. Plugin entrypoints run as local subprocesses with a constrained environment, isolated temporary directories, execution timeouts, and output limits. Operators should still install plugins only from trusted repositories or uploads, keep the Git host allowlist narrow, and avoid exposing plugin installation as an untrusted public marketplace flow without an additional sandbox.
+Ink treats installed plugins and their dependencies as trusted server-side code. Installation, package build hooks, and runtime entrypoints may execute code with the server process's privileges. Admin-only installation limits who can initiate installation, but it does not make untrusted code safe.
+
+Plugin entrypoints run as local subprocesses with a constrained environment, isolated temporary directories, execution timeouts, and output limits. These are defense-in-depth controls, not a security sandbox. Permission declarations are primarily review metadata, except that Node `installScripts` selects whether pnpm lifecycle scripts are ignored during installation. Operators must install only from trusted repositories or uploads, audit dependency chains, keep the Git host allowlist narrow, and avoid any public marketplace until installation and runtime have an appropriate sandbox with enforced capabilities. Python's build-hook limitation makes the trusted-only rule mandatory even at install time.
 
 ## Example Node Fetch Entrypoint
 

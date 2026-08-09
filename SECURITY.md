@@ -14,13 +14,25 @@ Ink is still in early development. Security fixes are applied to:
 
 Please use GitHub private vulnerability reporting for this repository:
 
-- https://github.com/MilkTeaFun/Ink/security/advisories/new
+- https://github.com/ruhuang2001/Ink/security/advisories/new
 
 1. Go to the repository Security tab.
 2. Choose **Report a vulnerability**.
 3. Include reproduction steps, impact, affected endpoints or files, and any proposed mitigation.
 
 Do not open a public issue for undisclosed vulnerabilities, credentials, token leaks, or exploit details.
+
+## Plugin threat boundary
+
+Ink plugins are trusted server-side code. Plugin installation, dependency resolution and build hooks, and runtime entrypoints can execute code with the server process's privileges. Restricting installation endpoints to administrators controls who may install a plugin; it does not make an untrusted plugin or dependency safe.
+
+Install plugins only from sources whose code and dependency chain you trust. Ink must not offer an untrusted public plugin marketplace until plugin installation and execution have an appropriate sandbox and enforceable capability model.
+
+## Dependency vulnerability handling
+
+Pull requests run npm dependency review, `pnpm audit`, Go reachability analysis through `govulncheck`, and CodeQL analysis for Go and JavaScript/TypeScript. Vulnerability exceptions must be narrow, evidence-based, documented beside the affected manifest, and have an expiry date.
+
+`server/osv-scanner.toml` currently records one temporary exception for `GO-2026-5932`: `openpgp` is present transitively through `go-git`, but Ink does not import that package and `govulncheck` reports no reachable package or symbol. The exception expires on 2026-11-09 and must not be renewed without another applicability review.
 
 ## What to include
 

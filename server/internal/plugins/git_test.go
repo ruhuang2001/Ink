@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -200,12 +201,16 @@ func newGitTestService(t *testing.T, cloner GitCloner, hosts []string) (*Service
 	return service, repo, pluginRoot
 }
 
-// passthroughRunner skips `pnpm install` / `uv sync` during tests so the
-// install path can be exercised without Node/Python tooling.
+// passthroughRunner recognizes dependency install commands without requiring
+// Node/Python tooling, including Node's default no-lifecycle-scripts mode.
 type passthroughRunner struct{}
 
-func (passthroughRunner) Run(_ context.Context, _ string, _ []string, _ []byte, _ RunOptions) ([]byte, []byte, error) {
-	return nil, nil, nil
+func (passthroughRunner) Run(_ context.Context, _ string, command []string, _ []byte, _ RunOptions) ([]byte, []byte, error) {
+	joined := strings.Join(command, " ")
+	if joined == "uv sync --frozen" || joined == "pnpm install --frozen-lockfile" || joined == "pnpm install --frozen-lockfile --ignore-scripts" {
+		return nil, nil, nil
+	}
+	return nil, nil, fmt.Errorf("unexpected test command: %s", joined)
 }
 
 func assertInstallFromGitHappyPath(t *testing.T, cloner *stubGitCloner, details PluginDetails) {

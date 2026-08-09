@@ -30,13 +30,16 @@ func NewRunner(processor Processor, logger *slog.Logger, interval time.Duration,
 	}
 }
 
-func (r *Runner) Start(ctx context.Context) {
+func (r *Runner) Start(ctx context.Context) <-chan struct{} {
+	done := make(chan struct{})
 	if r.processor == nil || r.interval <= 0 {
-		return
+		close(done)
+		return done
 	}
 
 	ticker := time.NewTicker(r.interval)
 	go func() {
+		defer close(done)
 		defer ticker.Stop()
 
 		r.runOnce(ctx)
@@ -49,6 +52,7 @@ func (r *Runner) Start(ctx context.Context) {
 			}
 		}
 	}()
+	return done
 }
 
 func (r *Runner) runOnce(ctx context.Context) {

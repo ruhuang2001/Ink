@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,6 +22,9 @@ type Config struct {
 	RefreshTokenTTL             time.Duration
 	RateLimitWindow             time.Duration
 	RateLimitMax                int
+	RateLimitMaxEntries         int
+	TrustedProxyCIDRs           []netip.Prefix
+	TrustedProxyHeader          string
 	AIConfigEncryptionKey       string
 	AIAllowInsecurePrivateURL   bool
 	AIProviderTimeout           time.Duration
@@ -69,6 +73,20 @@ func Load() (Config, error) {
 	}
 
 	rateLimitMax, err := envInt("LOGIN_RATE_LIMIT_MAX", 10)
+	if err != nil {
+		return Config{}, err
+	}
+
+	rateLimitMaxEntries, err := envInt("LOGIN_RATE_LIMIT_MAX_ENTRIES", 20000)
+	if err != nil {
+		return Config{}, err
+	}
+
+	trustedProxyCIDRs, err := envPrefixList("TRUSTED_PROXY_CIDRS")
+	if err != nil {
+		return Config{}, err
+	}
+	trustedProxyHeader, err := trustedProxyHeaderValue(os.Getenv("TRUSTED_PROXY_HEADER"))
 	if err != nil {
 		return Config{}, err
 	}
@@ -162,6 +180,9 @@ func Load() (Config, error) {
 		RefreshTokenTTL:             refreshTokenTTL,
 		RateLimitWindow:             rateLimitWindow,
 		RateLimitMax:                rateLimitMax,
+		RateLimitMaxEntries:         rateLimitMaxEntries,
+		TrustedProxyCIDRs:           trustedProxyCIDRs,
+		TrustedProxyHeader:          trustedProxyHeader,
 		AIConfigEncryptionKey:       os.Getenv("AI_CONFIG_ENCRYPTION_KEY"),
 		AIAllowInsecurePrivateURL:   envBool("AI_ALLOW_INSECURE_PRIVATE_URL", false),
 		AIProviderTimeout:           aiProviderTimeout,
@@ -213,6 +234,12 @@ func Load() (Config, error) {
 
 	if cfg.RateLimitMax <= 0 {
 		return Config{}, fmt.Errorf("LOGIN_RATE_LIMIT_MAX must be positive")
+	}
+	if cfg.RateLimitMaxEntries < 2 {
+		return Config{}, fmt.Errorf("LOGIN_RATE_LIMIT_MAX_ENTRIES must be at least 2")
+	}
+	if (len(cfg.TrustedProxyCIDRs) == 0) != (cfg.TrustedProxyHeader == "") {
+		return Config{}, fmt.Errorf("TRUSTED_PROXY_CIDRS and TRUSTED_PROXY_HEADER must be configured together")
 	}
 	if cfg.AIProviderTimeout <= 0 {
 		return Config{}, fmt.Errorf("AI_PROVIDER_TIMEOUT must be positive")
@@ -346,6 +373,32 @@ func envDuration(key string, fallback time.Duration) (time.Duration, error) {
 	}
 
 	return parsed, nil
+}
+
+func envPrefixList(key string) ([]netip.Prefix, error) {
+	values := envStringList(key, nil)
+	result := make([]netip.Prefix, 0, len(values))
+	for _, value := range values {
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			return nil, fmt.Errorf("%s contains invalid CIDR %q: %w", key, value, err)
+		}
+		if prefix.Addr().Is4In6() {
+			return nil, fmt.Errorf("%s contains IPv4-mapped CIDR %q; use its IPv4 CIDR equivalent", key, value)
+		}
+		result = append(result, prefix.Masked())
+	}
+	return result, nil
+}
+
+func trustedProxyHeaderValue(value string) (string, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "", "forwarded", "x-forwarded-for":
+		return value, nil
+	default:
+		return "", fmt.Errorf("TRUSTED_PROXY_HEADER must be forwarded or x-forwarded-for")
+	}
 }
 
 // envStringList returns a comma-separated env var as a trimmed non-empty

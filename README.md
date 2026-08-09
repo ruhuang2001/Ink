@@ -50,7 +50,7 @@ The development admin credentials are saved to `server/.dev-admin-password` on f
 
 - `make check-web`: lint, format check, unit tests, and production build for the frontend
 - `make check-api`: `gofmt`, Go tests, and backend build
-- `make smoke-api`: login + workspace load/save/restore smoke test against a real API process
+- `make smoke-api`: auth, workspace persistence, plugin lifecycle, and schedule delivery smoke test against a real API and PostgreSQL
 - `make build-web`: production frontend build
 - `make test-api`: backend unit tests only
 
@@ -67,6 +67,10 @@ The development admin credentials are saved to `server/.dev-admin-password` on f
 - Account authentication and per-user workspace persistence
 - Printer bindings, print jobs, plugin installation, schedules, and feedback endpoints
 - CI for web quality, server quality, dependency review, CodeQL, release automation, and Scorecard scanning
+
+## Plugin security
+
+Ink plugins are trusted server-side code, not sandboxed extensions. Installation, dependency builds, and runtime entrypoints can execute with the server process's privileges, so operators must install only plugins and dependencies they trust. See the [plugin security model](docs/PLUGIN_SPEC.md#security-model) for details.
 
 ## Contributing
 

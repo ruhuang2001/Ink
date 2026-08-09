@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+ignoreUntil = 2026-11-09
+reason = "openpgp is an unreachable transitive package from go-git; govulncheck v1.6.0 reports no imported package or reachable symbol. Re-evaluate when go-git removes openpgp or before this exception expires."

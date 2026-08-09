@@ -226,12 +226,81 @@ func (installPassthroughRunner) Run(ctx context.Context, workdir string, command
 		if command[0] == "uv" && strings.Join(command[1:], " ") == "sync --frozen" {
 			return nil, nil, nil
 		}
-		if command[0] == "pnpm" && strings.Join(command[1:], " ") == "install --frozen-lockfile" {
+		if command[0] == "pnpm" && (strings.Join(command[1:], " ") == "install --frozen-lockfile" || strings.Join(command[1:], " ") == "install --frozen-lockfile --ignore-scripts") {
 			return nil, nil, nil
 		}
 	}
 
 	return execRunner{}.Run(ctx, workdir, command, stdin, options)
+}
+
+type commandCaptureRunner struct {
+	commands [][]string
+}
+
+func (r *commandCaptureRunner) Run(_ context.Context, _ string, command []string, _ []byte, _ RunOptions) ([]byte, []byte, error) {
+	r.commands = append(r.commands, append([]string{}, command...))
+	return nil, nil, nil
+}
+
+func TestInstallPluginDependencyCommands(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		manifest    Manifest
+		wantCommand []string
+	}{
+		{
+			name:        "node permissions omitted ignores scripts",
+			manifest:    Manifest{Runtime: RuntimeSpec{Type: "node"}},
+			wantCommand: []string{"pnpm", "install", "--frozen-lockfile", "--ignore-scripts"},
+		},
+		{
+			name: "node install scripts false ignores scripts",
+			manifest: Manifest{
+				Runtime:     RuntimeSpec{Type: "node"},
+				Permissions: &PluginPermissions{InstallScripts: false},
+			},
+			wantCommand: []string{"pnpm", "install", "--frozen-lockfile", "--ignore-scripts"},
+		},
+		{
+			name: "node install scripts true allows scripts",
+			manifest: Manifest{
+				Runtime:     RuntimeSpec{Type: "node"},
+				Permissions: &PluginPermissions{InstallScripts: true},
+			},
+			wantCommand: []string{"pnpm", "install", "--frozen-lockfile"},
+		},
+		{
+			name:        "python sync may execute package build hooks",
+			manifest:    Manifest{Runtime: RuntimeSpec{Type: "python"}},
+			wantCommand: []string{"uv", "sync", "--frozen"},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			runner := &commandCaptureRunner{}
+			service := &Service{
+				runner:         runner,
+				installTimeout: time.Second,
+				runtimeLimits:  normalizeRuntimeLimits(RuntimeLimits{}),
+			}
+
+			if err := service.installPlugin(context.Background(), t.TempDir(), tt.manifest); err != nil {
+				t.Fatalf("installPlugin() error = %v", err)
+			}
+			if len(runner.commands) != 1 {
+				t.Fatalf("captured %d commands, want 1", len(runner.commands))
+			}
+			if got := strings.Join(runner.commands[0], " "); got != strings.Join(tt.wantCommand, " ") {
+				t.Fatalf("command = %q, want %q", got, strings.Join(tt.wantCommand, " "))
+			}
+		})
+	}
 }
 
 func TestExecRunnerUsesIsolatedEnvironment(t *testing.T) {

@@ -641,6 +641,11 @@ const enUS = {
       disable: "Disable",
       addDialog: {
         title: "Add plugin",
+        securityTitle: "Install trusted plugins only",
+        securityWarning:
+          "Plugins and their dependencies execute on the server with the server process privileges. Install only from trusted sources.",
+        permissionsWarning:
+          "Requested permission badges are declarations, not grants enforced by a sandbox.",
         zipUpload: "Upload ZIP",
         githubImport: "Import from GitHub",
         chooseZip: "Choose ZIP file",
@@ -650,7 +655,7 @@ const enUS = {
         repoRef: "Branch",
         repoSubdir: "Subdirectory",
         placeholders: {
-          repoUrl: "Example: https://github.com/MilkTeaFun/Ink-plugin.git",
+          repoUrl: "Example: https://github.com/example/ink-plugin.git",
           repoRef: "Default: main",
           repoSubdir: "Example: plugins/acme-source",
         },

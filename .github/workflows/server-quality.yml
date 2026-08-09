@@ -2,10 +2,6 @@ name: server-quality
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/server-quality.yml"
-      - "Makefile"
-      - "server/**"
   push:
     branches:
       - main
@@ -63,6 +59,21 @@ jobs:
           working-directory: server
           args: --default=none --enable=errcheck --enable=govet --enable=ineffassign --enable=staticcheck --disable=unused ./...
 
+  govulncheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: scan reachable Go vulnerabilities
+        working-directory: server
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
   api-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -87,6 +98,9 @@ jobs:
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
+
+      - name: install uv for plugin smoke fixture
+        run: pipx install uv==0.8.22
 
       - name: run api smoke test
         env:

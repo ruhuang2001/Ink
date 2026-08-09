@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -32,6 +33,15 @@ import (
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
+const (
+	httpReadHeaderTimeout = 5 * time.Second
+	httpReadTimeout       = 15 * time.Second
+	httpWriteTimeout      = 2 * time.Minute
+	httpIdleTimeout       = 60 * time.Second
+	httpMaxHeaderBytes    = 1 << 20
+	shutdownTimeout       = 10 * time.Second
+)
+
 func main() {
 	if err := config.LoadDotEnv(); err != nil {
 		panic(err)
@@ -44,7 +54,9 @@ func main() {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	ctx := context.Background()
+	ctx, cancelRoot := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancelRoot()
+
 	db, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		panic(err)
@@ -144,13 +156,13 @@ func main() {
 		clock.SystemClock{},
 	)
 	fetchRunner := scheduler.NewFetchRunner(pluginFetchService, logger, cfg.SchedulerPollInterval, 10)
-	fetchRunner.Start(ctx)
+	fetchDone := fetchRunner.Start(ctx)
 
 	schedulerRunner := scheduler.NewRunner(scheduleService, logger, cfg.SchedulerPollInterval, 10)
-	schedulerRunner.Start(ctx)
+	schedulerDone := schedulerRunner.Start(ctx)
 
 	inboxJanitor := scheduler.NewInboxJanitor(inboxService, clock.SystemClock{}, logger, cfg.InboxJanitorInterval, cfg.InboxRetention)
-	inboxJanitor.Start(ctx)
+	janitorDone := inboxJanitor.Start(ctx)
 
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
@@ -166,29 +178,55 @@ func main() {
 			logger,
 			cfg.RateLimitWindow,
 			cfg.RateLimitMax,
+			cfg.RateLimitMaxEntries,
+			cfg.TrustedProxyCIDRs,
+			cfg.TrustedProxyHeader,
 			cfg.PluginUploadMaxBytes,
 		).Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadHeaderTimeout: httpReadHeaderTimeout,
+		ReadTimeout:       httpReadTimeout,
+		WriteTimeout:      httpWriteTimeout,
+		IdleTimeout:       httpIdleTimeout,
+		MaxHeaderBytes:    httpMaxHeaderBytes,
 	}
 
 	logger.Info("starting auth api", "port", cfg.Port)
 
-	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	serverErrors := make(chan error, 1)
+	go func() { serverErrors <- server.ListenAndServe() }()
+
+	var serveErr error
+	select {
+	case <-ctx.Done():
+	case err := <-serverErrors:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErr = err
 			logger.Error("server stopped unexpectedly", "error", err)
-			os.Exit(1)
 		}
-	}()
+		cancelRoot()
+	}
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancelShutdown()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown failed", "error", err)
-		os.Exit(1)
+		if serveErr == nil {
+			serveErr = err
+		}
+	}
+
+	for _, worker := range []<-chan struct{}{fetchDone, schedulerDone, janitorDone} {
+		select {
+		case <-worker:
+		case <-shutdownCtx.Done():
+			logger.Error("worker shutdown timed out", "error", shutdownCtx.Err())
+			if serveErr == nil {
+				serveErr = shutdownCtx.Err()
+			}
+		}
+	}
+
+	if serveErr != nil {
+		panic(serveErr)
 	}
 }

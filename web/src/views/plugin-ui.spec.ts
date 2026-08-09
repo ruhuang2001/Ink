@@ -18,7 +18,7 @@ function buildExampleUrl(path: string) {
 }
 
 function buildFixtureRepoUrl() {
-  return "https://github.com/MilkTeaFun/Ink-plugin.git";
+  return "https://github.com/example/ink-plugin.git";
 }
 
 function buildToken(kind: string) {
@@ -343,6 +343,12 @@ describe("plugin ui flows", () => {
       .find((button) => button.text() === "添加插件")
       ?.trigger("click");
     await nextTick();
+
+    const securityNote = wrapper.find("[role='note']");
+    expect(securityNote.exists()).toBe(true);
+    expect(securityNote.text()).toContain("插件及其依赖会在服务端执行");
+    expect(securityNote.text()).toContain("仅是插件声明");
+    expect(securityNote.text()).toContain("并不代表由沙箱强制执行的授权");
 
     const fileInput = wrapper.find("input[type='file']");
     Object.defineProperty(fileInput.element, "files", {

@@ -15,11 +15,13 @@ import (
 type DeliveryStatus string
 
 const (
-	DeliveryStatusPrinted DeliveryStatus = "printed"
-	DeliveryStatusFailed  DeliveryStatus = "failed"
+	DeliveryStatusReserved DeliveryStatus = "reserved"
+	DeliveryStatusPrinted  DeliveryStatus = "printed"
+	DeliveryStatusFailed   DeliveryStatus = "failed"
 
 	DefaultDailyCap     = 50
 	MaxDeliveryAttempts = 3
+	ReservationLease    = 2 * time.Minute
 )
 
 type Delivery struct {
@@ -31,6 +33,7 @@ type Delivery struct {
 	LastError       *string
 	PrintJobID      *string
 	DeliveredAt     *time.Time
+	LeaseUntil      *time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
@@ -56,8 +59,9 @@ type ScheduleRunResult struct {
 }
 
 type Repository interface {
-	ListFailedBySchedule(ctx context.Context, scheduleID string, limit int) ([]DeliveryItem, error)
+	ListRetryableBySchedule(ctx context.Context, scheduleID string, limit int) ([]DeliveryItem, error)
 	ListUndeliveredBySchedule(ctx context.Context, scheduleID string, bindingID string, limit int) ([]inbox.Item, error)
+	ClaimDelivery(ctx context.Context, delivery Delivery, leaseUntil time.Time) (Delivery, bool, error)
 	SaveDelivery(ctx context.Context, delivery Delivery) error
 	CountPrintedInLast24h(ctx context.Context, bindingID string, since time.Time) (int, error)
 }
@@ -168,9 +172,18 @@ func (s *Service) dispatchOne(
 	current DeliveryItem,
 	sendConfirmation bool,
 ) (DeliveryStatus, string, error) {
-	if current.Delivery.ID != "" && current.Delivery.AttemptCount >= MaxDeliveryAttempts {
+	delivery, err := s.buildDelivery(current, input.ScheduleID)
+	if err != nil {
+		return "", "", err
+	}
+	delivery, claimed, err := s.repo.ClaimDelivery(ctx, delivery, s.clock.Now().Add(ReservationLease))
+	if err != nil {
+		return "", "", err
+	}
+	if !claimed {
 		return "", "", nil
 	}
+	current.Delivery = delivery
 
 	rendered, err := printer.RenderBlocksToText(current.Item.Blocks)
 	if err != nil {
@@ -183,6 +196,7 @@ func (s *Service) dispatchOne(
 	}
 
 	job, err := s.printer.CreatePrintJobForUser(ctx, input.Binding.UserID, printer.CreateJobInput{
+		JobID:             delivery.ID,
 		Title:             current.Item.Title,
 		Source:            source,
 		Content:           rendered,
@@ -194,13 +208,9 @@ func (s *Service) dispatchOne(
 	}
 
 	now := s.clock.Now()
-	delivery, err := s.buildDelivery(current, input.ScheduleID)
-	if err != nil {
-		return "", "", err
-	}
 	delivery.Status = DeliveryStatusPrinted
-	delivery.AttemptCount++
 	delivery.LastError = nil
+	delivery.LeaseUntil = nil
 	delivery.UpdatedAt = now
 	delivery.DeliveredAt = &now
 	delivery.PrintJobID = &job.ID
@@ -221,8 +231,8 @@ func (s *Service) saveFailed(ctx context.Context, current DeliveryItem, schedule
 		trimmed = "dispatch failed"
 	}
 	delivery.Status = DeliveryStatusFailed
-	delivery.AttemptCount++
 	delivery.LastError = &trimmed
+	delivery.LeaseUntil = nil
 	delivery.PrintJobID = nil
 	delivery.DeliveredAt = nil
 	delivery.UpdatedAt = now
@@ -269,7 +279,7 @@ func (s *Service) loadScheduleCandidates(
 	bindingID string,
 	budget int,
 ) ([]DeliveryItem, error) {
-	failed, err := s.repo.ListFailedBySchedule(ctx, scheduleID, budget)
+	failed, err := s.repo.ListRetryableBySchedule(ctx, scheduleID, budget)
 	if err != nil {
 		return nil, err
 	}

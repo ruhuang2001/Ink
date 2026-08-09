@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
+	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,7 +53,12 @@ type FeedbackService interface {
 	Submit(ctx context.Context, accessToken string, input feedback.SubmitInput) error
 }
 
-const pluginUploadMultipartMemory int64 = 32 << 10
+const (
+	defaultJSONMaxBytes   int64 = 1 << 20
+	workspaceJSONMaxBytes int64 = 4 << 20
+
+	pluginUploadMultipartMemory int64 = 32 << 10
+)
 
 // Server exposes the HTTP handlers for authentication endpoints.
 type Server struct {
@@ -66,6 +72,8 @@ type Server struct {
 	schedules            ScheduleService
 	logger               *slog.Logger
 	rateLimiter          *LoginRateLimiter
+	trustedProxyCIDRs    []netip.Prefix
+	trustedProxyHeader   string
 	pluginUploadMaxBytes int64
 }
 
@@ -82,6 +90,9 @@ func NewServer(
 	logger *slog.Logger,
 	rateWindow time.Duration,
 	rateMax int,
+	rateMaxEntries int,
+	trustedProxyCIDRs []netip.Prefix,
+	trustedProxyHeader string,
 	pluginUploadMaxBytes int64,
 ) *Server {
 	return &Server{
@@ -94,7 +105,9 @@ func NewServer(
 		pluginRuns:           pluginRunService,
 		schedules:            scheduleService,
 		logger:               logger,
-		rateLimiter:          NewLoginRateLimiter(rateWindow, rateMax),
+		rateLimiter:          NewLoginRateLimiter(rateWindow, rateMax, rateMaxEntries),
+		trustedProxyCIDRs:    append([]netip.Prefix(nil), trustedProxyCIDRs...),
+		trustedProxyHeader:   trustedProxyHeader,
 		pluginUploadMaxBytes: pluginUploadMaxBytes,
 	}
 }
@@ -240,6 +253,36 @@ func (s *Server) wrap(next func(http.ResponseWriter, *http.Request, string)) htt
 	}
 }
 
+func decodeJSON(w http.ResponseWriter, r *http.Request, requestID string, dst any, limit int64, allowEmpty bool) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(dst); err != nil {
+		if allowEmpty && errors.Is(err, io.EOF) {
+			return true
+		}
+		writeJSONDecodeError(w, requestID, err)
+		return false
+	}
+
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		writeJSONDecodeError(w, requestID, err)
+		return false
+	}
+	return true
+}
+
+func writeJSONDecodeError(w http.ResponseWriter, requestID string, err error) {
+	var maxBytesError *http.MaxBytesError
+	if errors.As(err, &maxBytesError) {
+		writeError(w, requestID, http.StatusRequestEntityTooLarge, "request_too_large", "请求体过大。")
+		return
+	}
+	writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+}
+
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
@@ -247,13 +290,12 @@ func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, requestID string) {
 	var payload loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
-	meta := clientMetaFromRequest(r)
-	if !s.rateLimiter.Allow(meta.IPAddress + ":" + auth.NormalizeEmail(payload.Email)) {
+	meta := s.clientMetaFromRequest(r)
+	if !s.rateLimiter.Allow("ip:"+meta.IPAddress, "account:"+auth.NormalizeEmail(payload.Email)) {
 		writeError(w, requestID, http.StatusTooManyRequests, "rate_limited", "登录尝试过于频繁，请稍后再试。")
 		return
 	}
@@ -278,12 +320,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, requestID s
 
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request, requestID string) {
 	var payload refreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
-	result, err := s.auth.Refresh(r.Context(), payload.RefreshToken, clientMetaFromRequest(r))
+	result, err := s.auth.Refresh(r.Context(), payload.RefreshToken, s.clientMetaFromRequest(r))
 	if err != nil {
 		s.writeAuthError(w, requestID, err)
 		return
@@ -315,8 +356,8 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, requestID stri
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request, requestID string) {
 	var payload logoutRequest
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&payload)
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, true) {
+		return
 	}
 
 	if err := s.auth.Logout(r.Context(), bearerToken(r.Header.Get("Authorization")), payload.RefreshToken); err != nil {
@@ -334,8 +375,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, re
 	}
 
 	var payload changePasswordRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -344,7 +384,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, re
 		accessToken,
 		payload.CurrentPassword,
 		payload.NewPassword,
-		clientMetaFromRequest(r),
+		s.clientMetaFromRequest(r),
 	); err != nil {
 		s.writeAuthError(w, requestID, err)
 		return
@@ -361,8 +401,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, reques
 	}
 
 	var payload createUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -403,8 +442,7 @@ func (s *Server) handleSaveWorkspace(w http.ResponseWriter, r *http.Request, req
 	}
 
 	var state workspace.State
-	if err := json.NewDecoder(r.Body).Decode(&state); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &state, workspaceJSONMaxBytes, false) {
 		return
 	}
 
@@ -441,8 +479,7 @@ func (s *Server) handleSaveAIConfig(w http.ResponseWriter, r *http.Request, requ
 	}
 
 	var payload aiConfigRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -469,8 +506,7 @@ func (s *Server) handleGenerateAIReply(w http.ResponseWriter, r *http.Request, r
 	}
 
 	var payload aiReplyRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -549,8 +585,7 @@ func (s *Server) handleInstallPluginFromGit(w http.ResponseWriter, r *http.Reque
 	}
 
 	var req installPluginFromGitRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_json", "请求体必须是 JSON。")
+	if !decodeJSON(w, r, requestID, &req, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -623,8 +658,7 @@ func (s *Server) handleSavePluginBinding(w http.ResponseWriter, r *http.Request,
 	}
 
 	var payload pluginBindingRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -649,8 +683,7 @@ func (s *Server) handleTestPluginBinding(w http.ResponseWriter, r *http.Request,
 	}
 
 	var payload pluginBindingRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -674,12 +707,9 @@ func (s *Server) handleRunPlugin(w http.ResponseWriter, r *http.Request, request
 		return
 	}
 
-	if r.ContentLength > 0 {
-		var payload map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
-			return
-		}
+	var payload struct{}
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, true) {
+		return
 	}
 
 	result, err := s.pluginRuns.RunManual(r.Context(), accessToken, r.PathValue("installationID"))
@@ -715,8 +745,7 @@ func (s *Server) handleBindPrinter(w http.ResponseWriter, r *http.Request, reque
 	}
 
 	var payload bindPrinterRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -756,8 +785,7 @@ func (s *Server) handleSubmitFeedback(w http.ResponseWriter, r *http.Request, re
 	}
 
 	var payload submitFeedbackRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -795,8 +823,7 @@ func (s *Server) handleCreatePrintJob(w http.ResponseWriter, r *http.Request, re
 	}
 
 	var payload createPrintJobRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -855,8 +882,7 @@ func (s *Server) handleUpdatePrintJobDevice(w http.ResponseWriter, r *http.Reque
 	}
 
 	var payload updatePrintJobDeviceRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -895,8 +921,7 @@ func (s *Server) handleCreatePrintSchedule(w http.ResponseWriter, r *http.Reques
 	}
 
 	var payload printScheduleRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -928,8 +953,7 @@ func (s *Server) handleUpdatePrintSchedule(w http.ResponseWriter, r *http.Reques
 	}
 
 	var payload printScheduleRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
 		return
 	}
 
@@ -960,12 +984,9 @@ func (s *Server) handleRunPrintSchedule(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	if r.ContentLength > 0 {
-		var payload map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
-			return
-		}
+	var payload struct{}
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, true) {
+		return
 	}
 
 	result, err := s.schedules.RunNow(r.Context(), accessToken, r.PathValue("scheduleID"))
@@ -1151,67 +1172,278 @@ func bearerToken(header string) string {
 	return strings.TrimSpace(strings.TrimPrefix(header, prefix))
 }
 
-func clientMetaFromRequest(r *http.Request) auth.ClientMeta {
+func (s *Server) clientMetaFromRequest(r *http.Request) auth.ClientMeta {
 	return auth.ClientMeta{
 		ClientType: session.ClientTypeWeb,
 		UserAgent:  r.UserAgent(),
-		IPAddress:  requestIP(r),
+		IPAddress:  requestIP(r, s.trustedProxyCIDRs, s.trustedProxyHeader),
 	}
 }
 
-func requestIP(r *http.Request) string {
-	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); forwarded != "" {
-		return forwarded
+func requestIP(r *http.Request, trustedProxyCIDRs []netip.Prefix, trustedProxyHeader string) string {
+	peer, ok := parseForwardedAddress(strings.TrimSpace(r.RemoteAddr))
+	if !ok {
+		return strings.TrimSpace(r.RemoteAddr)
+	}
+	if !addressInPrefixes(peer, trustedProxyCIDRs) {
+		return peer.String()
 	}
 
-	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
-	if err == nil {
-		return host
+	chain, ok := forwardedChain(r.Header, trustedProxyHeader)
+	if !ok || len(chain) == 0 {
+		return peer.String()
 	}
+	current := peer
+	for index := len(chain) - 1; index >= 0; index-- {
+		if !addressInPrefixes(current, trustedProxyCIDRs) {
+			return current.String()
+		}
+		current = chain[index]
+	}
+	return current.String()
+}
 
-	return strings.TrimSpace(r.RemoteAddr)
+func forwardedChain(header http.Header, trustedProxyHeader string) ([]netip.Addr, bool) {
+	if trustedProxyHeader == "" {
+		return nil, true
+	}
+	values := header.Values(http.CanonicalHeaderKey(trustedProxyHeader))
+	if len(values) == 0 {
+		return nil, true
+	}
+	if trustedProxyHeader == "forwarded" {
+		return parseForwardedHeader(strings.Join(values, ","))
+	}
+	parts := strings.Split(strings.Join(values, ","), ",")
+	result := make([]netip.Addr, 0, len(parts))
+	for _, part := range parts {
+		address, ok := parseForwardedAddress(strings.TrimSpace(part))
+		if !ok {
+			return nil, false
+		}
+		result = append(result, address)
+	}
+	return result, true
+}
+
+func parseForwardedHeader(value string) ([]netip.Addr, bool) {
+	elements, ok := splitForwardedValue(value, ',')
+	if !ok {
+		return nil, false
+	}
+	result := make([]netip.Addr, 0, len(elements))
+	for _, element := range elements {
+		var rawAddress string
+		seenParameters := make(map[string]struct{})
+		parameters, ok := splitForwardedValue(element, ';')
+		if !ok || len(parameters) == 0 {
+			return nil, false
+		}
+		for _, parameter := range parameters {
+			key, value, found := strings.Cut(strings.TrimSpace(parameter), "=")
+			key = strings.ToLower(strings.TrimSpace(key))
+			if !found || !isHTTPToken(key) {
+				return nil, false
+			}
+			if _, duplicate := seenParameters[key]; duplicate {
+				return nil, false
+			}
+			seenParameters[key] = struct{}{}
+			parsedValue, ok := parseForwardedParameter(value)
+			if !ok {
+				return nil, false
+			}
+			if key == "for" {
+				rawAddress = parsedValue
+			}
+		}
+		address, ok := parseForwardedAddress(rawAddress)
+		if !ok {
+			return nil, false
+		}
+		result = append(result, address)
+	}
+	return result, true
+}
+
+func splitForwardedValue(value string, separator byte) ([]string, bool) {
+	result := []string{}
+	start := 0
+	quoted := false
+	escaped := false
+	for index := 0; index < len(value); index++ {
+		current := value[index]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if quoted && current == '\\' {
+			escaped = true
+			continue
+		}
+		if current == '"' {
+			quoted = !quoted
+			continue
+		}
+		if current == separator && !quoted {
+			result = append(result, value[start:index])
+			start = index + 1
+		}
+	}
+	if quoted || escaped {
+		return nil, false
+	}
+	return append(result, value[start:]), true
+}
+
+func parseForwardedParameter(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, `"`) {
+		unquoted, err := strconv.Unquote(value)
+		if err != nil || hasControlCharacter(unquoted) {
+			return "", false
+		}
+		return unquoted, true
+	}
+	if !isHTTPToken(value) {
+		return "", false
+	}
+	return value, true
+}
+
+func isHTTPToken(value string) bool {
+	if value == "" {
+		return false
+	}
+	const separators = `()<>@,;:\"/[]?={} `
+	for index := 0; index < len(value); index++ {
+		current := value[index]
+		if current <= 0x20 || current >= 0x7f || strings.ContainsRune(separators, rune(current)) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasControlCharacter(value string) bool {
+	for index := 0; index < len(value); index++ {
+		if value[index] < 0x20 || value[index] == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+func parseForwardedAddress(value string) (netip.Addr, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.EqualFold(value, "unknown") || strings.HasPrefix(value, "_") {
+		return netip.Addr{}, false
+	}
+	if addressPort, err := netip.ParseAddrPort(value); err == nil {
+		return addressPort.Addr().Unmap(), true
+	}
+	address, err := netip.ParseAddr(value)
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	return address.Unmap(), true
+}
+
+func addressInPrefixes(address netip.Addr, prefixes []netip.Prefix) bool {
+	for _, prefix := range prefixes {
+		if prefix.Contains(address) {
+			return true
+		}
+	}
+	return false
 }
 
 // LoginRateLimiter limits repeated login attempts within a fixed time window.
 type LoginRateLimiter struct {
-	mu     sync.Mutex
-	window time.Duration
-	max    int
-	hits   map[string][]time.Time
+	mu          sync.Mutex
+	window      time.Duration
+	max         int
+	maxEntries  int
+	hits        map[string][]time.Time
+	lastSeen    map[string]time.Time
+	lastCleanup time.Time
+	now         func() time.Time
 }
 
 // NewLoginRateLimiter creates a rate limiter for login attempts.
-func NewLoginRateLimiter(window time.Duration, max int) *LoginRateLimiter {
+func NewLoginRateLimiter(window time.Duration, max int, maxEntries int) *LoginRateLimiter {
 	return &LoginRateLimiter{
-		window: window,
-		max:    max,
-		hits:   make(map[string][]time.Time),
+		window:     window,
+		max:        max,
+		maxEntries: maxEntries,
+		hits:       make(map[string][]time.Time),
+		lastSeen:   make(map[string]time.Time),
+		now:        time.Now,
 	}
 }
 
-// Allow records a login attempt and reports whether it is still within the limit.
-func (l *LoginRateLimiter) Allow(key string) bool {
+// Allow atomically records one login attempt against every supplied dimension.
+func (l *LoginRateLimiter) Allow(keys ...string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	now := time.Now()
+	now := l.now()
 	cutoff := now.Add(-l.window)
-	windowHits := l.hits[key][:0]
-
-	for _, hit := range l.hits[key] {
-		if hit.After(cutoff) {
-			windowHits = append(windowHits, hit)
-		}
+	if l.lastCleanup.IsZero() || now.Sub(l.lastCleanup) >= l.window {
+		l.cleanup(cutoff)
+		l.lastCleanup = now
 	}
-
-	if len(windowHits) >= l.max {
-		l.hits[key] = windowHits
+	if len(l.hits)+missingKeyCount(l.hits, keys) > l.maxEntries {
 		return false
 	}
 
-	windowHits = append(windowHits, now)
-	l.hits[key] = windowHits
-	return true
+	windowHits := make(map[string][]time.Time, len(keys))
+	allowed := true
+	for _, key := range keys {
+		current := l.hits[key][:0]
+		for _, hit := range l.hits[key] {
+			if hit.After(cutoff) {
+				current = append(current, hit)
+			}
+		}
+		windowHits[key] = current
+		if len(current) >= l.max {
+			allowed = false
+		}
+	}
+
+	for key, current := range windowHits {
+		if len(current) < l.max {
+			current = append(current, now)
+		}
+		l.hits[key] = current
+		l.lastSeen[key] = now
+	}
+	return allowed
+}
+
+func (l *LoginRateLimiter) cleanup(cutoff time.Time) {
+	for key, seen := range l.lastSeen {
+		if !seen.After(cutoff) {
+			delete(l.hits, key)
+			delete(l.lastSeen, key)
+		}
+	}
+}
+
+func missingKeyCount(existing map[string][]time.Time, keys []string) int {
+	missing := 0
+	seen := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		if _, ok := existing[key]; !ok {
+			missing++
+		}
+	}
+	return missing
 }
 
 type contextKey string
