@@ -1315,10 +1315,10 @@ func unzipSecureWithLimit(zipPath string, destination string, maxUncompressedByt
 	destination = filepath.Clean(destination)
 
 	for _, file := range reader.File {
-		cleanName := filepath.Clean(file.Name)
-		if strings.HasPrefix(cleanName, "..") || filepath.IsAbs(cleanName) {
+		if !filepath.IsLocal(file.Name) {
 			return fmt.Errorf("%w: invalid zip entry path", ErrInvalidPlugin)
 		}
+		cleanName := filepath.Clean(file.Name)
 		if file.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("%w: symbolic links are not allowed", ErrInvalidPlugin)
 		}

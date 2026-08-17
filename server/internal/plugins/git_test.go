@@ -363,6 +363,24 @@ func TestInstallFromGitRejectsSubdirEscape(t *testing.T) {
 	}
 }
 
+func TestResolvePluginDirectoryInCloneRejectsEscapingSymlink(t *testing.T) {
+	t.Parallel()
+
+	cloneDir := t.TempDir()
+	outsideDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outsideDir, "ink-plugin.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatalf("write outside manifest: %v", err)
+	}
+	if err := os.Symlink(outsideDir, filepath.Join(cloneDir, "plugin")); err != nil {
+		t.Fatalf("create escaping symlink: %v", err)
+	}
+
+	_, err := resolvePluginDirectoryInClone(cloneDir, "plugin")
+	if !errors.Is(err, ErrInvalidPlugin) {
+		t.Fatalf("expected ErrInvalidPlugin, got %v", err)
+	}
+}
+
 func TestInstallFromGitMissingSubdirManifest(t *testing.T) {
 	t.Parallel()
 

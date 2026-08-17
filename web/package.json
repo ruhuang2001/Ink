@@ -52,15 +52,5 @@
       "pnpm exec oxfmt -c .oxfmtrc.json --no-error-on-unmatched-pattern"
     ]
   },
-  "packageManager": "pnpm@10.28.0",
-  "pnpm": {
-    "overrides": {
-      "brace-expansion": "2.1.4",
-      "js-cookie": "3.0.7",
-      "nanoid": "3.3.17",
-      "picomatch": "4.0.4",
-      "undici": "7.29.0",
-      "yaml": "2.8.3"
-    }
-  }
+  "packageManager": "pnpm@10.28.0"
 }

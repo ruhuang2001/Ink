@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 )
@@ -163,16 +164,10 @@ func sanitizeSubdir(subdir string) (string, error) {
 	if subdir == "" {
 		return "", nil
 	}
-	if filepath.IsAbs(subdir) {
+	if !filepath.IsLocal(subdir) {
 		return "", fmt.Errorf("%w: subdir must be a relative path", ErrInvalidInput)
 	}
 	cleaned := filepath.Clean(subdir)
-	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("%w: subdir must not escape the repository root", ErrInvalidInput)
-	}
-	if filepath.IsAbs(cleaned) {
-		return "", fmt.Errorf("%w: subdir must be a relative path", ErrInvalidInput)
-	}
 	return cleaned, nil
 }
 
@@ -182,10 +177,12 @@ func sanitizeSubdir(subdir string) (string, error) {
 // searched.
 func resolvePluginDirectoryInClone(cloneDir string, subdir string) (string, error) {
 	if subdir != "" {
-		pluginDir := filepath.Join(cloneDir, subdir)
-		rel, err := filepath.Rel(cloneDir, pluginDir)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		if !filepath.IsLocal(subdir) {
 			return "", fmt.Errorf("%w: subdir escapes the repository", ErrInvalidInput)
+		}
+		pluginDir, err := securejoin.SecureJoin(cloneDir, subdir)
+		if err != nil {
+			return "", fmt.Errorf("%w: invalid repository subdir", ErrInvalidInput)
 		}
 		info, err := os.Stat(pluginDir)
 		if err != nil || !info.IsDir() {

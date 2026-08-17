@@ -629,6 +629,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   let flashTimer = 0;
   let remoteSaveTimer = 0;
   let remoteSavePromise: Promise<boolean> | null = null;
+  let remoteSavePending = false;
   let remotePrintStatusTimer = 0;
   let remotePrintStatusPromise: Promise<void> | null = null;
 
@@ -938,6 +939,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   async function persistRemoteWorkspace() {
     if (remoteSavePromise) {
+      remoteSavePending = true;
       return remoteSavePromise;
     }
 
@@ -952,7 +954,15 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     workspaceSyncError.value = "";
     remoteSavePromise = (async () => {
       try {
-        await saveWorkspaceStateWithApi(currentSession.accessToken, workspaceState.value);
+        do {
+          remoteSavePending = false;
+          await saveWorkspaceStateWithApi(currentSession.accessToken, workspaceState.value);
+        } while (
+          remoteSavePending &&
+          authSession.value?.accessToken === currentSession.accessToken &&
+          authUser.value?.id === currentUser.id &&
+          workspaceOwnerId.value === currentUser.id
+        );
         return true;
       } catch (error) {
         workspaceSyncError.value = getErrorMessage(error, "store.errors.syncWorkspace");

@@ -20,11 +20,8 @@ import type {
   updatePrintJobDevice,
 } from "@/services/printers";
 import { fetchPrintJobs } from "@/services/printers";
-import type {
-  createUserWithApi,
-  fetchWorkspaceStateWithApi,
-  saveWorkspaceStateWithApi,
-} from "@/services/workspace";
+import type { createUserWithApi, fetchWorkspaceStateWithApi } from "@/services/workspace";
+import { saveWorkspaceStateWithApi } from "@/services/workspace";
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { PrintJob } from "@/types/workspace";
 
@@ -415,6 +412,42 @@ describe("workspace store", () => {
     expect(store.aiConfigSummary.bound).toBe(false);
     expect(store.sendConfirmationEnabled).toBe(false);
     expect(store.postLoginTutorialOpen).toBe(true);
+  });
+
+  it("persists changes made while a remote workspace save is in flight", async () => {
+    vi.useFakeTimers();
+    let finishFirstSave!: () => void;
+    vi.mocked(saveWorkspaceStateWithApi)
+      .mockImplementationOnce(
+        async (_accessToken, state) =>
+          new Promise((resolve) => {
+            finishFirstSave = () => resolve(state);
+          }),
+      )
+      .mockImplementation(async (_accessToken, state) => state);
+
+    try {
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "demo-password");
+      vi.mocked(saveWorkspaceStateWithApi).mockClear();
+
+      store.setTheme("dark");
+      await vi.advanceTimersByTimeAsync(180);
+      expect(saveWorkspaceStateWithApi).toHaveBeenCalledTimes(1);
+
+      store.setTheme("light");
+      await vi.advanceTimersByTimeAsync(180);
+      finishFirstSave();
+      await vi.waitFor(() => {
+        expect(saveWorkspaceStateWithApi).toHaveBeenCalledTimes(2);
+      });
+
+      expect(vi.mocked(saveWorkspaceStateWithApi).mock.calls[1]?.[1].preferences.theme).toBe(
+        "light",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("can send the first message after loading an empty remote workspace", async () => {
