@@ -49,9 +49,9 @@ ensure_action_cache() {
   git clone --depth 1 --branch "$ref" "git@github.com:$repo" "$cache_dir" >/dev/null
 }
 
-ensure_action_cache actions/checkout v6
+ensure_action_cache actions/checkout v7
 ensure_action_cache actions/setup-node v6
-ensure_action_cache actions/setup-go v6
+ensure_action_cache actions/setup-go v7
 ensure_action_cache golangci/golangci-lint-action v9
 
 run_act() {
