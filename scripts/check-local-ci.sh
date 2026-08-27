@@ -18,8 +18,12 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 TMP_GIT_CONFIG=$(mktemp "${TMPDIR:-/tmp}/ink-act-gitconfig.XXXXXX")
+SMOKE_DB_CONTAINER=""
 
 cleanup() {
+  if [ -n "$SMOKE_DB_CONTAINER" ]; then
+    docker stop "$SMOKE_DB_CONTAINER" >/dev/null 2>&1 || true
+  fi
   rm -f "$TMP_GIT_CONFIG"
 }
 
@@ -62,6 +66,42 @@ run_act() {
     "$@"
 }
 
+run_api_smoke() {
+  SMOKE_DB_CONTAINER="ink-local-ci-postgres-$(date +%s)-$$"
+
+  docker run --rm --detach \
+    --name "$SMOKE_DB_CONTAINER" \
+    --env POSTGRES_DB=ink \
+    --env POSTGRES_USER=postgres \
+    --env POSTGRES_PASSWORD=postgres \
+    --publish 127.0.0.1::5432 \
+    postgres:16 >/dev/null
+
+  attempt=0
+  until docker exec "$SMOKE_DB_CONTAINER" pg_isready -U postgres -d ink >/dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 30 ]; then
+      echo "Temporary PostgreSQL did not become ready." >&2
+      docker logs "$SMOKE_DB_CONTAINER" >&2 || true
+      return 1
+    fi
+    sleep 1
+  done
+
+  smoke_db_address=$(docker port "$SMOKE_DB_CONTAINER" 5432/tcp)
+  smoke_db_port=${smoke_db_address##*:}
+  case "$smoke_db_port" in
+    '' | *[!0-9]*)
+      echo "Could not determine the temporary PostgreSQL port." >&2
+      return 1
+      ;;
+  esac
+
+  DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${smoke_db_port}/ink?sslmode=disable" \
+    INK_SMOKE_BOOTSTRAP_DB=0 \
+    make smoke-api
+}
+
 echo "==> Running web-quality via act"
 run_act pull_request -W .github/workflows/web-quality.yml
 
@@ -73,4 +113,5 @@ run_act pull_request -W .github/workflows/server-quality.yml -j golangci-lint
 
 echo "==> Running api-smoke locally"
 echo "act 0.2.87 currently panics on this repo's service-container smoke job, so we run the local equivalent instead."
-make smoke-api
+echo "The smoke test uses an isolated temporary PostgreSQL container and leaves the development database untouched."
+run_api_smoke
