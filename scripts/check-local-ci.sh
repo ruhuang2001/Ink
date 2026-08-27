@@ -50,7 +50,7 @@ ensure_action_cache() {
 }
 
 ensure_action_cache actions/checkout v7
-ensure_action_cache actions/setup-node v6
+ensure_action_cache actions/setup-node v7
 ensure_action_cache actions/setup-go v7
 ensure_action_cache golangci/golangci-lint-action v9
 
