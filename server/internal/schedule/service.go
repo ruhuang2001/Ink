@@ -1,10 +1,11 @@
 package schedule
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -436,8 +437,8 @@ func (s *Service) mapViews(ctx context.Context, schedules []PrintSchedule) ([]Sc
 		views = append(views, view)
 	}
 
-	sort.Slice(views, func(i, j int) bool {
-		return views[i].Title < views[j].Title
+	slices.SortFunc(views, func(a, b ScheduleView) int {
+		return cmp.Compare(a.Title, b.Title)
 	})
 
 	return views, nil
@@ -537,7 +538,7 @@ func normalizeWeekdays(frequency FrequencyType, weekdays []int) ([]int, error) {
 	if len(normalized) == 0 {
 		return nil, fmt.Errorf("%w: weekly schedules require at least one weekday", ErrInvalidInput)
 	}
-	sort.Ints(normalized)
+	slices.Sort(normalized)
 	return normalized, nil
 }
 

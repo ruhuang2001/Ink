@@ -2,16 +2,16 @@ package plugins
 
 import (
 	"archive/zip"
-	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -111,6 +111,24 @@ type Service struct {
 	gitAllowedHosts []string
 }
 
+type installMetadata struct {
+	sourceType    SourceType
+	installedBy   string
+	repoURL       string
+	repoRef       string
+	repoCommitSHA string
+	repoSubdir    string
+}
+
+type bindingResolution struct {
+	user         auth.UserDTO
+	installation Installation
+	manifest     Manifest
+	existing     *Binding
+	config       map[string]any
+	secrets      map[string]string
+}
+
 type validationPayload struct {
 	WorkspaceConfig map[string]any    `json:"workspaceConfig"`
 	Secrets         map[string]string `json:"secrets"`
@@ -182,137 +200,6 @@ func normalizeRuntimeLimits(limits RuntimeLimits) RuntimeLimits {
 	return limits
 }
 
-func (execRunner) Run(ctx context.Context, workdir string, command []string, stdin []byte, options RunOptions) ([]byte, []byte, error) {
-	if len(command) == 0 {
-		return nil, nil, fmt.Errorf("empty command")
-	}
-
-	outputLimit := options.OutputMaxBytes
-	if outputLimit <= 0 {
-		outputLimit = defaultPluginOutputMaxBytes
-	}
-
-	tempDir, err := os.MkdirTemp("", "ink-plugin-run-*")
-	if err != nil {
-		return nil, nil, err
-	}
-	defer func() {
-		_ = os.RemoveAll(tempDir)
-	}()
-	if err := preparePluginTempDirs(tempDir); err != nil {
-		return nil, nil, err
-	}
-
-	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-	cmd.Dir = workdir
-	cmd.Stdin = bytes.NewReader(stdin)
-	cmd.Env = isolatedPluginEnv(tempDir, options.EnvAllowlist)
-	stdout := newLimitedBuffer(outputLimit)
-	stderr := newLimitedBuffer(outputLimit)
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-
-	err = cmd.Run()
-	if stdout.Exceeded() || stderr.Exceeded() {
-		return stdout.Bytes(), stderr.Bytes(), ErrOutputTooLarge
-	}
-	return stdout.Bytes(), stderr.Bytes(), err
-}
-
-type limitedBuffer struct {
-	buffer   bytes.Buffer
-	limit    int64
-	exceeded bool
-}
-
-func newLimitedBuffer(limit int64) *limitedBuffer {
-	if limit <= 0 {
-		limit = defaultPluginOutputMaxBytes
-	}
-	return &limitedBuffer{limit: limit}
-}
-
-func (b *limitedBuffer) Write(p []byte) (int, error) {
-	remaining := int(b.limit) - b.buffer.Len()
-	if remaining <= 0 {
-		b.exceeded = true
-		return len(p), nil
-	}
-	if len(p) > remaining {
-		_, _ = b.buffer.Write(p[:remaining])
-		b.exceeded = true
-		return len(p), nil
-	}
-	return b.buffer.Write(p)
-}
-
-func (b *limitedBuffer) Bytes() []byte {
-	return b.buffer.Bytes()
-}
-
-func (b *limitedBuffer) Exceeded() bool {
-	return b.exceeded
-}
-
-func preparePluginTempDirs(tempDir string) error {
-	for _, subdir := range []string{
-		filepath.Join(tempDir, ".cache"),
-		filepath.Join(tempDir, "uv-cache"),
-		filepath.Join(tempDir, "npm-cache"),
-	} {
-		if err := os.MkdirAll(subdir, 0o700); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func isolatedPluginEnv(tempDir string, allowlist []string) []string {
-	env := []string{
-		"PATH=" + pluginPathEnv(),
-		"HOME=" + tempDir,
-		"TMPDIR=" + tempDir,
-		"TEMP=" + tempDir,
-		"TMP=" + tempDir,
-		"XDG_CACHE_HOME=" + filepath.Join(tempDir, ".cache"),
-		"UV_CACHE_DIR=" + filepath.Join(tempDir, "uv-cache"),
-		"npm_config_cache=" + filepath.Join(tempDir, "npm-cache"),
-		"PYTHONUNBUFFERED=1",
-		"NO_COLOR=1",
-	}
-
-	seen := map[string]struct{}{}
-	for _, entry := range env {
-		key := entry
-		if index := strings.Index(entry, "="); index >= 0 {
-			key = entry[:index]
-		}
-		seen[key] = struct{}{}
-	}
-
-	for _, key := range allowlist {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		if value, ok := os.LookupEnv(key); ok {
-			env = append(env, key+"="+value)
-			seen[key] = struct{}{}
-		}
-	}
-	return env
-}
-
-func pluginPathEnv() string {
-	if path := strings.TrimSpace(os.Getenv("PATH")); path != "" {
-		return path
-	}
-	return "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-}
-
 func (s *Service) ListAdminInstallations(ctx context.Context, accessToken string) ([]PluginDetails, error) {
 	if err := s.requireAdmin(ctx, accessToken); err != nil {
 		return nil, err
@@ -323,8 +210,15 @@ func (s *Service) ListAdminInstallations(ctx context.Context, accessToken string
 		return nil, err
 	}
 
-	sort.Slice(installations, func(i, j int) bool {
-		return installations[i].UpdatedAt.After(installations[j].UpdatedAt)
+	slices.SortFunc(installations, func(a, b Installation) int {
+		switch {
+		case a.UpdatedAt.After(b.UpdatedAt):
+			return -1
+		case a.UpdatedAt.Before(b.UpdatedAt):
+			return 1
+		default:
+			return cmp.Compare(a.PluginKey, b.PluginKey)
+		}
 	})
 
 	result := make([]PluginDetails, 0, len(installations))
@@ -393,77 +287,10 @@ func (s *Service) UploadPlugin(ctx context.Context, accessToken string, filename
 		return PluginDetails{}, err
 	}
 
-	if err := s.installPlugin(ctx, pluginDir, manifest); err != nil {
-		existing, lookupErr := s.repo.FindInstallationByPluginKey(ctx, manifest.PluginKey)
-		if lookupErr == nil && existing == nil {
-			now := s.clock.Now()
-			installationID, idErr := s.ids.New("plugin")
-			if idErr == nil {
-				installErr := err.Error()
-				_ = s.repo.SaveInstallation(ctx, Installation{
-					ID:           installationID,
-					PluginKey:    manifest.PluginKey,
-					SourceType:   SourceTypeUpload,
-					DisplayName:  manifest.Name,
-					Version:      manifest.Version,
-					RuntimeType:  manifest.Runtime.Type,
-					ManifestJSON: manifestJSON,
-					Status:       InstallationStatusFailed,
-					LastError:    &installErr,
-					InstalledBy:  &currentUser.ID,
-					CreatedAt:    now,
-					UpdatedAt:    now,
-				})
-			}
-		}
-		return PluginDetails{}, err
-	}
-
-	existing, err := s.repo.FindInstallationByPluginKey(ctx, manifest.PluginKey)
-	if err != nil {
-		return PluginDetails{}, err
-	}
-
-	now := s.clock.Now()
-	installationID := ""
-	createdAt := now
-	if existing != nil {
-		installationID = existing.ID
-		createdAt = existing.CreatedAt
-	} else {
-		installationID, err = s.ids.New("plugin")
-		if err != nil {
-			return PluginDetails{}, err
-		}
-	}
-
-	finalDir := filepath.Join(s.pluginRoot, "installations", fmt.Sprintf("%s-%d", installationID, now.UnixNano()))
-	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
-		return PluginDetails{}, err
-	}
-	if err := os.Rename(pluginDir, finalDir); err != nil {
-		return PluginDetails{}, err
-	}
-
-	installation := Installation{
-		ID:           installationID,
-		PluginKey:    manifest.PluginKey,
-		SourceType:   SourceTypeUpload,
-		DisplayName:  manifest.Name,
-		Version:      manifest.Version,
-		RuntimeType:  manifest.Runtime.Type,
-		ManifestJSON: manifestJSON,
-		CurrentPath:  finalDir,
-		Status:       InstallationStatusReady,
-		InstalledBy:  &currentUser.ID,
-		CreatedAt:    createdAt,
-		UpdatedAt:    now,
-	}
-	if err := s.repo.SaveInstallation(ctx, installation); err != nil {
-		return PluginDetails{}, err
-	}
-
-	return s.detailsFromInstallation(installation, nil), nil
+	return s.installAndPublish(ctx, pluginDir, manifest, manifestJSON, installMetadata{
+		sourceType:  SourceTypeUpload,
+		installedBy: currentUser.ID,
+	})
 }
 
 // gitInstallContext bundles the inputs needed once URL/subdir validation has
@@ -564,11 +391,23 @@ func (s *Service) cloneAndParse(ctx context.Context, stagingDir, normalizedURL, 
 }
 
 func (s *Service) finalizeGitInstall(ctx context.Context, gc gitInstallContext) (PluginDetails, error) {
-	if err := s.installPlugin(ctx, gc.pluginDir, gc.manifest); err != nil {
-		s.recordFailedGitInstall(ctx, gc, err)
+	return s.installAndPublish(ctx, gc.pluginDir, gc.manifest, gc.manifestJSON, installMetadata{
+		sourceType:    SourceTypeGit,
+		installedBy:   gc.user,
+		repoURL:       gc.normalizedURL,
+		repoRef:       gc.ref,
+		repoCommitSHA: gc.commitSHA,
+		repoSubdir:    gc.subdir,
+	})
+}
+
+func (s *Service) installAndPublish(ctx context.Context, pluginDir string, manifest Manifest, manifestJSON []byte, metadata installMetadata) (PluginDetails, error) {
+	if err := s.installPlugin(ctx, pluginDir, manifest); err != nil {
+		s.recordFailedInstall(ctx, manifest, manifestJSON, metadata, err)
 		return PluginDetails{}, err
 	}
-	installationID, createdAt, err := s.resolveInstallationID(ctx, gc.manifest.PluginKey)
+
+	installationID, createdAt, err := s.resolveInstallationID(ctx, manifest.PluginKey)
 	if err != nil {
 		return PluginDetails{}, err
 	}
@@ -577,28 +416,32 @@ func (s *Service) finalizeGitInstall(ctx context.Context, gc gitInstallContext) 
 	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
 		return PluginDetails{}, err
 	}
-	if err := os.Rename(gc.pluginDir, finalDir); err != nil {
+	if err := os.Rename(pluginDir, finalDir); err != nil {
 		return PluginDetails{}, err
 	}
+
 	installation := Installation{
 		ID:            installationID,
-		PluginKey:     gc.manifest.PluginKey,
-		SourceType:    SourceTypeGit,
-		DisplayName:   gc.manifest.Name,
-		Version:       gc.manifest.Version,
-		RuntimeType:   gc.manifest.Runtime.Type,
-		ManifestJSON:  gc.manifestJSON,
+		PluginKey:     manifest.PluginKey,
+		SourceType:    metadata.sourceType,
+		DisplayName:   manifest.Name,
+		Version:       manifest.Version,
+		RuntimeType:   manifest.Runtime.Type,
+		ManifestJSON:  manifestJSON,
 		CurrentPath:   finalDir,
 		Status:        InstallationStatusReady,
-		InstalledBy:   &gc.user,
-		RepoURL:       gc.normalizedURL,
-		RepoRef:       gc.ref,
-		RepoCommitSHA: gc.commitSHA,
-		RepoSubdir:    gc.subdir,
+		InstalledBy:   &metadata.installedBy,
+		RepoURL:       metadata.repoURL,
+		RepoRef:       metadata.repoRef,
+		RepoCommitSHA: metadata.repoCommitSHA,
+		RepoSubdir:    metadata.repoSubdir,
 		CreatedAt:     createdAt,
 		UpdatedAt:     now,
 	}
 	if err := s.repo.SaveInstallation(ctx, installation); err != nil {
+		if cleanupErr := os.RemoveAll(finalDir); cleanupErr != nil {
+			return PluginDetails{}, fmt.Errorf("save installation: %w (remove published directory: %v)", err, cleanupErr)
+		}
 		return PluginDetails{}, err
 	}
 	return s.detailsFromInstallation(installation, nil), nil
@@ -620,8 +463,8 @@ func (s *Service) resolveInstallationID(ctx context.Context, pluginKey string) (
 	return id, now, nil
 }
 
-func (s *Service) recordFailedGitInstall(ctx context.Context, gc gitInstallContext, installErr error) {
-	existing, lookupErr := s.repo.FindInstallationByPluginKey(ctx, gc.manifest.PluginKey)
+func (s *Service) recordFailedInstall(ctx context.Context, manifest Manifest, manifestJSON []byte, metadata installMetadata, installErr error) {
+	existing, lookupErr := s.repo.FindInstallationByPluginKey(ctx, manifest.PluginKey)
 	if lookupErr != nil || existing != nil {
 		return
 	}
@@ -633,19 +476,19 @@ func (s *Service) recordFailedGitInstall(ctx context.Context, gc gitInstallConte
 	message := installErr.Error()
 	_ = s.repo.SaveInstallation(ctx, Installation{
 		ID:            installationID,
-		PluginKey:     gc.manifest.PluginKey,
-		SourceType:    SourceTypeGit,
-		DisplayName:   gc.manifest.Name,
-		Version:       gc.manifest.Version,
-		RuntimeType:   gc.manifest.Runtime.Type,
-		ManifestJSON:  gc.manifestJSON,
+		PluginKey:     manifest.PluginKey,
+		SourceType:    metadata.sourceType,
+		DisplayName:   manifest.Name,
+		Version:       manifest.Version,
+		RuntimeType:   manifest.Runtime.Type,
+		ManifestJSON:  manifestJSON,
 		Status:        InstallationStatusFailed,
 		LastError:     &message,
-		InstalledBy:   &gc.user,
-		RepoURL:       gc.normalizedURL,
-		RepoRef:       gc.ref,
-		RepoCommitSHA: gc.commitSHA,
-		RepoSubdir:    gc.subdir,
+		InstalledBy:   &metadata.installedBy,
+		RepoURL:       metadata.repoURL,
+		RepoRef:       metadata.repoRef,
+		RepoCommitSHA: metadata.repoCommitSHA,
+		RepoSubdir:    metadata.repoSubdir,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	})
@@ -706,8 +549,8 @@ func (s *Service) ListUserPlugins(ctx context.Context, accessToken string) ([]Pl
 		result = append(result, s.detailsFromInstallation(installation, nil))
 	}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Installation.DisplayName < result[j].Installation.DisplayName
+	slices.SortFunc(result, func(a, b PluginDetails) int {
+		return cmp.Compare(a.Installation.DisplayName, b.Installation.DisplayName)
 	})
 
 	return result, nil
@@ -735,45 +578,16 @@ func (s *Service) GetUserPlugin(ctx context.Context, accessToken string, install
 }
 
 func (s *Service) SaveBinding(ctx context.Context, accessToken string, installationID string, input BindingInput) (PluginDetails, error) {
-	currentUser, err := s.auth.GetCurrentUser(ctx, accessToken)
+	resolved, err := s.resolveBindingInput(ctx, accessToken, installationID, input, false)
 	if err != nil {
 		return PluginDetails{}, err
 	}
-
-	installation, manifest, err := s.GetInstallation(ctx, installationID)
-	if err != nil {
-		return PluginDetails{}, err
-	}
-	if installation.Status != InstallationStatusReady && input.Enabled {
-		return PluginDetails{}, fmt.Errorf("%w: plugin is not ready", ErrInvalidInput)
-	}
-
-	existing, err := s.repo.FindPluginBindingByInstallationAndUserID(ctx, installation.ID, currentUser.ID)
-	if err != nil {
-		return PluginDetails{}, err
-	}
-
-	baseConfig := map[string]any{}
-	existingSecrets := map[string]string{}
-	if existing != nil {
-		baseConfig = cloneMap(existing.Config)
-		existingSecrets, err = s.decryptSecrets(*existing)
-		if err != nil {
-			return PluginDetails{}, err
-		}
-	}
-	for key, value := range input.Config {
-		baseConfig[key] = value
-	}
-
-	normalizedConfig, incomingSecrets, fieldErrs := NormalizeConfigValues(manifest.WorkspaceConfigSchema, baseConfig, true)
-	if len(fieldErrs) > 0 {
-		return PluginDetails{}, ValidationFailure{Errors: fieldErrs}
-	}
-
-	mergedSecrets := mergeSecrets(existingSecrets, input.Secrets, incomingSecrets)
+	currentUser := resolved.user
+	installation := resolved.installation
+	manifest := resolved.manifest
+	existing := resolved.existing
 	if input.Enabled {
-		validation, err := s.runValidation(ctx, installation, normalizedConfig, mergedSecrets, manifest)
+		validation, err := s.runValidation(ctx, installation, resolved.config, resolved.secrets, manifest)
 		if err != nil {
 			return PluginDetails{}, err
 		}
@@ -787,7 +601,7 @@ func (s *Service) SaveBinding(ctx context.Context, accessToken string, installat
 		PluginInstallationID: installation.ID,
 		UserID:               currentUser.ID,
 		Enabled:              input.Enabled,
-		Config:               normalizedConfig,
+		Config:               resolved.config,
 		Status:               BindingStatusDisconnected,
 		CreatedAt:            now,
 		UpdatedAt:            now,
@@ -808,11 +622,11 @@ func (s *Service) SaveBinding(ctx context.Context, accessToken string, installat
 		}
 	}
 
-	if len(mergedSecrets) > 0 {
+	if len(resolved.secrets) > 0 {
 		if s.encryptor == nil {
 			return PluginDetails{}, ErrMissingSecret
 		}
-		ciphertext, nonce, err := s.encryptSecrets(mergedSecrets)
+		ciphertext, nonce, err := s.encryptSecrets(resolved.secrets)
 		if err != nil {
 			return PluginDetails{}, err
 		}
@@ -846,31 +660,41 @@ func (s *Service) SaveBinding(ctx context.Context, accessToken string, installat
 }
 
 func (s *Service) TestBinding(ctx context.Context, accessToken string, installationID string, input BindingInput) (ValidationResult, error) {
+	resolved, err := s.resolveBindingInput(ctx, accessToken, installationID, input, true)
+	if err != nil {
+		var validationFailure ValidationFailure
+		if errors.As(err, &validationFailure) {
+			return ValidationResult{Valid: false, Errors: validationFailure.Errors}, nil
+		}
+		return ValidationResult{}, err
+	}
+	return s.runValidation(ctx, resolved.installation, resolved.config, resolved.secrets, resolved.manifest)
+}
+
+func (s *Service) resolveBindingInput(ctx context.Context, accessToken string, installationID string, input BindingInput, requireReady bool) (bindingResolution, error) {
 	currentUser, err := s.auth.GetCurrentUser(ctx, accessToken)
 	if err != nil {
-		return ValidationResult{}, err
+		return bindingResolution{}, err
 	}
-
 	installation, manifest, err := s.GetInstallation(ctx, installationID)
 	if err != nil {
-		return ValidationResult{}, err
+		return bindingResolution{}, err
 	}
-	if installation.Status != InstallationStatusReady {
-		return ValidationResult{}, fmt.Errorf("%w: plugin is not ready", ErrInvalidInput)
+	if (requireReady || input.Enabled) && installation.Status != InstallationStatusReady {
+		return bindingResolution{}, fmt.Errorf("%w: plugin is not ready", ErrInvalidInput)
 	}
 
 	existing, err := s.repo.FindPluginBindingByInstallationAndUserID(ctx, installation.ID, currentUser.ID)
 	if err != nil {
-		return ValidationResult{}, err
+		return bindingResolution{}, err
 	}
-
 	baseConfig := map[string]any{}
 	existingSecrets := map[string]string{}
 	if existing != nil {
 		baseConfig = cloneMap(existing.Config)
 		existingSecrets, err = s.decryptSecrets(*existing)
 		if err != nil {
-			return ValidationResult{}, err
+			return bindingResolution{}, err
 		}
 	}
 	for key, value := range input.Config {
@@ -879,14 +703,16 @@ func (s *Service) TestBinding(ctx context.Context, accessToken string, installat
 
 	normalizedConfig, incomingSecrets, fieldErrs := NormalizeConfigValues(manifest.WorkspaceConfigSchema, baseConfig, true)
 	if len(fieldErrs) > 0 {
-		return ValidationResult{
-			Valid:  false,
-			Errors: fieldErrs,
-		}, nil
+		return bindingResolution{}, ValidationFailure{Errors: fieldErrs}
 	}
-
-	mergedSecrets := mergeSecrets(existingSecrets, input.Secrets, incomingSecrets)
-	return s.runValidation(ctx, installation, normalizedConfig, mergedSecrets, manifest)
+	return bindingResolution{
+		user:         currentUser,
+		installation: installation,
+		manifest:     manifest,
+		existing:     existing,
+		config:       normalizedConfig,
+		secrets:      mergeSecrets(existingSecrets, input.Secrets, incomingSecrets),
+	}, nil
 }
 
 func (s *Service) GetInstallation(ctx context.Context, installationID string) (Installation, Manifest, error) {
@@ -921,50 +747,6 @@ func (s *Service) GetBindingForUser(ctx context.Context, installationID string, 
 	}
 
 	return *binding, secrets, nil
-}
-
-// ExecuteFetch invokes the plugin's fetch entrypoint and returns a normalised
-// list of items. The caller is responsible for persisting items and the cursor.
-func (s *Service) ExecuteFetch(ctx context.Context, installation Installation, binding Binding, secrets map[string]string, trigger FetchTrigger) (FetchOutput, error) {
-	manifest, err := ParseManifest(installation.ManifestJSON)
-	if err != nil {
-		return FetchOutput{}, err
-	}
-
-	payload := fetchPayload{
-		WorkspaceConfig: cloneMap(binding.Config),
-		Secrets:         secrets,
-		Cursor:          binding.Cursor,
-		Trigger:         trigger,
-	}
-	input, err := json.Marshal(payload)
-	if err != nil {
-		return FetchOutput{}, err
-	}
-
-	execCtx, cancel := context.WithTimeout(ctx, s.execTimeout)
-	defer cancel()
-
-	stdout, stderr, err := s.runner.Run(execCtx, installation.CurrentPath, manifest.Entrypoints.Fetch.Command, input, s.runOptions())
-	if err != nil {
-		return FetchOutput{}, fmt.Errorf("%w: %s", ErrExecutionFailed, trimExecOutput(stdout, stderr, err))
-	}
-
-	var result FetchOutput
-	if err := json.Unmarshal(stdout, &result); err != nil {
-		return FetchOutput{}, fmt.Errorf("%w: invalid fetch output", ErrExecutionFailed)
-	}
-
-	for index := range result.Items {
-		if strings.TrimSpace(result.Items[index].SourceLabel) == "" {
-			result.Items[index].SourceLabel = installation.DisplayName
-		}
-	}
-	if err := validateFetchOutputLimits(result, s.runtimeLimits); err != nil {
-		return FetchOutput{}, fmt.Errorf("%w: %s", ErrExecutionFailed, err.Error())
-	}
-
-	return result, nil
 }
 
 // UpdateBindingCursor persists the cursor returned by the last fetch so the
@@ -1033,125 +815,6 @@ func (s *Service) GetBindingByID(ctx context.Context, bindingID string) (Binding
 	}
 
 	return *binding, secrets, nil
-}
-
-func (s *Service) runValidation(ctx context.Context, installation Installation, config map[string]any, secrets map[string]string, manifest Manifest) (ValidationResult, error) {
-	payload := validationPayload{
-		WorkspaceConfig: cloneMap(config),
-		Secrets:         secrets,
-	}
-	input, err := json.Marshal(payload)
-	if err != nil {
-		return ValidationResult{}, err
-	}
-
-	execCtx, cancel := context.WithTimeout(ctx, s.execTimeout)
-	defer cancel()
-
-	stdout, stderr, err := s.runner.Run(execCtx, installation.CurrentPath, manifest.Entrypoints.Validate.Command, input, s.runOptions())
-	if err != nil {
-		return ValidationResult{}, fmt.Errorf("%w: %s", ErrExecutionFailed, trimExecOutput(stdout, stderr, err))
-	}
-
-	var result ValidationResult
-	if err := json.Unmarshal(stdout, &result); err != nil {
-		return ValidationResult{}, fmt.Errorf("%w: invalid validation output", ErrExecutionFailed)
-	}
-
-	if !result.Valid && len(result.Errors) == 0 {
-		result.Errors = []FieldError{{
-			Field:   "",
-			Message: "插件校验失败",
-		}}
-	}
-
-	return result, nil
-}
-
-func (s *Service) installPlugin(ctx context.Context, pluginDir string, manifest Manifest) error {
-	var command []string
-	switch manifest.Runtime.Type {
-	case "node":
-		command = []string{"pnpm", "install", "--frozen-lockfile", "--ignore-scripts"}
-		if manifest.Permissions != nil && manifest.Permissions.InstallScripts {
-			command = []string{"pnpm", "install", "--frozen-lockfile"}
-		}
-	case "python":
-		command = []string{"uv", "sync", "--frozen"}
-	default:
-		return fmt.Errorf("%w: unsupported runtime %s", ErrInvalidPlugin, manifest.Runtime.Type)
-	}
-
-	installCtx, cancel := context.WithTimeout(ctx, s.installTimeout)
-	defer cancel()
-
-	stdout, stderr, err := s.runner.Run(installCtx, pluginDir, command, nil, s.runOptions())
-	if err != nil {
-		return fmt.Errorf("%w: %s", ErrExecutionFailed, trimExecOutput(stdout, stderr, err))
-	}
-
-	return nil
-}
-
-func (s *Service) runOptions() RunOptions {
-	return RunOptions{
-		OutputMaxBytes: s.runtimeLimits.OutputMaxBytes,
-		EnvAllowlist:   s.runtimeLimits.EnvAllowlist,
-	}
-}
-
-func validateFetchOutputLimits(output FetchOutput, limits RuntimeLimits) error {
-	limits = normalizeRuntimeLimits(limits)
-	if len(output.Items) > limits.FetchMaxItems {
-		return fmt.Errorf("fetch returned %d items, limit is %d", len(output.Items), limits.FetchMaxItems)
-	}
-
-	for itemIndex, item := range output.Items {
-		if err := validateItemLimits(item, itemIndex, limits); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateItemLimits(item Item, itemIndex int, limits RuntimeLimits) error {
-	if len(item.ExternalID) > limits.FetchMaxTextBytes {
-		return fmt.Errorf("items[%d].externalId exceeds %d bytes", itemIndex, limits.FetchMaxTextBytes)
-	}
-	if len(item.Title) > limits.FetchMaxTextBytes {
-		return fmt.Errorf("items[%d].title exceeds %d bytes", itemIndex, limits.FetchMaxTextBytes)
-	}
-	if len(item.SourceLabel) > limits.FetchMaxTextBytes {
-		return fmt.Errorf("items[%d].sourceLabel exceeds %d bytes", itemIndex, limits.FetchMaxTextBytes)
-	}
-	if len(item.Blocks) > limits.FetchMaxBlocksPerItem {
-		return fmt.Errorf(
-			"items[%d].blocks has %d blocks, limit is %d",
-			itemIndex,
-			len(item.Blocks),
-			limits.FetchMaxBlocksPerItem,
-		)
-	}
-	for blockIndex, block := range item.Blocks {
-		if err := validateBlockLimits(block, itemIndex, blockIndex, limits); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateBlockLimits(block ContentBlock, itemIndex int, blockIndex int, limits RuntimeLimits) error {
-	label := fmt.Sprintf("items[%d].blocks[%d]", itemIndex, blockIndex)
-	if len(block.Text) > limits.FetchMaxTextBytes {
-		return fmt.Errorf("%s.text exceeds %d bytes", label, limits.FetchMaxTextBytes)
-	}
-	if len(block.Alt) > limits.FetchMaxTextBytes {
-		return fmt.Errorf("%s.alt exceeds %d bytes", label, limits.FetchMaxTextBytes)
-	}
-	if len(block.URL) > limits.FetchMaxURLBytes {
-		return fmt.Errorf("%s.url exceeds %d bytes", label, limits.FetchMaxURLBytes)
-	}
-	return nil
 }
 
 func (s *Service) detailsFromInstallation(installation Installation, binding *Binding) PluginDetails {
@@ -1260,9 +923,7 @@ func (s *Service) decryptSecrets(binding Binding) (map[string]string, error) {
 
 func mergeSecrets(existing map[string]string, inputs ...map[string]string) map[string]string {
 	result := map[string]string{}
-	for key, value := range existing {
-		result[key] = value
-	}
+	maps.Copy(result, existing)
 	for _, current := range inputs {
 		for key, value := range current {
 			trimmed := strings.TrimSpace(value)
@@ -1279,10 +940,7 @@ func cloneMap(input map[string]any) map[string]any {
 	if len(input) == 0 {
 		return map[string]any{}
 	}
-	cloned := make(map[string]any, len(input))
-	for key, value := range input {
-		cloned[key] = value
-	}
+	cloned := maps.Clone(input)
 	return cloned
 }
 
@@ -1428,18 +1086,4 @@ func validateRuntimeFiles(pluginDir string, manifest Manifest) error {
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
-}
-
-func trimExecOutput(stdout []byte, stderr []byte, runErr error) string {
-	parts := []string{}
-	if text := strings.TrimSpace(string(stdout)); text != "" {
-		parts = append(parts, text)
-	}
-	if text := strings.TrimSpace(string(stderr)); text != "" {
-		parts = append(parts, text)
-	}
-	if runErr != nil && len(parts) == 0 {
-		parts = append(parts, runErr.Error())
-	}
-	return strings.Join(parts, " | ")
 }

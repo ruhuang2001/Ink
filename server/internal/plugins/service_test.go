@@ -2,12 +2,13 @@ package plugins
 
 import (
 	"archive/zip"
+	"cmp"
 	"context"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -20,6 +21,7 @@ type memoryRepo struct {
 	mu            sync.Mutex
 	installations map[string]Installation
 	bindings      map[string]Binding
+	saveErr       error
 }
 
 func newMemoryRepo() *memoryRepo {
@@ -69,6 +71,9 @@ func (r *memoryRepo) SaveInstallation(_ context.Context, installation Installati
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if r.saveErr != nil {
+		return r.saveErr
+	}
 	r.installations[installation.ID] = installation
 	return nil
 }
@@ -124,8 +129,15 @@ func (r *memoryRepo) ClaimBindingsDueForFetch(_ context.Context, now time.Time, 
 		r.bindings[binding.ID] = binding
 		result = append(result, binding)
 	}
-	sort.Slice(result, func(i int, j int) bool {
-		return result[i].NextFetchAt.Before(*result[j].NextFetchAt)
+	slices.SortFunc(result, func(a, b Binding) int {
+		switch {
+		case a.NextFetchAt.Before(*b.NextFetchAt):
+			return -1
+		case a.NextFetchAt.After(*b.NextFetchAt):
+			return 1
+		default:
+			return cmp.Compare(a.ID, b.ID)
+		}
 	})
 	if limit > 0 && len(result) > limit {
 		result = result[:limit]
@@ -563,6 +575,50 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 	}
 	if disabled.Binding == nil || disabled.Binding.NextFetchAt != nil {
 		t.Fatalf("expected disabled binding to stop automatic fetches, got %+v", disabled.Binding)
+	}
+}
+
+func TestUploadPluginRemovesPublishedDirectoryWhenPersistenceFails(t *testing.T) {
+	t.Parallel()
+
+	fixtureDir := filepath.Join("..", "..", "testdata", "plugins", "python-hello-plugin")
+	zipPath := filepath.Join(t.TempDir(), "python-hello-plugin.zip")
+	if err := zipDirectory(fixtureDir, zipPath, true); err != nil {
+		t.Fatalf("zip fixture: %v", err)
+	}
+	file, err := os.Open(zipPath)
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	repo := newMemoryRepo()
+	repo.saveErr = errors.New("database unavailable")
+	pluginRoot := t.TempDir()
+	service := NewService(
+		repo,
+		fakeAuthenticator{},
+		fakeEncryptor{},
+		&fakeIDGenerator{},
+		fakeClock{now: time.Date(2026, 4, 10, 2, 0, 0, 0, time.UTC)},
+		installPassthroughRunner{},
+		pluginRoot,
+		5*time.Second,
+		30*time.Second,
+		RuntimeLimits{},
+		nil,
+		nil,
+	)
+
+	if _, err := service.UploadPlugin(context.Background(), "admin-token", "plugin.zip", file); err == nil {
+		t.Fatal("expected persistence error")
+	}
+	entries, err := os.ReadDir(filepath.Join(pluginRoot, "installations"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("read installation directory: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("published directories after persistence failure = %d, want 0", len(entries))
 	}
 }
 

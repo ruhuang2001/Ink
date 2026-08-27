@@ -231,9 +231,7 @@ func assertAtomicDeliveryClaims(t *testing.T, ctx context.Context, db *pgxpool.P
 	errCh := make(chan error, contenders)
 	var wait sync.WaitGroup
 	for range contenders {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
+		wait.Go(func() {
 			<-start
 			_, claimed, err := store.ClaimDelivery(ctx, delivery, now.Add(dispatch.ReservationLease))
 			if err != nil {
@@ -243,7 +241,7 @@ func assertAtomicDeliveryClaims(t *testing.T, ctx context.Context, db *pgxpool.P
 			if claimed {
 				claimedCount.Add(1)
 			}
-		}()
+		})
 	}
 	close(start)
 	wait.Wait()

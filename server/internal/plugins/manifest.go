@@ -1,12 +1,13 @@
 package plugins
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/url"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -218,8 +219,8 @@ func NormalizeConfigValues(fields []FieldSpec, raw map[string]any, allowSecret b
 	}
 
 	if len(errors) > 0 {
-		sort.Slice(errors, func(i, j int) bool {
-			return errors[i].Field < errors[j].Field
+		slices.SortFunc(errors, func(a, b FieldError) int {
+			return cmp.Compare(a.Field, b.Field)
 		})
 	}
 
