@@ -62,10 +62,14 @@ function isStaticAsset(request, url) {
 
 async function respondToNavigation(request) {
   const cache = await caches.open(CACHE_NAME);
+  const url = new URL(request.url);
 
   try {
     const response = await fetch(request);
-    await cache.put(APP_SHELL_URL, response.clone());
+    const contentType = response.headers.get("Content-Type") || "";
+    if (response.ok && !url.pathname.includes("/api/") && contentType.includes("text/html")) {
+      await cache.put(APP_SHELL_URL, response.clone());
+    }
     return response;
   } catch {
     return (await caches.match(request)) || (await caches.match(APP_SHELL_URL)) || Response.error();

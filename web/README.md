@@ -37,11 +37,11 @@ pnpm check:budget
 - User-facing product copy is localized in `src/i18n/messages`.
 - Print preview images come from the API; the browser does not independently reproduce physical print layout.
 
-`pnpm check:budget` runs after production builds in `pnpm check` and enforces the current release budgets: one entry JavaScript chunk at or below 150 KiB gzip, one entry stylesheet at or below 80 KiB gzip, and each emitted font asset at or below 64 KiB. Route chunks and Unicode font subsets are loaded on demand.
+`pnpm check:budget` runs after production builds in `pnpm check` and enforces the current release budgets: one entry JavaScript chunk at or below 150 KiB gzip, one entry stylesheet at or below 80 KiB gzip, and each emitted font asset at or below 64 KiB. Route chunks are loaded on demand. The web console uses the operating system's native Chinese font stack, avoiding a multi-megabyte web-font download while preserving native weight rendering.
 
 ## Performance baseline
 
-The release branch is measured against a production preview build rather than the Vite development server. The current desktop baseline is first contentful paint around 130 ms. With cache disabled, 150 ms latency, approximately 1.6 Mbps download, and 4x CPU throttling, the measured first contentful paint is about 1.45 s and the first route requests approximately 365 KB of Unicode font subsets. The entry JavaScript is about 105 KiB gzip and the entry stylesheet is about 60 KiB gzip.
+The release branch is measured against a production preview build rather than the Vite development server. The current desktop baseline is first contentful paint around 130 ms. With cache disabled, 150 ms latency, approximately 1.6 Mbps download, and 4x CPU throttling, the measured first contentful paint is about 1.42 s with no web-font transfer. The entry JavaScript is about 105 KiB gzip and the entry stylesheet is about 11 KiB gzip.
 
 Re-run the browser profile after significant changes. Keep the same route, viewport, cache state, network profile, and CPU throttle so results remain comparable.
 

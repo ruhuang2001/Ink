@@ -630,13 +630,16 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   let remotePrintStatusPromise: Promise<void> | null = null;
   let remotePrintStatusBackoffMs = REMOTE_PRINT_STATUS_POLL_MS;
 
-  configureAuthRefresh(async () => {
+  configureAuthRefresh(async (accessToken) => {
     const current = authSession.value;
-    if (!current) {
+    if (!current || current.accessToken !== accessToken) {
       return null;
     }
     try {
       const refreshed = await refreshAuthSession(current.refreshToken);
+      if (authSession.value?.accessToken !== accessToken) {
+        return null;
+      }
       setAuthState(refreshed.user, refreshed.session);
       return refreshed.session.accessToken;
     } catch {
@@ -816,7 +819,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   );
 
   if (typeof window !== "undefined") {
-    window.addEventListener("visibilitychange", () => {
+    document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") {
         clearRemotePrintStatusSync();
         return;
@@ -854,14 +857,17 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       bound: nextConfig.bound,
     };
     aiConfigError.value = "";
+    scheduleRemoteWorkspaceSave();
   }
 
   function upsertPrintJob(nextJob: PrintJob) {
     printJobs.value = [nextJob, ...printJobs.value.filter((job) => job.id !== nextJob.id)];
+    scheduleRemoteWorkspaceSave();
   }
 
   function upsertDevice(nextDevice: Device) {
     devices.value = [nextDevice, ...devices.value.filter((device) => device.id !== nextDevice.id)];
+    scheduleRemoteWorkspaceSave();
   }
 
   function clearRemotePrintStatusSync() {
@@ -982,11 +988,18 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       try {
         do {
           remoteSavePending = false;
+          const saveSession = authSession.value;
+          if (
+            !saveSession ||
+            authUser.value?.id !== currentUser.id ||
+            workspaceOwnerId.value !== currentUser.id
+          ) {
+            return true;
+          }
           const snapshot = JSON.parse(JSON.stringify(workspaceState.value)) as WorkspaceState;
-          await saveWorkspaceStateWithApi(currentSession.accessToken, snapshot);
+          await saveWorkspaceStateWithApi(saveSession.accessToken, snapshot);
         } while (
           remoteSavePending &&
-          authSession.value?.accessToken === currentSession.accessToken &&
           authUser.value?.id === currentUser.id &&
           workspaceOwnerId.value === currentUser.id
         );
@@ -1378,6 +1391,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
             }
           : job,
       );
+      scheduleRemoteWorkspaceSave();
     }, 500);
   }
 
@@ -1408,6 +1422,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
       const job = buildPrintJob(title, content, source);
       printJobs.value = [job, ...printJobs.value];
+      scheduleRemoteWorkspaceSave();
 
       showFlashKey("store.flash.printQueuedDirectly", "success");
       await maybeCompleteQueuedJob(job.id);
@@ -1507,6 +1522,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           }
         : job,
     );
+    scheduleRemoteWorkspaceSave();
     showFlashKey("store.flash.printQueued", "success");
     await maybeCompleteQueuedJob(jobId);
     return true;
@@ -1540,6 +1556,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           }
         : job,
     );
+    scheduleRemoteWorkspaceSave();
     showFlashKey("store.flash.printCancelled", "success");
     return true;
   }
@@ -1568,6 +1585,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           }
         : job,
     );
+    scheduleRemoteWorkspaceSave();
     showFlashKey("store.flash.printDeviceUpdated", "success");
   }
 
@@ -1595,6 +1613,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         upsertDevice(device);
         if (options?.setAsDefault || !defaultDeviceId.value) {
           defaultDeviceId.value = device.id;
+          scheduleRemoteWorkspaceSave();
         }
         showFlashKey("store.flash.deviceBound", "success");
         return device;
@@ -1615,6 +1634,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     devices.value = [...devices.value, device];
     if (options?.setAsDefault) {
       defaultDeviceId.value = device.id;
+      scheduleRemoteWorkspaceSave();
     }
     showFlashKey("store.flash.deviceAdded", "success");
     return device;
@@ -1647,6 +1667,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         (schedule) => schedule.deviceId !== deviceId,
       );
       defaultDeviceId.value = fallbackDeviceId;
+      scheduleRemoteWorkspaceSave();
       showFlashKey("store.flash.deviceDeleted", "success");
       return true;
     }
@@ -1657,6 +1678,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     devices.value = remainingDevices;
     defaultDeviceId.value = fallbackDeviceId;
+    scheduleRemoteWorkspaceSave();
     printJobs.value = printJobs.value.map((job) =>
       job.deviceId === deviceId
         ? {

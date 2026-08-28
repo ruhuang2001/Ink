@@ -27,10 +27,13 @@ export interface HttpRequestInit extends RequestInit {
 
 type AuthRefreshHandler = (accessToken: string) => Promise<string | null>;
 let authRefreshHandler: AuthRefreshHandler | null = null;
-let authRefreshPromise: Promise<string | null> | null = null;
+let authRefreshOperation: { accessToken: string; promise: Promise<string | null> } | null = null;
 
 export function configureAuthRefresh(handler: AuthRefreshHandler | null) {
   authRefreshHandler = handler;
+  if (!handler) {
+    authRefreshOperation = null;
+  }
 }
 
 export async function request<T>(input: string, init: HttpRequestInit = {}): Promise<T> {
@@ -45,42 +48,47 @@ export async function request<T>(input: string, init: HttpRequestInit = {}): Pro
     headers.set("X-Request-ID", createRequestId());
   }
 
-  const canRefresh =
-    !init.skipAuthRefresh &&
-    authRefreshHandler &&
-    headers.has("Authorization") &&
-    !input.includes("/auth/refresh");
-  let response = await fetchWithTimeout(input, init, headers);
+  const canRefresh = !init.skipAuthRefresh && authRefreshHandler && headers.has("Authorization");
+  let attempt = await fetchWithTimeout(input, init, headers);
+  let response = attempt.response;
 
   if (response.status === 401 && canRefresh) {
-    const nextAccessToken = await refreshAccessToken(headers.get("Authorization") ?? "");
+    attempt.cleanup();
+    const accessToken = headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+    const nextAccessToken = await refreshAccessToken(accessToken);
     if (nextAccessToken) {
+      attempt.cleanup();
       headers.set("Authorization", `Bearer ${nextAccessToken}`);
-      response = await fetchWithTimeout(input, init, headers);
+      attempt = await fetchWithTimeout(input, init, headers);
+      response = attempt.response;
     }
   }
 
-  if (!response.ok) {
-    let errorPayload: ApiErrorResponse | null = null;
-    try {
-      errorPayload = (await response.json()) as ApiErrorResponse;
-    } catch {
-      errorPayload = null;
+  try {
+    if (!response.ok) {
+      let errorPayload: ApiErrorResponse | null = null;
+      try {
+        errorPayload = (await response.json()) as ApiErrorResponse;
+      } catch {
+        errorPayload = null;
+      }
+
+      throw new AuthApiError(
+        response.status,
+        errorPayload?.code ?? "request_failed",
+        errorPayload?.message ?? "请求失败，请稍后重试。",
+        errorPayload?.requestId ?? response.headers.get("X-Request-ID") ?? undefined,
+      );
     }
 
-    throw new AuthApiError(
-      response.status,
-      errorPayload?.code ?? "request_failed",
-      errorPayload?.message ?? "请求失败，请稍后重试。",
-      errorPayload?.requestId ?? response.headers.get("X-Request-ID") ?? undefined,
-    );
-  }
+    if (response.status === 204) {
+      return undefined as T;
+    }
 
-  if (response.status === 204) {
-    return undefined as T;
+    return (await response.json()) as T;
+  } finally {
+    attempt.cleanup();
   }
-
-  return (await response.json()) as T;
 }
 
 async function fetchWithTimeout(input: string, init: HttpRequestInit, headers: Headers) {
@@ -100,8 +108,16 @@ async function fetchWithTimeout(input: string, init: HttpRequestInit, headers: H
   }
 
   try {
-    return await fetch(input, { ...init, headers, signal: controller.signal });
+    return {
+      response: await fetch(input, { ...init, headers, signal: controller.signal }),
+      cleanup: () => {
+        globalThis.clearTimeout(timeoutId);
+        init.signal?.removeEventListener("abort", onAbort);
+      },
+    };
   } catch (error) {
+    globalThis.clearTimeout(timeoutId);
+    init.signal?.removeEventListener("abort", onAbort);
     const message =
       error instanceof DOMException && error.name === "AbortError" && timedOut
         ? "请求超时，请稍后重试。"
@@ -111,9 +127,6 @@ async function fetchWithTimeout(input: string, init: HttpRequestInit, headers: H
             ? `网络异常，请检查连接后重试。${error.message ? ` (${error.message})` : ""}`
             : "网络异常，请检查连接后重试。";
     throw new AuthApiError(0, "network_error", message);
-  } finally {
-    globalThis.clearTimeout(timeoutId);
-    init.signal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -128,10 +141,15 @@ async function refreshAccessToken(authorization: string) {
   if (!authRefreshHandler) {
     return null;
   }
-  if (!authRefreshPromise) {
-    authRefreshPromise = authRefreshHandler(authorization).finally(() => {
-      authRefreshPromise = null;
-    });
+  if (!authRefreshOperation || authRefreshOperation.accessToken !== authorization) {
+    const promise = authRefreshHandler(authorization)
+      .catch(() => null)
+      .finally(() => {
+        if (authRefreshOperation?.promise === promise) {
+          authRefreshOperation = null;
+        }
+      });
+    authRefreshOperation = { accessToken: authorization, promise };
   }
-  return authRefreshPromise;
+  return authRefreshOperation.promise;
 }

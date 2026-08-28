@@ -59,6 +59,7 @@ export async function refreshAuthSession(refreshToken: string) {
   const response = await request<AuthResponse>("/api/v1/auth/refresh", {
     method: "POST",
     body: JSON.stringify({ refreshToken }),
+    skipAuthRefresh: true,
   });
 
   return {

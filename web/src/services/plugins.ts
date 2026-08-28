@@ -92,6 +92,7 @@ export async function disablePlugin(accessToken: string, installationId: string)
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({}),
+      timeoutMs: 120000,
     },
   );
 
@@ -131,6 +132,7 @@ export async function savePluginBinding(
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(payload),
+      timeoutMs: 60000,
     },
   );
 
@@ -150,6 +152,7 @@ export async function testPluginBinding(
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(payload),
+      timeoutMs: 60000,
     },
   );
 
@@ -229,6 +232,7 @@ export async function runPluginFetch(accessToken: string, installationId: string
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({}),
+      timeoutMs: 60000,
     },
   );
 
@@ -244,6 +248,7 @@ export async function runPrintSchedule(accessToken: string, scheduleId: string) 
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({}),
+      timeoutMs: 120000,
     },
   );
 
