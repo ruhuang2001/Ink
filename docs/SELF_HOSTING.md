@@ -101,6 +101,12 @@ cd server
 
 Serve `web/dist/` as static files and proxy `/api/` to `127.0.0.1:8080`. The API does not serve frontend assets itself.
 
+Configure the reverse proxy to compress JavaScript, CSS, and font responses.
+Use long-lived immutable caching for hashed files under `web/dist/assets/`,
+while keeping `index.html`, `site.webmanifest`, and `sw.js` revalidatable. The
+service worker caches only the shell and same-origin static assets; it never
+caches API responses.
+
 ## Reverse proxy
 
 Terminate TLS at the reverse proxy. Forward `/api/` without stripping the `/api` prefix, and serve the SPA with an `index.html` fallback for client-side routes.
