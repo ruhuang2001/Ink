@@ -1,11 +1,5 @@
-import { AuthApiError } from "@/services/auth";
+import { request } from "@/services/http";
 import type { PluginDetails, PluginValidationResult, PrintScheduleView } from "@/types/plugins";
-
-interface ApiErrorResponse {
-  code?: string;
-  message?: string;
-  requestId?: string;
-}
 
 export interface PluginBindingPayload {
   enabled: boolean;
@@ -48,52 +42,6 @@ export interface ManualPrintScheduleRunResult {
   printJobIds: string[];
 }
 
-async function request<T>(input: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (!headers.has("Content-Type") && !(init.body instanceof FormData)) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(input, {
-      ...init,
-      headers,
-    });
-  } catch (error) {
-    throw new AuthApiError(
-      0,
-      "network_error",
-      error instanceof Error
-        ? `网络异常，请检查连接后重试。${error.message ? ` (${error.message})` : ""}`
-        : "网络异常，请检查连接后重试。",
-    );
-  }
-
-  if (!response.ok) {
-    let errorPayload: ApiErrorResponse | null = null;
-
-    try {
-      errorPayload = (await response.json()) as ApiErrorResponse;
-    } catch {
-      errorPayload = null;
-    }
-
-    throw new AuthApiError(
-      response.status,
-      errorPayload?.code ?? "request_failed",
-      errorPayload?.message ?? "请求失败，请稍后重试。",
-      errorPayload?.requestId,
-    );
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return (await response.json()) as T;
-}
-
 export async function fetchAdminPlugins(accessToken: string) {
   return request<{ plugins: PluginDetails[] }>("/api/v1/admin/plugins", {
     method: "GET",
@@ -113,6 +61,7 @@ export async function uploadPluginZip(accessToken: string, file: File) {
       Authorization: `Bearer ${accessToken}`,
     },
     body: formData,
+    timeoutMs: 180000,
   });
 
   return response.plugin;
@@ -127,6 +76,7 @@ export async function installPluginFromGit(accessToken: string, payload: GitPlug
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(payload),
+      timeoutMs: 180000,
     },
   );
 
@@ -142,6 +92,7 @@ export async function disablePlugin(accessToken: string, installationId: string)
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({}),
+      timeoutMs: 120000,
     },
   );
 
@@ -181,6 +132,7 @@ export async function savePluginBinding(
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(payload),
+      timeoutMs: 60000,
     },
   );
 
@@ -200,6 +152,7 @@ export async function testPluginBinding(
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(payload),
+      timeoutMs: 60000,
     },
   );
 
@@ -279,6 +232,7 @@ export async function runPluginFetch(accessToken: string, installationId: string
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({}),
+      timeoutMs: 60000,
     },
   );
 
@@ -294,6 +248,7 @@ export async function runPrintSchedule(accessToken: string, scheduleId: string) 
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({}),
+      timeoutMs: 120000,
     },
   );
 

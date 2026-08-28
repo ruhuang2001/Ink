@@ -1,4 +1,7 @@
+import { AuthApiError, request } from "@/services/http";
 import type { AuthSession, User } from "@/types/workspace";
+
+export { AuthApiError } from "@/services/http";
 
 export interface LoginPayload {
   email: string;
@@ -27,26 +30,6 @@ interface MeResponse {
   user: User;
 }
 
-interface ApiErrorResponse {
-  code?: string;
-  message?: string;
-  requestId?: string;
-}
-
-export class AuthApiError extends Error {
-  status: number;
-  code: string;
-  requestId?: string;
-
-  constructor(status: number, code: string, message: string, requestId?: string) {
-    super(message);
-    this.name = "AuthApiError";
-    this.status = status;
-    this.code = code;
-    this.requestId = requestId;
-  }
-}
-
 function buildSession(response: AuthResponse): AuthSession {
   const expiresInMs = Number(response.expiresIn) * 1000;
   if (!Number.isFinite(expiresInMs) || expiresInMs <= 0) {
@@ -58,50 +41,6 @@ function buildSession(response: AuthResponse): AuthSession {
     refreshToken: response.refreshToken,
     accessTokenExpiresAt: new Date(Date.now() + expiresInMs).toISOString(),
   };
-}
-
-async function request<T>(input: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json");
-
-  let response: Response;
-  try {
-    response = await fetch(input, {
-      ...init,
-      headers,
-    });
-  } catch (error) {
-    throw new AuthApiError(
-      0,
-      "network_error",
-      error instanceof Error
-        ? `网络异常，请检查连接后重试。${error.message ? ` (${error.message})` : ""}`
-        : "网络异常，请检查连接后重试。",
-    );
-  }
-
-  if (!response.ok) {
-    let errorPayload: ApiErrorResponse | null = null;
-
-    try {
-      errorPayload = (await response.json()) as ApiErrorResponse;
-    } catch {
-      errorPayload = null;
-    }
-
-    throw new AuthApiError(
-      response.status,
-      errorPayload?.code ?? "request_failed",
-      errorPayload?.message ?? "请求失败，请稍后重试。",
-      errorPayload?.requestId,
-    );
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return (await response.json()) as T;
 }
 
 export async function loginWithApi(payload: LoginPayload) {
@@ -120,6 +59,7 @@ export async function refreshAuthSession(refreshToken: string) {
   const response = await request<AuthResponse>("/api/v1/auth/refresh", {
     method: "POST",
     body: JSON.stringify({ refreshToken }),
+    skipAuthRefresh: true,
   });
 
   return {
