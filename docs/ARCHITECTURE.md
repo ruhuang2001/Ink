@@ -21,8 +21,8 @@ Vue SPA ───────────────► Go HTTP API
 The frontend and API are deployed separately. The frontend calls versioned `/api/v1/...` endpoints; the API owns authentication, persistence, plugin execution, scheduling, rendering, and provider calls.
 
 The production frontend is built as an initial application chunk plus route
-chunks. Unicode-aware font subsets and route chunks are fetched on demand so a
-first visit does not download every page or the full CJK font file.
+chunks. Route chunks are fetched on demand, and the web console uses native
+system Chinese fonts instead of downloading a full CJK web font.
 
 ## Repository layout
 

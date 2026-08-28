@@ -41,7 +41,7 @@ defineProps<{
   color: #1c1917;
   background: #fff;
   box-shadow: 0 8px 24px rgb(28 25 23 / 12%);
-  font-family: "Noto Sans SC", sans-serif;
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   font-size: 22px;
   line-height: 1.55;
   white-space: pre-wrap;
