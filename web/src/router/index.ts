@@ -129,18 +129,19 @@ export function createAppRouter(
     routes,
   });
 
-  router.onError((error) => {
+  router.onError((error, to) => {
     if (!isDynamicImportError(error) || typeof window === "undefined") {
       return;
     }
 
     const reloadKey = "ink.route-chunk-reload";
     try {
-      if (window.sessionStorage.getItem(reloadKey) === window.location.href) {
+      const target = to?.fullPath ?? window.location.href;
+      if (window.sessionStorage.getItem(reloadKey) === target) {
         return;
       }
-      window.sessionStorage.setItem(reloadKey, window.location.href);
-      window.location.reload();
+      window.sessionStorage.setItem(reloadKey, target);
+      window.location.assign(target);
     } catch {
       // Storage and reload can be unavailable in embedded or restricted browsers.
     }
@@ -177,7 +178,11 @@ export function createAppRouter(
 
   router.afterEach((to) => {
     if (typeof window !== "undefined") {
-      window.sessionStorage.removeItem("ink.route-chunk-reload");
+      try {
+        window.sessionStorage.removeItem("ink.route-chunk-reload");
+      } catch {
+        // Storage can be unavailable in embedded or restricted browsers.
+      }
     }
     const title = to.meta.titleKey
       ? `${translate("app.name")} · ${translate(to.meta.titleKey)}`

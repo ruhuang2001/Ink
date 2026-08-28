@@ -6,7 +6,6 @@ import { registerServiceWorker } from "@/pwa";
 import router from "@/router";
 import { pinia } from "@/stores/pinia";
 
-import "@fontsource/noto-sans-sc/400.css";
 import "@/styles.css";
 
 const app = createApp(AppRoot);
