@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "check": "pnpm lint && pnpm format:check && pnpm test:run && pnpm build",
+    "check": "pnpm lint && pnpm format:check && pnpm test:run && pnpm build && pnpm check:budget",
+    "check:budget": "node scripts/check-performance-budget.mjs",
     "format": "oxfmt -c .oxfmtrc.json .",
     "format:check": "oxfmt -c .oxfmtrc.json --check .",
     "lint": "oxlint -c .oxlintrc.json --deny-warnings src vite.config.ts tailwind.config.ts postcss.config.js",

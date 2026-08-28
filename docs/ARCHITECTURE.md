@@ -20,6 +20,10 @@ Vue SPA ───────────────► Go HTTP API
 
 The frontend and API are deployed separately. The frontend calls versioned `/api/v1/...` endpoints; the API owns authentication, persistence, plugin execution, scheduling, rendering, and provider calls.
 
+The production frontend is built as an initial application chunk plus route
+chunks. Unicode-aware font subsets and route chunks are fetched on demand so a
+first visit does not download every page or the full CJK font file.
+
 ## Repository layout
 
 - `web/src`: Vue views, Pinia state, API clients, routes, shared types, and i18n resources.
@@ -104,6 +108,8 @@ This prevents network collection timing from being coupled to the desired print 
 - Login throttling is bounded but process-local.
 - AI credentials and plugin binding secrets are encrypted using `AI_CONFIG_ENCRYPTION_KEY`.
 - Plugin installation is administrator-only, but administrator authorization does not make plugin code safe.
+- Browser API calls use one typed client with request timeouts, cancellation,
+  request IDs, and single-flight access-token refresh coordination.
 
 See [Security Policy](../SECURITY.md) and [Plugin Security Model](PLUGIN_SPEC.md#security-model).
 

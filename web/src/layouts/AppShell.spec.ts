@@ -98,8 +98,9 @@ describe("AppShell", () => {
 
     await loginLink?.trigger("click");
     await flushPromises();
-
-    expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/status");
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/status");
+    });
   });
 
   it("logs out and returns to conversations when the header logout action is used", async () => {
@@ -112,7 +113,9 @@ describe("AppShell", () => {
     await flushPromises();
 
     expect(store.isAuthenticated).toBe(false);
-    expect(router.currentRoute.value.fullPath).toBe("/conversations");
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.fullPath).toBe("/conversations");
+    });
   });
 
   it("shows and dismisses the post-login binding tutorial dialog", async () => {

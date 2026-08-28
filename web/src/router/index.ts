@@ -11,12 +11,13 @@ import AppShell from "@/layouts/AppShell.vue";
 import { DEFAULT_LOGIN_REDIRECT, resolveLoginRedirect } from "@/router/authRedirect";
 import { pinia } from "@/stores/pinia";
 import { useWorkspaceStore } from "@/stores/workspace";
-import ConversationsView from "@/views/ConversationsView.vue";
-import LoginView from "@/views/LoginView.vue";
-import PrintsView from "@/views/PrintsView.vue";
-import SettingsView from "@/views/SettingsView.vue";
-import StatusView from "@/views/StatusView.vue";
-import TutorialView from "@/views/TutorialView.vue";
+
+const ConversationsView = () => import("@/views/ConversationsView.vue");
+const LoginView = () => import("@/views/LoginView.vue");
+const PrintsView = () => import("@/views/PrintsView.vue");
+const SettingsView = () => import("@/views/SettingsView.vue");
+const StatusView = () => import("@/views/StatusView.vue");
+const TutorialView = () => import("@/views/TutorialView.vue");
 
 declare module "vue-router" {
   interface RouteMeta {
@@ -128,6 +129,23 @@ export function createAppRouter(
     routes,
   });
 
+  router.onError((error) => {
+    if (!isDynamicImportError(error) || typeof window === "undefined") {
+      return;
+    }
+
+    const reloadKey = "ink.route-chunk-reload";
+    try {
+      if (window.sessionStorage.getItem(reloadKey) === window.location.href) {
+        return;
+      }
+      window.sessionStorage.setItem(reloadKey, window.location.href);
+      window.location.reload();
+    } catch {
+      // Storage and reload can be unavailable in embedded or restricted browsers.
+    }
+  });
+
   router.beforeEach(async (to) => {
     const workspaceStore = useWorkspaceStore(piniaInstance);
 
@@ -158,6 +176,9 @@ export function createAppRouter(
   });
 
   router.afterEach((to) => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem("ink.route-chunk-reload");
+    }
     const title = to.meta.titleKey
       ? `${translate("app.name")} · ${translate(to.meta.titleKey)}`
       : translate("app.name");
@@ -165,6 +186,13 @@ export function createAppRouter(
   });
 
   return router;
+}
+
+function isDynamicImportError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /dynamically imported module|importing a module script failed|loading chunk/i.test(
+    message,
+  );
 }
 
 export function createTestRouter(piniaInstance = pinia) {

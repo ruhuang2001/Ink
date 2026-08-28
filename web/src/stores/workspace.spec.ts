@@ -432,11 +432,11 @@ describe("workspace store", () => {
       vi.mocked(saveWorkspaceStateWithApi).mockClear();
 
       store.setTheme("dark");
-      await vi.advanceTimersByTimeAsync(180);
+      await vi.advanceTimersByTimeAsync(750);
       expect(saveWorkspaceStateWithApi).toHaveBeenCalledTimes(1);
 
       store.setTheme("light");
-      await vi.advanceTimersByTimeAsync(180);
+      await vi.advanceTimersByTimeAsync(750);
       finishFirstSave();
       await vi.waitFor(() => {
         expect(saveWorkspaceStateWithApi).toHaveBeenCalledTimes(2);
