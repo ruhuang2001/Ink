@@ -573,6 +573,14 @@ type fakePrinterService struct {
 	err       error
 }
 
+func (f fakePrinterService) RenderPreview(_ context.Context, _ string, _ string) (string, error) {
+	return "iVBORw0KGgo=", f.err
+}
+
+func (f fakePrinterService) RenderBlocksPreview(_ context.Context, _ string, _ []plugins.ContentBlock) (string, error) {
+	return "iVBORw0KGgo=", f.err
+}
+
 func (f fakePrinterService) ListDevices(_ context.Context, _ string) ([]workspace.Device, error) {
 	return f.devices, f.err
 }

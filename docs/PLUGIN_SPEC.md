@@ -1,11 +1,51 @@
-# Ink Plugin Spec v2
+# Ink Source Plugin Guide and Spec v2
 
-This document defines the only supported plugin contract for Ink source plugins.
+This document is both the implementation guide and the normative contract for Ink source plugins.
 
 - `schemaVersion` must be `2`
 - Plugins own data collection cadence through `fetchPolicy`
 - Print schedules only decide when already-collected items are printed
 - `scheduleConfig` and `scheduleConfigSchema` do not exist in v2
+
+> **Trust boundary:** Ink plugins are server-side programs, not browser extensions. Installation and runtime may execute arbitrary code with the API process's privileges. Develop, audit, and install only trusted plugins and dependency trees.
+
+## Build a Plugin
+
+Choose one supported package layout.
+
+Node.js:
+
+```text
+example-plugin/
+├── ink-plugin.json
+├── package.json
+├── pnpm-lock.yaml
+├── validate.mjs
+└── fetch.mjs
+```
+
+Python:
+
+```text
+example-plugin/
+├── ink-plugin.json
+├── pyproject.toml
+├── uv.lock
+├── validate.py
+└── fetch.py
+```
+
+Development sequence:
+
+1. Define configuration and entrypoints in `ink-plugin.json`.
+2. Implement `validate` to reject unusable binding configuration.
+3. Implement `fetch` to return stable item identifiers and semantic blocks.
+4. Test both entrypoints locally with JSON stdin fixtures.
+5. Package the directory as a ZIP, or push it to an allowlisted HTTPS Git host.
+6. Install it from **Settings → Plugins**, configure the binding, validate it, and perform a manual fetch.
+7. Create a print schedule for the connected binding.
+
+The fixture at [`server/testdata/plugins/python-hello-plugin`](../server/testdata/plugins/python-hello-plugin) is a minimal working Python example used by the server's real subprocess tests.
 
 ## Mental Model
 
@@ -92,6 +132,8 @@ Ink now splits plugin work into two independent loops:
 - `secret`
 
 `secret` fields are allowed only in `workspaceConfigSchema`. Their values are encrypted in binding storage and are passed to the plugin through the `secrets` object.
+
+Configuration keys not declared by the manifest are rejected. Values submitted through the `secrets` object must correspond to fields explicitly declared with `type: "secret"`.
 
 ## Entrypoints
 
@@ -215,14 +257,61 @@ Supported block types:
 - `image`
 - `link`
 - `divider`
+- `list` (`style`: `bullet` or `ordered`, with `items`)
+- `quote`
 
-Plugins should emit only simple, already-sanitized printable content.
+Block shapes:
+
+```json
+[
+  { "type": "heading", "level": 1, "text": "Daily Digest" },
+  { "type": "paragraph", "text": "A printable paragraph." },
+  { "type": "image", "url": "https://example.com/image.png", "alt": "Cover" },
+  { "type": "link", "url": "https://example.com/article", "text": "Read more" },
+  { "type": "divider" },
+  { "type": "list", "style": "bullet", "items": ["First", "Second"] },
+  { "type": "quote", "text": "A short quotation." }
+]
+```
+
+Rules:
+
+- `heading.level` must be `1`, `2`, or `3`.
+- `heading`, `paragraph`, and `quote` require non-empty text.
+- `image` and `link` URLs must use HTTP or HTTPS.
+- `list.style` may be `bullet` or `ordered`; `items` must be non-empty strings.
+- Every item must contain at least one valid block.
+
+The current thermal renderer converts blocks to text before generating the final PNG. `image` blocks therefore print their alternative text and URL; Ink does not yet download and embed remote image pixels. Links print their label and URL. This behavior is identical in preview and physical printing.
+
+Plugins should emit simple, sanitized printable content. Ink renders semantic blocks into the target device's image format; plugins do not calculate paper width or emit printer commands. Unsupported rich source content should be summarized or converted to the closest supported semantic block.
 
 Recommended local checks for plugin authors:
 
 - run the manifest validation and plugin tests provided by this monorepo (and use future in-repo plugin tooling when available)
 - execute `validate` with a fixture payload and assert `valid: true`
 - execute `fetch` with a fixture payload and validate every emitted item and block
+
+Example shell checks:
+
+```bash
+printf '%s' '{"workspaceConfig":{"feedUrl":"https://example.com/feed"},"secrets":{}}' \
+  | node validate.mjs
+
+printf '%s' '{"workspaceConfig":{"feedUrl":"https://example.com/feed"},"secrets":{},"cursor":null,"trigger":{"kind":"manual","triggeredAt":"2026-01-01T00:00:00Z","timezone":"UTC"}}' \
+  | node fetch.mjs
+```
+
+Use `uv run python ...` instead for Python entrypoints. Entrypoints must write only result JSON to stdout; use stderr for diagnostics and never log secrets.
+
+## Install and Update
+
+Administrators can install a plugin in either form:
+
+- upload a ZIP containing the package layout above;
+- install from an HTTPS Git URL whose host is in `PLUGIN_GIT_ALLOWED_HOSTS`, with an optional branch/tag and repository subdirectory.
+
+Reinstalling the same `pluginKey` updates the existing installation record. Ink publishes the new version only after dependency installation succeeds and removes the previous published directory after the database update succeeds. Existing user bindings remain associated with the installation ID, so plugin authors should preserve compatible configuration keys or document migration steps.
 
 Ink also applies server-side fetch output limits before ingestion:
 
@@ -339,6 +428,13 @@ Delivery order is fixed to oldest-first.
   - Fetches and ingests items
   - Does not print
 
+- `POST /api/v1/print-preview`
+  - Authenticated preview operation; accepts `title` and either plain `content`
+    or plugin `blocks`
+  - Returns a base64-encoded PNG rendered with the same 384px image pipeline
+    used for physical printing
+  - Never creates a print job or contacts a printer
+
 - `POST /api/v1/print-schedules/{scheduleID}/run`
   - Manual print tick only
   - Prints already-collected items for that schedule
@@ -349,6 +445,15 @@ Delivery order is fixed to oldest-first.
 Ink treats installed plugins and their dependencies as trusted server-side code. Installation, package build hooks, and runtime entrypoints may execute code with the server process's privileges. Admin-only installation limits who can initiate installation, but it does not make untrusted code safe.
 
 Plugin entrypoints run as local subprocesses with a constrained environment, isolated temporary directories, execution timeouts, and output limits. These are defense-in-depth controls, not a security sandbox. Permission declarations are primarily review metadata, except that Node `installScripts` selects whether pnpm lifecycle scripts are ignored during installation. Operators must install only from trusted repositories or uploads, audit dependency chains, keep the Git host allowlist narrow, and avoid any public marketplace until installation and runtime have an appropriate sandbox with enforced capabilities. Python's build-hook limitation makes the trusted-only rule mandatory even at install time.
+
+Plugin authors should:
+
+- minimize dependencies and commit lockfiles;
+- avoid install scripts unless strictly necessary;
+- bound network response sizes and timeouts inside the plugin;
+- treat configuration and remote content as untrusted input;
+- never print secrets to stdout, stderr, item content, or error messages;
+- use stable, source-derived `externalId` values rather than fetch timestamps.
 
 ## Example Node Fetch Entrypoint
 
@@ -374,12 +479,12 @@ process.stdout.write(
         sourceLabel: sourceName,
         blocks: [
           { type: "heading", level: 1, text: `${sourceName} Digest` },
-          { type: "paragraph", text: "Hello from Ink." }
-        ]
-      }
+          { type: "paragraph", text: "Hello from Ink." },
+        ],
+      },
     ],
-    cursor: payload.trigger?.triggeredAt ?? null
-  })
+    cursor: payload.trigger?.triggeredAt ?? null,
+  }),
 );
 ```
 

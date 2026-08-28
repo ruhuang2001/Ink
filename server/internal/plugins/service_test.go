@@ -578,6 +578,46 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 	}
 }
 
+func TestSaveBindingRejectsUndeclaredSecrets(t *testing.T) {
+	repo := newMemoryRepo()
+	service := NewService(repo, fakeAuthenticator{}, fakeEncryptor{}, &fakeIDGenerator{}, fakeClock{now: time.Now()}, installPassthroughRunner{}, t.TempDir(), time.Second, time.Second, RuntimeLimits{}, nil, nil)
+	installation := Installation{ID: "plugin-1", PluginKey: "demo", Status: InstallationStatusReady, ManifestJSON: []byte(`{"schemaVersion":2,"kind":"source","pluginKey":"demo","name":"Demo","version":"1","runtime":{"type":"node"},"fetchPolicy":{"type":"fixed_interval","minutes":5},"entrypoints":{"validate":{"command":["node","validate.js"]},"fetch":{"command":["node","fetch.js"]}},"workspaceConfigSchema":[{"key":"token","label":"Token","type":"secret"},{"key":"feed","label":"Feed","type":"url"}]}`)}
+	repo.installations[installation.ID] = installation
+
+	_, err := service.SaveBinding(context.Background(), "member-token", installation.ID, BindingInput{Secrets: map[string]string{"feed": "not-a-secret", "unknown": "value"}})
+	if err == nil {
+		t.Fatal("expected undeclared secrets to be rejected")
+	}
+	var validation ValidationFailure
+	if !errors.As(err, &validation) || len(validation.Errors) != 2 {
+		t.Fatalf("expected two field validation errors, got %v", err)
+	}
+}
+
+func TestRemovePublishedPluginDirectoryStaysWithinRoot(t *testing.T) {
+	root := t.TempDir()
+	inside := filepath.Join(root, "installations", "old")
+	if err := os.MkdirAll(inside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := removePublishedPluginDirectory(root, inside); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(inside); !os.IsNotExist(err) {
+		t.Fatalf("expected published directory removed, got %v", err)
+	}
+	outside := filepath.Join(root, "outside")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := removePublishedPluginDirectory(root, outside); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("expected outside path preserved, got %v", err)
+	}
+}
+
 func TestUploadPluginRemovesPublishedDirectoryWhenPersistenceFails(t *testing.T) {
 	t.Parallel()
 

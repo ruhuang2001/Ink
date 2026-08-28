@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/workspace"
 	memobirdapi "github.com/ruhuang2001/memobird-go/memobird"
+	memobirdtextrender "github.com/ruhuang2001/memobird-go/textrender"
 )
 
 var (
@@ -89,6 +91,8 @@ type PrinterService interface {
 	SubmitPrintJob(ctx context.Context, accessToken string, jobID string) (workspace.PrintJob, error)
 	CancelPrintJob(ctx context.Context, accessToken string, jobID string) (workspace.PrintJob, error)
 	UpdatePrintJobDevice(ctx context.Context, accessToken string, jobID string, input UpdateJobDeviceInput) (workspace.PrintJob, error)
+	RenderPreview(ctx context.Context, title string, content string) (string, error)
+	RenderBlocksPreview(ctx context.Context, title string, blocks []plugins.ContentBlock) (string, error)
 }
 
 type SystemPrinterService interface {
@@ -308,6 +312,27 @@ func (s *Service) CreatePrintJob(ctx context.Context, accessToken string, input 
 	}
 
 	return s.createPrintJobForUser(ctx, currentUser.ID, input)
+}
+
+// RenderPreview renders the exact PNG payload used by the Memobird image
+// pipeline, without creating a print job or contacting the device.
+func (s *Service) RenderPreview(_ context.Context, title string, content string) (string, error) {
+	title = strings.TrimSpace(title)
+	content = strings.TrimSpace(content)
+	if title == "" || content == "" {
+		return "", ErrInvalidInput
+	}
+	return memobirdtextrender.RenderBase64PNG(renderPrintableText(title, content), memobirdtextrender.Options{
+		Width: 384, Padding: 18, FontSize: 22, LineHeight: 1.55, FontData: printerFontData,
+	})
+}
+
+func (s *Service) RenderBlocksPreview(ctx context.Context, title string, blocks []plugins.ContentBlock) (string, error) {
+	content, err := RenderBlocksToText(blocks)
+	if err != nil {
+		return "", err
+	}
+	return s.RenderPreview(ctx, title, content)
 }
 
 func (s *Service) CreatePrintJobForUser(ctx context.Context, userID string, input CreateJobInput) (workspace.PrintJob, error) {

@@ -1,8 +1,11 @@
 package printer
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
+	"image/png"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +13,28 @@ import (
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
+
+func TestRenderPreviewReturnsPNG(t *testing.T) {
+	service := NewService(nil, nil, nil, nil, "", "", time.Second)
+	image, err := service.RenderPreview(context.Background(), "标题", "正文内容")
+	if err != nil {
+		t.Fatalf("render preview: %v", err)
+	}
+	pngBytes, err := base64.StdEncoding.DecodeString(image)
+	if err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if len(pngBytes) < 8 || string(pngBytes[:8]) != "\x89PNG\r\n\x1a\n" {
+		t.Fatalf("expected PNG signature")
+	}
+	decoded, err := png.Decode(bytes.NewReader(pngBytes))
+	if err != nil {
+		t.Fatalf("decode PNG: %v", err)
+	}
+	if decoded.Bounds().Dx() != 384 {
+		t.Fatalf("expected preview width 384, got %d", decoded.Bounds().Dx())
+	}
+}
 
 func TestCancelPrintJobRejectsQueuedJobs(t *testing.T) {
 	repo := newFakePrinterRepo()

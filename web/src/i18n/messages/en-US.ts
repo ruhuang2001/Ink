@@ -712,6 +712,11 @@ const enUS = {
       newSchedule: "New schedule",
       confirmPrint: "Confirm print",
       cancelPrint: "Cancel print",
+      preview: "Print preview",
+    },
+    preview: {
+      title: "Print preview",
+      hint: "This preview approximates the Memobird's 384px-wide black-and-white image output at 22px text size. The physical print may vary slightly by device.",
     },
     pending: {
       title: "Pending prints",

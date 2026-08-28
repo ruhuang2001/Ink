@@ -4,11 +4,11 @@
 
 Ink is still in early development. Security fixes are applied to:
 
-| Version | Supported |
-| --- | --- |
-| `main` | yes |
-| latest `0.x` release | yes |
-| older pre-release snapshots | no |
+| Version                     | Supported |
+| --------------------------- | --------- |
+| `main`                      | yes       |
+| latest `0.x` release        | yes       |
+| older pre-release snapshots | no        |
 
 ## Reporting a vulnerability
 
@@ -27,6 +27,12 @@ Do not open a public issue for undisclosed vulnerabilities, credentials, token l
 Ink plugins are trusted server-side code. Plugin installation, dependency resolution and build hooks, and runtime entrypoints can execute code with the server process's privileges. Restricting installation endpoints to administrators controls who may install a plugin; it does not make an untrusted plugin or dependency safe.
 
 Install plugins only from sources whose code and dependency chain you trust. Ink must not offer an untrusted public plugin marketplace until plugin installation and execution have an appropriate sandbox and enforceable capability model.
+
+## Browser session boundary
+
+The current web client stores access and refresh session tokens in browser Web Storage. This keeps the early self-hosted flow simple, but JavaScript running through an XSS vulnerability could read those credentials. Deploy Ink only over HTTPS, use a restrictive Content Security Policy at the reverse proxy, avoid injecting untrusted HTML, and keep frontend dependencies patched.
+
+Moving refresh credentials to `HttpOnly`, `Secure`, and appropriately `SameSite` cookies with an explicit CSRF strategy is planned but not implemented in the current release.
 
 ## Dependency vulnerability handling
 

@@ -17,6 +17,8 @@ You can help by:
 ## Repository overview
 
 - `web/` contains the Vue 3 + TypeScript frontend built with Vite.
+- `server/` contains the Go API, PostgreSQL repositories, migrations, workers, and plugin runtime.
+- `docs/` contains self-hosting, architecture, and plugin protocol documentation.
 - `Makefile` provides the quickest way to run common local commands.
 
 ## Before you start
@@ -45,6 +47,8 @@ This helps avoid duplicate work and keeps the project direction consistent.
 
 - Node.js 22
 - pnpm 10
+- Go 1.25
+- Docker with PostgreSQL 16 support
 - Git
 
 Fork the repository, clone your fork, and create a branch from `main`.
@@ -59,8 +63,6 @@ git checkout -b feat/your-change
 
 ## Development commands
 
-### Frontend
-
 Install dependencies:
 
 ```bash
@@ -71,17 +73,18 @@ pnpm install
 
 The root install sets up the repository Git hooks. The `web/` install provides the frontend toolchain used by the pre-commit checks.
 
-Start the frontend dev server:
+Start the full development stack in separate terminals:
 
 ```bash
+make dev-api
 make dev-web
 ```
 
-Run the full frontend quality check before opening a pull request:
+Run the relevant quality checks before opening a pull request:
 
 ```bash
-cd web
-pnpm check
+make check-web
+make check-api
 ```
 
 Useful frontend commands:
@@ -189,10 +192,7 @@ Please keep commits readable and consistent with the existing project history.
 
 Before opening a pull request, run the checks relevant to your change.
 
-```bash
-cd web
-pnpm check
-```
+Use `make check-local-ci` before a commit or push when Docker and `act` are available. It runs the same web, server, and Go lint jobs used in CI, followed by the isolated API smoke test.
 
 ## License
 

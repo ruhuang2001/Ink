@@ -37,6 +37,8 @@ const (
 	BlockImage     BlockType = "image"
 	BlockLink      BlockType = "link"
 	BlockDivider   BlockType = "divider"
+	BlockList      BlockType = "list"
+	BlockQuote     BlockType = "quote"
 
 	TriggerKindAutomatic TriggerKind = "automatic"
 	TriggerKindManual    TriggerKind = "manual"
@@ -186,6 +188,8 @@ type ContentBlock struct {
 	Text  string    `json:"text,omitempty"`  // heading / paragraph / link
 	URL   string    `json:"url,omitempty"`   // image / link
 	Alt   string    `json:"alt,omitempty"`   // image
+	Items []string  `json:"items,omitempty"` // list
+	Style string    `json:"style,omitempty"` // list: bullet / ordered
 }
 
 // Item represents a single printable unit produced by a plugin.

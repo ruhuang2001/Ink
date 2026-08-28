@@ -690,6 +690,11 @@ const zhCN = {
       newSchedule: "新建定时任务",
       confirmPrint: "确认打印",
       cancelPrint: "取消打印",
+      preview: "打印预览",
+    },
+    preview: {
+      title: "打印预览",
+      hint: "预览按咕咕机约 384px 宽、22px 字号的黑白图片效果展示，实际出纸可能因设备略有差异。",
     },
     pending: {
       title: "待处理打印",

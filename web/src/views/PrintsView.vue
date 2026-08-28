@@ -4,6 +4,8 @@ import { useI18n } from "vue-i18n";
 import { RouterLink } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
+import PrintPreview from "@/components/PrintPreview.vue";
+import { renderPrintPreview } from "@/services/printers";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { getPrintStatusBadgeClass, getSourceStatusBadgeClass } from "@/utils/workspace";
 
@@ -47,6 +49,7 @@ const scheduleWeekdays = ref<number[]>([]);
 const scheduleBatchSize = ref(1);
 const scheduleDeviceId = ref("");
 const scheduleError = ref("");
+const previewJob = ref<{ title: string; content: string; image?: string } | null>(null);
 
 function getInvalidBatchSizeMessage() {
   return t("prints.errors.invalidBatchSize");
@@ -103,6 +106,35 @@ function openPrintDialog() {
 
 function closePrintDialog() {
   printDialogOpen.value = false;
+}
+
+async function openPreview(item: { title: string; content: string }) {
+  previewJob.value = { title: item.title, content: item.content };
+  const token = workspaceStore.authSession?.accessToken;
+  if (!token) return;
+  try {
+    const image = await renderPrintPreview(token, { title: item.title, content: item.content });
+    if (previewJob.value?.title === item.title) previewJob.value = { ...item, image };
+  } catch {
+    // Keep the CSS fallback visible when the preview endpoint is unavailable.
+  }
+}
+
+function closePreview() {
+  previewJob.value = null;
+}
+
+function previewManualPrint() {
+  printError.value = "";
+  if (!printTitle.value.trim()) {
+    printError.value = t("prints.printDialog.errors.titleRequired");
+    return;
+  }
+  if (!printContent.value.trim()) {
+    printError.value = t("prints.printDialog.errors.contentRequired");
+    return;
+  }
+  void openPreview({ title: printTitle.value, content: printContent.value });
 }
 
 async function submitPrintDialog() {
@@ -304,6 +336,12 @@ async function submitScheduleDialog() {
                 <div
                   class="flex w-full flex-wrap items-start gap-2 self-stretch sm:w-auto sm:self-start"
                 >
+                  <button
+                    class="ui-btn-secondary px-3 py-1.5 text-sm whitespace-nowrap"
+                    @click="openPreview(item)"
+                  >
+                    {{ t("prints.actions.preview") }}
+                  </button>
                   <button
                     v-if="item.status === 'pending'"
                     class="ui-btn-primary px-3 py-1.5 text-sm whitespace-nowrap"
@@ -594,6 +632,13 @@ async function submitScheduleDialog() {
             @click="closePrintDialog"
           >
             {{ t("common.actions.cancel") }}
+          </button>
+          <button
+            type="button"
+            class="ui-btn-secondary px-4 py-2 text-sm"
+            @click="previewManualPrint"
+          >
+            {{ t("prints.actions.preview") }}
           </button>
           <button type="submit" class="ui-btn-primary px-4 py-2 text-sm">
             {{ t("prints.printDialog.submit") }}
@@ -894,6 +939,20 @@ async function submitScheduleDialog() {
           </button>
         </div>
       </form>
+    </AppDialog>
+
+    <AppDialog
+      v-if="previewJob"
+      :open="true"
+      :title="t('prints.preview.title')"
+      @close="closePreview"
+    >
+      <p class="mb-4 text-sm text-stone-500">{{ t("prints.preview.hint") }}</p>
+      <PrintPreview
+        :title="previewJob.title"
+        :content="previewJob.content"
+        :image="previewJob.image"
+      />
     </AppDialog>
   </section>
 </template>

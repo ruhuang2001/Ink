@@ -142,6 +142,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/feedback/print", s.wrap(s.handleSubmitFeedback))
 	mux.HandleFunc("GET /api/v1/print-jobs", s.wrap(s.handleListPrintJobs))
 	mux.HandleFunc("POST /api/v1/print-jobs", s.wrap(s.handleCreatePrintJob))
+	mux.HandleFunc("POST /api/v1/print-preview", s.wrap(s.handlePrintPreview))
 	mux.HandleFunc("POST /api/v1/print-jobs/{jobID}/submit", s.wrap(s.handleSubmitPrintJob))
 	mux.HandleFunc("POST /api/v1/print-jobs/{jobID}/cancel", s.wrap(s.handleCancelPrintJob))
 	mux.HandleFunc("PUT /api/v1/print-jobs/{jobID}/device", s.wrap(s.handleUpdatePrintJobDevice))
@@ -209,6 +210,12 @@ type createPrintJobRequest struct {
 	Content           string `json:"content"`
 	PrinterBindingID  string `json:"printerBindingId"`
 	SubmitImmediately bool   `json:"submitImmediately"`
+}
+
+type printPreviewRequest struct {
+	Title   string                 `json:"title"`
+	Content string                 `json:"content"`
+	Blocks  []plugins.ContentBlock `json:"blocks,omitempty"`
 }
 
 type updatePrintJobDeviceRequest struct {
@@ -638,6 +645,29 @@ func (s *Server) handleCreatePrintJob(w http.ResponseWriter, r *http.Request, re
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]workspace.PrintJob{"printJob": job})
+}
+
+func (s *Server) handlePrintPreview(w http.ResponseWriter, r *http.Request, requestID string) {
+	if bearerToken(r.Header.Get("Authorization")) == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+	var payload printPreviewRequest
+	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
+		return
+	}
+	var image string
+	var err error
+	if len(payload.Blocks) > 0 {
+		image, err = s.printer.RenderBlocksPreview(r.Context(), payload.Title, payload.Blocks)
+	} else {
+		image, err = s.printer.RenderPreview(r.Context(), payload.Title, payload.Content)
+	}
+	if err != nil {
+		s.writePrinterError(w, requestID, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"image": image})
 }
 
 func (s *Server) handleSubmitPrintJob(w http.ResponseWriter, r *http.Request, requestID string) {

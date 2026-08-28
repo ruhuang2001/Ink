@@ -43,9 +43,6 @@ type Config struct {
 	PluginEnvAllowlist          []string
 	PluginGitAllowedHosts       []string
 	SchedulerPollInterval       time.Duration
-	DispatchRetryInterval       time.Duration
-	DispatchRetryBackoff        time.Duration
-	DispatchRetryBatch          int
 	InboxJanitorInterval        time.Duration
 	InboxRetention              time.Duration
 }
@@ -146,21 +143,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	dispatchRetryInterval, err := envDuration("DISPATCH_RETRY_INTERVAL", 1*time.Minute)
-	if err != nil {
-		return Config{}, err
-	}
-
-	dispatchRetryBackoff, err := envDuration("DISPATCH_RETRY_BACKOFF", 15*time.Minute)
-	if err != nil {
-		return Config{}, err
-	}
-
-	dispatchRetryBatch, err := envInt("DISPATCH_RETRY_BATCH", 50)
-	if err != nil {
-		return Config{}, err
-	}
-
 	inboxJanitorInterval, err := envDuration("INBOX_JANITOR_INTERVAL", 6*time.Hour)
 	if err != nil {
 		return Config{}, err
@@ -201,9 +183,6 @@ func Load() (Config, error) {
 		PluginEnvAllowlist:          envStringList("PLUGIN_ENV_ALLOWLIST", []string{}),
 		PluginGitAllowedHosts:       envStringList("PLUGIN_GIT_ALLOWED_HOSTS", []string{"github.com", "gitee.com", "gitlab.com"}),
 		SchedulerPollInterval:       schedulerPollInterval,
-		DispatchRetryInterval:       dispatchRetryInterval,
-		DispatchRetryBackoff:        dispatchRetryBackoff,
-		DispatchRetryBatch:          dispatchRetryBatch,
 		InboxJanitorInterval:        inboxJanitorInterval,
 		InboxRetention:              inboxRetention,
 	}
@@ -273,15 +252,6 @@ func Load() (Config, error) {
 	}
 	if cfg.SchedulerPollInterval <= 0 {
 		return Config{}, fmt.Errorf("SCHEDULER_POLL_INTERVAL must be positive")
-	}
-	if cfg.DispatchRetryInterval <= 0 {
-		return Config{}, fmt.Errorf("DISPATCH_RETRY_INTERVAL must be positive")
-	}
-	if cfg.DispatchRetryBackoff <= 0 {
-		return Config{}, fmt.Errorf("DISPATCH_RETRY_BACKOFF must be positive")
-	}
-	if cfg.DispatchRetryBatch <= 0 {
-		return Config{}, fmt.Errorf("DISPATCH_RETRY_BATCH must be positive")
 	}
 	if cfg.InboxJanitorInterval <= 0 {
 		return Config{}, fmt.Errorf("INBOX_JANITOR_INTERVAL must be positive")

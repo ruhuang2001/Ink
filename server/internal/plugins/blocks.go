@@ -28,6 +28,8 @@ var blockValidators = map[BlockType]func(ContentBlock) error{
 	BlockImage:     validateImageBlock,
 	BlockLink:      validateLinkBlock,
 	BlockDivider:   func(ContentBlock) error { return nil },
+	BlockList:      validateListBlock,
+	BlockQuote:     validateQuoteBlock,
 }
 
 func validateBlock(block ContentBlock) error {
@@ -65,6 +67,28 @@ func validateImageBlock(block ContentBlock) error {
 func validateLinkBlock(block ContentBlock) error {
 	if err := validateHTTPURL(block.URL); err != nil {
 		return fmt.Errorf("link.url: %w", err)
+	}
+	return nil
+}
+
+func validateListBlock(block ContentBlock) error {
+	if block.Style != "" && block.Style != "bullet" && block.Style != "ordered" {
+		return fmt.Errorf("list.style must be bullet or ordered")
+	}
+	if len(block.Items) == 0 {
+		return fmt.Errorf("list.items must not be empty")
+	}
+	for _, item := range block.Items {
+		if strings.TrimSpace(item) == "" {
+			return fmt.Errorf("list.items must not contain empty values")
+		}
+	}
+	return nil
+}
+
+func validateQuoteBlock(block ContentBlock) error {
+	if strings.TrimSpace(block.Text) == "" {
+		return fmt.Errorf("quote.text is required")
 	}
 	return nil
 }

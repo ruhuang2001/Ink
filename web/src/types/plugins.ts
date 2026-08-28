@@ -64,6 +64,25 @@ export interface PluginManifest {
   workspaceConfigSchema: PluginFieldSpec[];
 }
 
+export type PluginBlockType =
+  | "heading"
+  | "paragraph"
+  | "image"
+  | "link"
+  | "divider"
+  | "list"
+  | "quote";
+
+export interface ContentBlock {
+  type: PluginBlockType;
+  level?: number;
+  text?: string;
+  url?: string;
+  alt?: string;
+  items?: string[];
+  style?: "bullet" | "ordered";
+}
+
 export interface PluginInstallationSummary {
   id: string;
   pluginKey: string;

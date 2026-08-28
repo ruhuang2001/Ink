@@ -24,7 +24,7 @@ func TestRenderBlocksToTextAllTypes(t *testing.T) {
 	}
 
 	expectedSubstrings := []string{
-		"# 今日要闻",
+		"今日要闻",
 		"早上好",
 		"[封面] https://example.com/a.png",
 		"阅读全文\nhttps://example.com/article",
@@ -81,9 +81,8 @@ func TestRenderBlocksToTextHeadingLevels(t *testing.T) {
 		if err != nil {
 			t.Fatalf("render level %d: %v", level, err)
 		}
-		prefix := strings.Repeat("#", level) + " 标题"
-		if rendered != prefix {
-			t.Fatalf("expected %q, got %q", prefix, rendered)
+		if rendered != "标题" {
+			t.Fatalf("expected plain heading text, got %q", rendered)
 		}
 	}
 }

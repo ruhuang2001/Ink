@@ -406,6 +406,10 @@ func (s *Service) installAndPublish(ctx context.Context, pluginDir string, manif
 		s.recordFailedInstall(ctx, manifest, manifestJSON, metadata, err)
 		return PluginDetails{}, err
 	}
+	previousPath := ""
+	if previous, lookupErr := s.repo.FindInstallationByPluginKey(ctx, manifest.PluginKey); lookupErr == nil && previous != nil {
+		previousPath = previous.CurrentPath
+	}
 
 	installationID, createdAt, err := s.resolveInstallationID(ctx, manifest.PluginKey)
 	if err != nil {
@@ -444,7 +448,19 @@ func (s *Service) installAndPublish(ctx context.Context, pluginDir string, manif
 		}
 		return PluginDetails{}, err
 	}
+	if previousPath != "" && previousPath != finalDir {
+		_ = removePublishedPluginDirectory(s.pluginRoot, previousPath)
+	}
 	return s.detailsFromInstallation(installation, nil), nil
+}
+
+func removePublishedPluginDirectory(pluginRoot, path string) error {
+	installationsRoot := filepath.Join(pluginRoot, "installations")
+	relative, err := filepath.Rel(installationsRoot, path)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+		return nil
+	}
+	return os.RemoveAll(path)
 }
 
 func (s *Service) resolveInstallationID(ctx context.Context, pluginKey string) (string, time.Time, error) {
@@ -697,6 +713,9 @@ func (s *Service) resolveBindingInput(ctx context.Context, accessToken string, i
 			return bindingResolution{}, err
 		}
 	}
+	if fieldErrs := validateInputSecrets(manifest.WorkspaceConfigSchema, input.Secrets); len(fieldErrs) > 0 {
+		return bindingResolution{}, ValidationFailure{Errors: fieldErrs}
+	}
 	for key, value := range input.Config {
 		baseConfig[key] = value
 	}
@@ -713,6 +732,29 @@ func (s *Service) resolveBindingInput(ctx context.Context, accessToken string, i
 		config:       normalizedConfig,
 		secrets:      mergeSecrets(existingSecrets, input.Secrets, incomingSecrets),
 	}, nil
+}
+
+func validateInputSecrets(fields []FieldSpec, secrets map[string]string) []FieldError {
+	if len(secrets) == 0 {
+		return nil
+	}
+	declared := make(map[string]FieldSpec, len(fields))
+	for _, field := range fields {
+		declared[field.Key] = field
+	}
+	errors := make([]FieldError, 0)
+	for key := range secrets {
+		field, ok := declared[key]
+		if !ok {
+			errors = append(errors, FieldError{Field: key, Message: "包含未声明字段"})
+			continue
+		}
+		if field.Type != FieldTypeSecret {
+			errors = append(errors, FieldError{Field: key, Message: "仅允许为 secret 字段提供值"})
+		}
+	}
+	slices.SortFunc(errors, func(a, b FieldError) int { return cmp.Compare(a.Field, b.Field) })
+	return errors
 }
 
 func (s *Service) GetInstallation(ctx context.Context, installationID string) (Installation, Manifest, error) {

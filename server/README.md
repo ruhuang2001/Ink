@@ -1,6 +1,8 @@
 # Ink API
 
-The Go service in `server/` backs authentication, workspace persistence, printers, plugins, schedules, and feedback flows for Ink.
+The Go service owns authentication, PostgreSQL persistence, printer integration, trusted plugin execution, content collection, scheduling, PNG rendering, and background cleanup.
+
+For deployment instructions, see [Self-hosting Ink](../docs/SELF_HOSTING.md). For component and data-flow details, see [Architecture](../docs/ARCHITECTURE.md).
 
 ## Local development
 
@@ -41,6 +43,8 @@ Never trust a CIDR containing arbitrary clients, and configure every proxy in th
 - `make smoke-api`: real API smoke flow for auth, workspace persistence, plugin upload/binding/fetch, and schedule delivery (requires `uv`)
 - `make reset-db`: remove the local PostgreSQL volume
 
+`make reset-db` deletes local development database data. It is not a production migration or rollback command.
+
 ## Endpoint groups
 
 - auth: login, refresh, current user, logout, password change
@@ -49,5 +53,6 @@ Never trust a CIDR containing arbitrary clients, and configure every proxy in th
 - printers and print jobs: device bindings, queue actions, and job lifecycle
 - plugins and schedules: installation, binding, validation, and scheduling
 - feedback: printable feedback submission for the admin workflow
+- preview: server-side 384px PNG rendering without creating a print job
 
 > **Plugin operator warning:** Plugins, dependency installers/build hooks, and entrypoints execute as trusted server-side code with the API process's privileges. Admin-only installation is not a sandbox; install only plugins and dependencies you trust. See [`docs/PLUGIN_SPEC.md`](../docs/PLUGIN_SPEC.md#security-model).

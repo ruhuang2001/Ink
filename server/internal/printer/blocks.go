@@ -38,8 +38,7 @@ func RenderBlocksToText(blocks []plugins.ContentBlock) (string, error) {
 func renderBlock(block plugins.ContentBlock) (string, error) {
 	switch block.Type {
 	case plugins.BlockHeading:
-		prefix := strings.Repeat("#", block.Level)
-		return fmt.Sprintf("%s %s", prefix, strings.TrimSpace(block.Text)), nil
+		return strings.TrimSpace(block.Text), nil
 	case plugins.BlockParagraph:
 		return strings.TrimSpace(block.Text), nil
 	case plugins.BlockImage:
@@ -57,6 +56,18 @@ func renderBlock(block plugins.ContentBlock) (string, error) {
 		return fmt.Sprintf("%s\n%s", label, url), nil
 	case plugins.BlockDivider:
 		return strings.Repeat("-", 16), nil
+	case plugins.BlockList:
+		lines := make([]string, 0, len(block.Items))
+		for index, item := range block.Items {
+			prefix := "- "
+			if block.Style == "ordered" {
+				prefix = fmt.Sprintf("%d. ", index+1)
+			}
+			lines = append(lines, prefix+strings.TrimSpace(item))
+		}
+		return strings.Join(lines, "\n"), nil
+	case plugins.BlockQuote:
+		return "“" + strings.TrimSpace(block.Text) + "”", nil
 	default:
 		return "", fmt.Errorf("unsupported block type %q", block.Type)
 	}
