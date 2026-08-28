@@ -20,6 +20,7 @@ import {
   refreshAuthSession,
 } from "@/services/auth";
 import { submitFeedbackToAdmin } from "@/services/feedback";
+import { configureAuthRefresh } from "@/services/http";
 import { generateReplyWithMockService } from "@/services/mockInk";
 import {
   createPrintSchedule,
@@ -79,9 +80,10 @@ import {
 
 const STORAGE_KEY = "ink.workspace.v1";
 const AUTH_SESSION_STORAGE_KEY = "ink.auth.session.v1";
-const REMOTE_SAVE_DEBOUNCE_MS = 180;
+const REMOTE_SAVE_DEBOUNCE_MS = 750;
 const REMOTE_PRINT_STATUS_POLL_MS = 5000;
 const REMOTE_PRINT_STATUS_INITIAL_POLL_MS = 1500;
+const REMOTE_PRINT_STATUS_MAX_BACKOFF_MS = 120000;
 
 type ActiveSchedule = Schedule & {
   pluginInstallationId: string;
@@ -505,17 +507,11 @@ function writePersistedAuthSession(session: AuthSession | null, persistAcrossRes
 }
 
 function sortPrintJobsByUpdatedAt(printJobs: PrintJob[]) {
-  return printJobs.reduce<PrintJob[]>((sorted, job) => {
-    const insertIndex = sorted.findIndex(
-      (candidate) => new Date(candidate.updatedAt).getTime() < new Date(job.updatedAt).getTime(),
-    );
-
-    if (insertIndex === -1) {
-      return [...sorted, job];
-    }
-
-    return [...sorted.slice(0, insertIndex), job, ...sorted.slice(insertIndex)];
-  }, []);
+  // The project targets ES2022; use a copied array so the fallback remains non-mutating.
+  // oxlint-disable-next-line unicorn/no-array-sort
+  return [...printJobs].sort(
+    (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+  );
 }
 
 function buildAIReplyMessages(messages: ConversationMessage[]) {
@@ -632,6 +628,22 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   let remoteSavePending = false;
   let remotePrintStatusTimer = 0;
   let remotePrintStatusPromise: Promise<void> | null = null;
+  let remotePrintStatusBackoffMs = REMOTE_PRINT_STATUS_POLL_MS;
+
+  configureAuthRefresh(async () => {
+    const current = authSession.value;
+    if (!current) {
+      return null;
+    }
+    try {
+      const refreshed = await refreshAuthSession(current.refreshToken);
+      setAuthState(refreshed.user, refreshed.session);
+      return refreshed.session.accessToken;
+    } catch {
+      clearAuthState();
+      return null;
+    }
+  });
 
   const deviceMap = computed(() =>
     devices.value.reduce<Record<string, Device>>((accumulator, device) => {
@@ -766,36 +778,29 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   );
 
   watch(
-    workspaceState,
-    () => {
-      if (
-        !authSession.value ||
-        !authUser.value ||
-        workspaceOwnerId.value !== authUser.value.id ||
-        workspaceHydrating.value
-      ) {
-        return;
-      }
-
-      if (remoteSaveTimer) {
-        window.clearTimeout(remoteSaveTimer);
-      }
-
-      remoteSaveTimer = window.setTimeout(() => {
-        remoteSaveTimer = 0;
-        void persistRemoteWorkspace();
-      }, REMOTE_SAVE_DEBOUNCE_MS);
-    },
-    { deep: true },
-  );
-
-  watch(
     [authSession, loginProtectionEnabled],
     ([session, loginProtection]) => {
       writePersistedAuthSession(session, !loginProtection);
     },
     { deep: true, immediate: true },
   );
+
+  function scheduleRemoteWorkspaceSave() {
+    if (
+      typeof window === "undefined" ||
+      !authSession.value ||
+      !authUser.value ||
+      workspaceOwnerId.value !== authUser.value.id ||
+      workspaceHydrating.value
+    ) {
+      return;
+    }
+    if (remoteSaveTimer) window.clearTimeout(remoteSaveTimer);
+    remoteSaveTimer = window.setTimeout(() => {
+      remoteSaveTimer = 0;
+      void persistRemoteWorkspace();
+    }, REMOTE_SAVE_DEBOUNCE_MS);
+  }
 
   watch(
     hasQueuedRemotePrintJobs,
@@ -809,6 +814,18 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     },
     { immediate: true },
   );
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        clearRemotePrintStatusSync();
+        return;
+      }
+      if (hasQueuedRemotePrintJobs.value) {
+        scheduleRemotePrintStatusSync(true);
+      }
+    });
+  }
 
   function applyWorkspaceState(nextState: WorkspaceState) {
     const normalized = normalizeWorkspaceState(nextState);
@@ -869,12 +886,16 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       return;
     }
 
+    if (document.visibilityState === "hidden") {
+      return;
+    }
+
     remotePrintStatusTimer = window.setTimeout(
       () => {
         remotePrintStatusTimer = 0;
         void syncRemotePrintStatus();
       },
-      immediate ? REMOTE_PRINT_STATUS_INITIAL_POLL_MS : REMOTE_PRINT_STATUS_POLL_MS,
+      immediate ? REMOTE_PRINT_STATUS_INITIAL_POLL_MS : remotePrintStatusBackoffMs,
     );
   }
 
@@ -900,8 +921,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
         printJobs.value = latestPrintJobs;
         printerSyncError.value = "";
+        remotePrintStatusBackoffMs = REMOTE_PRINT_STATUS_POLL_MS;
       } catch (error) {
         printerSyncError.value = getErrorMessage(error, "store.errors.syncPrintStatus");
+        remotePrintStatusBackoffMs = Math.min(
+          Math.max(remotePrintStatusBackoffMs * 2, REMOTE_PRINT_STATUS_POLL_MS),
+          REMOTE_PRINT_STATUS_MAX_BACKOFF_MS,
+        );
       } finally {
         remotePrintStatusPromise = null;
 
@@ -956,7 +982,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       try {
         do {
           remoteSavePending = false;
-          await saveWorkspaceStateWithApi(currentSession.accessToken, workspaceState.value);
+          const snapshot = JSON.parse(JSON.stringify(workspaceState.value)) as WorkspaceState;
+          await saveWorkspaceStateWithApi(currentSession.accessToken, snapshot);
         } while (
           remoteSavePending &&
           authSession.value?.accessToken === currentSession.accessToken &&
@@ -1082,6 +1109,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     conversations.value = conversations.value.map((conversation) =>
       conversation.id === conversationId ? updater(conversation) : conversation,
     );
+    scheduleRemoteWorkspaceSave();
   }
 
   function touchConversation(conversationId: string) {
@@ -1104,6 +1132,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     activeConversationId.value = conversationId;
     generationError.value = "";
     selectedConversationMessageIds.value = [];
+    scheduleRemoteWorkspaceSave();
   }
 
   function ensureActiveConversation() {
@@ -1146,6 +1175,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       conversations.value = [replacement];
       selectConversation(replacement.id);
       showFlashKey("store.flash.conversationDeleted", "success");
+      scheduleRemoteWorkspaceSave();
       return true;
     }
 
@@ -1158,6 +1188,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     selectedConversationMessageIds.value = [];
     generationError.value = "";
     showFlashKey("store.flash.conversationDeleted", "success");
+    scheduleRemoteWorkspaceSave();
     return true;
   }
 
@@ -2041,21 +2072,25 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
 
     defaultDeviceId.value = deviceId;
+    scheduleRemoteWorkspaceSave();
     showFlashKey("store.flash.defaultDeviceUpdated", "success");
   }
 
   function setTheme(theme: ThemeMode) {
     selectedTheme.value = theme;
+    scheduleRemoteWorkspaceSave();
     showFlashKey("store.flash.themeUpdated");
   }
 
   function setLocale(nextLocale: LocalePreference) {
     localePreference.value = normalizeLocalePreference(nextLocale);
+    scheduleRemoteWorkspaceSave();
     showFlash(translate("store.flash.localeUpdated"));
   }
 
   function setSendConfirmation(enabled: boolean) {
     sendConfirmationEnabled.value = false;
+    scheduleRemoteWorkspaceSave();
     if (enabled) {
       showFlashKey("store.flash.sendConfirmationEnabled");
     }
@@ -2063,11 +2098,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   function setTutorialTabEnabled(enabled: boolean) {
     tutorialTabEnabled.value = enabled;
+    scheduleRemoteWorkspaceSave();
     showFlashKey(enabled ? "store.flash.tutorialTabShown" : "store.flash.tutorialTabHidden");
   }
 
   function setLoginProtection(enabled: boolean) {
     loginProtectionEnabled.value = enabled;
+    scheduleRemoteWorkspaceSave();
     showFlashKey(
       enabled ? "store.flash.loginProtectionEnabled" : "store.flash.loginProtectionDisabled",
     );

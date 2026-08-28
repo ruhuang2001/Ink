@@ -1,4 +1,4 @@
-import { AuthApiError } from "@/services/auth";
+import { request } from "@/services/http";
 
 export interface AIConfigSummary {
   bound: boolean;
@@ -27,52 +27,6 @@ export interface AIReplyResult {
   content: string;
   model: string;
   providerName: string;
-}
-
-interface ApiErrorResponse {
-  code?: string;
-  message?: string;
-  requestId?: string;
-}
-
-async function request<T>(input: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json");
-
-  let response: Response;
-  try {
-    response = await fetch(input, {
-      ...init,
-      headers,
-    });
-  } catch (error) {
-    throw new AuthApiError(
-      0,
-      "network_error",
-      error instanceof Error
-        ? `网络异常，请检查连接后重试。${error.message ? ` (${error.message})` : ""}`
-        : "网络异常，请检查连接后重试。",
-    );
-  }
-
-  if (!response.ok) {
-    let errorPayload: ApiErrorResponse | null = null;
-
-    try {
-      errorPayload = (await response.json()) as ApiErrorResponse;
-    } catch {
-      errorPayload = null;
-    }
-
-    throw new AuthApiError(
-      response.status,
-      errorPayload?.code ?? "request_failed",
-      errorPayload?.message ?? "请求失败，请稍后重试。",
-      errorPayload?.requestId,
-    );
-  }
-
-  return (await response.json()) as T;
 }
 
 export async function fetchAIConfigSummary(accessToken: string) {
@@ -104,5 +58,6 @@ export async function generateAIReply(
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(payload),
+    timeoutMs: 60000,
   });
 }

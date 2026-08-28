@@ -1,10 +1,9 @@
-const CACHE_NAME = "ink-shell-v1";
+const CACHE_NAME = "ink-shell-v2";
 const APP_SHELL_PATHS = [
   "./",
   "./site.webmanifest",
   "./favicon.svg",
   "./icon.jpg",
-  "./logo.png",
   "./apple-touch-icon.png",
   "./pwa-192.png",
   "./pwa-512.png",
@@ -66,7 +65,6 @@ async function respondToNavigation(request) {
 
   try {
     const response = await fetch(request);
-    await cache.put(request, response.clone());
     await cache.put(APP_SHELL_URL, response.clone());
     return response;
   } catch {

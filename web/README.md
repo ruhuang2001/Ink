@@ -26,6 +26,7 @@ pnpm format:check
 pnpm check
 pnpm test:run
 pnpm build
+pnpm check:budget
 ```
 
 ## Application boundaries
@@ -35,3 +36,15 @@ pnpm build
 - Routes and page metadata are defined in `src/router`.
 - User-facing product copy is localized in `src/i18n/messages`.
 - Print preview images come from the API; the browser does not independently reproduce physical print layout.
+
+`pnpm check:budget` runs after production builds in `pnpm check` and enforces the current release budgets: one entry JavaScript chunk at or below 150 KiB gzip, one entry stylesheet at or below 80 KiB gzip, and each emitted font asset at or below 64 KiB. Route chunks and Unicode font subsets are loaded on demand.
+
+## Performance baseline
+
+The release branch is measured against a production preview build rather than the Vite development server. The current desktop baseline is first contentful paint around 130 ms. With cache disabled, 150 ms latency, approximately 1.6 Mbps download, and 4x CPU throttling, the measured first contentful paint is about 1.45 s and the first route requests approximately 365 KB of Unicode font subsets. The entry JavaScript is about 105 KiB gzip and the entry stylesheet is about 60 KiB gzip.
+
+Re-run the browser profile after significant changes. Keep the same route, viewport, cache state, network profile, and CPU throttle so results remain comparable.
+
+## Caching and deployment
+
+The service worker caches the application shell and same-origin static assets. API requests are never cached. Hashed build assets may use long-lived immutable cache headers at the reverse proxy; `index.html`, `site.webmanifest`, and `sw.js` should remain revalidatable so new releases can activate promptly. The worker uses a versioned shell cache and stores one navigation fallback rather than every route URL.
