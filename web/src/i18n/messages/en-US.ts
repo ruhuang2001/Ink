@@ -1,4 +1,5 @@
 const enUS = {
+  visualStyle: { label: "Visual style", mono: "Minimal", paper: "Paper", studio: "Studio" },
   app: {
     name: "Ink",
   },
@@ -304,7 +305,7 @@ const enUS = {
       },
     },
     demoBanner: {
-      body: "Devices, conversations, and prints are demo content right now. Sign in to continue with real data.",
+      body: "Demo workspace · Sample data",
       action: "Log in",
     },
   },

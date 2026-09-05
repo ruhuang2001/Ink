@@ -4,6 +4,8 @@ import { useI18n } from "vue-i18n";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
+import NavIcon from "@/components/NavIcon.vue";
+import StylePicker from "@/components/StylePicker.vue";
 import { navigationItems } from "@/router";
 import { DEFAULT_LOGIN_REDIRECT } from "@/router/authRedirect";
 import { useWorkspaceStore } from "@/stores/workspace";
@@ -67,7 +69,7 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="flex min-h-[100dvh] flex-col bg-white text-stone-900">
+  <div class="ink-shell flex min-h-[100dvh] flex-col text-stone-900">
     <AppDialog
       :open="workspaceStore.postLoginTutorialOpen"
       :title="t('shell.postLoginTutorial.title')"
@@ -106,110 +108,39 @@ async function handleLogout() {
       </div>
     </AppDialog>
 
-    <header
-      class="sticky top-0 z-40 border-b border-stone-200 bg-white/90 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur sm:px-5 lg:bg-white lg:px-8 lg:py-3"
-    >
-      <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 lg:hidden">
-        <div class="flex items-center gap-3">
-          <img src="/icon.jpg" alt="Ink Icon" class="h-8 w-8 rounded-lg object-contain" />
-          <div class="flex items-center gap-2">
-            <p class="text-sm font-semibold text-stone-950">Ink</p>
-            <a
-              href="https://github.com/ruhuang2001"
-              target="_blank"
-              rel="noreferrer"
-              class="text-xs text-stone-400 transition-colors hover:text-stone-700"
-            >
-              Powered by ruhuang2001
-            </a>
-          </div>
-          <div class="hidden sm:block">
-            <p class="text-xs text-stone-500">
-              {{
-                route.meta.navHintKey
-                  ? t(route.meta.navHintKey)
-                  : route.meta.titleKey
-                    ? t(route.meta.titleKey)
-                    : t("common.labels.workspace")
-              }}
-            </p>
-          </div>
-        </div>
-
+    <header class="ink-header">
+      <RouterLink to="/status" class="ink-brand" aria-label="Ink">
+        <span class="ink-brand-mark" aria-hidden="true">i.</span><span>Ink</span>
+      </RouterLink>
+      <nav class="ink-desktop-nav" :aria-label="t('common.labels.workspace')">
+        <RouterLink
+          v-for="item in visibleNavigationItems"
+          :key="item.name"
+          :to="item.path"
+          class="ink-nav-link"
+          :class="{ 'is-current': route.name === item.name }"
+          :aria-current="route.name === item.name ? 'page' : undefined"
+        >
+          <NavIcon :name="item.name" /><span>{{ item.label }}</span>
+          <span v-if="item.name === 'prints' && pendingBadge" class="ink-count">{{
+            pendingBadge
+          }}</span>
+        </RouterLink>
+      </nav>
+      <div class="ink-header-actions">
+        <StylePicker />
         <button
           v-if="workspaceStore.isAuthenticated"
           type="button"
-          class="text-sm font-medium text-stone-600 hover:text-stone-900"
+          class="ink-account"
+          :title="workspaceStore.authUser?.email"
           @click="handleLogout"
         >
           {{ t("common.actions.logout") }}
         </button>
-        <RouterLink
-          v-else
-          :to="loginTarget"
-          class="text-sm font-medium text-stone-600 hover:text-stone-900"
+        <RouterLink v-else :to="loginTarget" class="ink-account"
+          >{{ t("common.actions.login") }} <span aria-hidden="true">↗</span></RouterLink
         >
-          {{ t("common.actions.login") }}
-        </RouterLink>
-      </div>
-
-      <div class="mx-auto hidden max-w-7xl items-center justify-between lg:flex">
-        <div class="flex items-center gap-8">
-          <div class="flex items-center gap-3">
-            <img src="/icon.jpg" alt="Ink Icon" class="h-8 w-8 rounded-lg object-contain" />
-            <p class="text-sm font-semibold text-stone-950">Ink</p>
-            <a
-              href="https://github.com/ruhuang2001"
-              target="_blank"
-              rel="noreferrer"
-              class="text-xs text-stone-400 transition-colors hover:text-stone-700"
-            >
-              Powered by ruhuang2001
-            </a>
-          </div>
-
-          <nav class="flex items-center gap-1">
-            <RouterLink
-              v-for="item in visibleNavigationItems"
-              :key="item.name"
-              :to="item.path"
-              class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-              :class="
-                route.name === item.name
-                  ? 'bg-stone-100 text-stone-900'
-                  : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
-              "
-            >
-              <span>{{ item.label }}</span>
-              <span
-                v-if="item.name === 'prints' && pendingBadge"
-                class="ml-2 inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-stone-900 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-white"
-              >
-                {{ pendingBadge }}
-              </span>
-            </RouterLink>
-          </nav>
-        </div>
-
-        <div class="flex items-center gap-4">
-          <template v-if="workspaceStore.isAuthenticated">
-            <p class="text-sm text-stone-500">{{ workspaceStore.authUser?.email }}</p>
-            <button
-              type="button"
-              class="text-sm font-medium text-stone-600 hover:text-stone-900"
-              @click="handleLogout"
-            >
-              {{ t("common.actions.logout") }}
-            </button>
-          </template>
-          <RouterLink
-            v-else
-            :to="loginTarget"
-            class="text-sm font-medium text-stone-600 hover:text-stone-900"
-          >
-            {{ t("common.actions.login") }}
-          </RouterLink>
-        </div>
       </div>
     </header>
 
@@ -229,25 +160,17 @@ async function handleLogout() {
       </div>
     </div>
 
-    <div
-      v-if="showAnonymousDemoBanner"
-      class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 lg:px-8"
-    >
-      <div
-        class="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      >
+    <div v-if="showAnonymousDemoBanner" class="ink-demo">
+      <div class="ink-demo-inner">
         <p class="leading-6">{{ t("shell.demoBanner.body") }}</p>
-        <RouterLink
-          :to="loginTarget"
-          class="inline-flex items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 transition-colors hover:border-amber-400 hover:bg-amber-100"
-        >
+        <RouterLink :to="loginTarget" class="ink-demo-link">
           {{ t("shell.demoBanner.action") }}
         </RouterLink>
       </div>
     </div>
 
     <main
-      class="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 lg:px-8 lg:py-8"
+      class="ink-main mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 lg:px-8 lg:py-8"
     >
       <RouterView v-slot="{ Component, route: currentRoute }">
         <Transition name="page-swap" mode="out-in">
@@ -257,7 +180,7 @@ async function handleLogout() {
     </main>
 
     <nav
-      class="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 px-3 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur lg:hidden"
+      class="ink-mobile-nav fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 px-3 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur lg:hidden"
     >
       <div
         class="mx-auto grid max-w-lg gap-1"
@@ -274,6 +197,7 @@ async function handleLogout() {
               : 'text-stone-500 hover:bg-stone-50 hover:text-stone-900'
           "
         >
+          <NavIcon :name="item.name" />
           <span class="block text-xs leading-tight font-medium">
             {{ item.label }}
             <span v-if="item.name === 'prints' && pendingBadge">· {{ pendingBadge }}</span>

@@ -610,9 +610,6 @@ void closeAccountCreationDialog;
                   <p class="text-sm font-medium text-stone-900">
                     {{ t("settings.account.passwordCard.title") }}
                   </p>
-                  <p class="mt-1 text-sm text-stone-500">
-                    {{ t("settings.account.passwordCard.description") }}
-                  </p>
                 </div>
                 <button
                   type="button"
@@ -649,9 +646,6 @@ void closeAccountCreationDialog;
                 <div>
                   <p class="text-sm font-medium text-stone-900">
                     {{ t("settings.account.createAccountCard.title") }}
-                  </p>
-                  <p class="mt-1 text-sm text-stone-500">
-                    {{ t("settings.account.createAccountCard.description") }}
                   </p>
                 </div>
                 <div class="flex items-center gap-3">
@@ -1005,9 +999,6 @@ void closeAccountCreationDialog;
               })
             }}
           </p>
-          <p class="mt-1 text-sm text-stone-500">
-            {{ t("settings.appearance.description") }}
-          </p>
         </div>
       </article>
 
@@ -1045,9 +1036,6 @@ void closeAccountCreationDialog;
                     ?.label ?? workspaceStore.localePreference,
               })
             }}
-          </p>
-          <p class="mt-1 text-sm text-stone-500">
-            {{ t("settings.language.description") }}
           </p>
         </div>
       </article>

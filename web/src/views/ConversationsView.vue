@@ -88,9 +88,6 @@ async function handleFeedbackSubmit() {
         <div class="flex flex-col gap-3">
           <div>
             <p class="text-sm font-medium text-stone-900">{{ t("feedback.card.title") }}</p>
-            <p class="mt-1 text-sm leading-6 text-stone-500">
-              {{ t("feedback.card.description") }}
-            </p>
           </div>
           <button
             type="button"
@@ -167,9 +164,6 @@ async function handleFeedbackSubmit() {
           <div class="flex flex-col gap-3">
             <div>
               <p class="text-sm font-medium text-stone-900">{{ t("feedback.card.title") }}</p>
-              <p class="mt-1 text-sm leading-6 text-stone-500">
-                {{ t("feedback.card.description") }}
-              </p>
             </div>
             <button
               type="button"

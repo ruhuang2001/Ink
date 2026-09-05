@@ -302,7 +302,6 @@ describe("workspace views", () => {
     });
 
     expect(wrapper.text()).toContain("问题 / 建议 / 吐槽反馈");
-    expect(wrapper.text()).toContain("这里的反馈会提醒作者");
 
     await wrapper
       .findAll("button")

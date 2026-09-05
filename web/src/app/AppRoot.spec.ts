@@ -148,7 +148,7 @@ describe("AppRoot", () => {
     expect(wrapper.find("header nav").exists()).toBe(true);
     expect(wrapper.find("nav.fixed").exists()).toBe(true);
     expect(wrapper.text()).toContain("登录");
-    expect(wrapper.text()).toContain("当前设备、对话、打印页均为演示内容");
+    expect(wrapper.text()).toContain("演示工作区 · 数据仅供体验");
     expect(wrapper.text()).not.toContain("退出");
   });
 

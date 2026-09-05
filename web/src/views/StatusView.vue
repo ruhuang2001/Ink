@@ -67,12 +67,8 @@ async function submitAddDevice() {
       </h2>
     </div>
 
-    <div class="rounded-2xl border border-stone-200 bg-white shadow-sm">
-      <article
-        v-for="item in workspaceStore.summaryCards"
-        :key="item.label"
-        class="flex items-center justify-between gap-4 border-b border-stone-100 px-5 py-4 last:border-b-0"
-      >
+    <div class="ink-summary">
+      <article v-for="item in workspaceStore.summaryCards" :key="item.label" class="ink-stat">
         <p class="text-sm text-stone-500">{{ item.label }}</p>
         <p class="text-sm font-medium text-stone-900">{{ item.value }}</p>
       </article>

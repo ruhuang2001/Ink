@@ -1,4 +1,5 @@
 const zhCN = {
+  visualStyle: { label: "页面风格", mono: "极简", paper: "纸笺", studio: "工作台" },
   app: {
     name: "Ink",
   },
@@ -297,7 +298,7 @@ const zhCN = {
       },
     },
     demoBanner: {
-      body: "当前设备、对话、打印页均为演示内容，具体使用请登录后继续。",
+      body: "演示工作区 · 数据仅供体验",
       action: "去登录",
     },
   },

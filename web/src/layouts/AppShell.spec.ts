@@ -59,25 +59,27 @@ describe("AppShell", () => {
     const { wrapper } = await mountShellAt("/status");
 
     expect(wrapper.text()).toContain("打印1");
-    expect(wrapper.text()).toContain("name@example.com");
+    expect(wrapper.find("button.ink-account").attributes("title")).toBe("name@example.com");
     expect(wrapper.text()).toContain("退出");
   });
 
-  it("shows the author credit link next to the product name", async () => {
+  it("switches visual styles and persists the choice across mounts", async () => {
     const { wrapper } = await mountShellAt("/status");
-
-    const creditLink = wrapper
-      .findAll("a")
-      .find((link) => link.text().includes("Powered by ruhuang2001"));
-
-    expect(creditLink?.attributes("href")).toBe("https://github.com/ruhuang2001");
+    await wrapper.find("select").setValue("studio");
+    expect(document.documentElement.dataset.visualStyle).toBe("studio");
+    expect(localStorage.getItem("ink.visual-style")).toBe("studio");
+    wrapper.unmount();
+    const { wrapper: restored } = await mountShellAt("/prints");
+    expect((restored.find("select").element as HTMLSelectElement).value).toBe("studio");
+    await restored.find("select").setValue("paper");
+    expect(document.documentElement.dataset.visualStyle).toBe("paper");
   });
 
   it("hides account controls for anonymous visitors", async () => {
     const { wrapper } = await mountShellAt("/status", false);
 
     expect(wrapper.text()).toContain("登录");
-    expect(wrapper.text()).toContain("当前设备、对话、打印页均为演示内容");
+    expect(wrapper.text()).toContain("演示工作区 · 数据仅供体验");
     expect(wrapper.text()).not.toContain("name@example.com");
     expect(wrapper.text()).not.toContain("退出");
   });
@@ -86,13 +88,13 @@ describe("AppShell", () => {
     const { wrapper: statusWrapper } = await mountShellAt("/status", false);
     const { wrapper: tutorialWrapper } = await mountShellAt("/tutorial", false);
 
-    expect(statusWrapper.text()).toContain("具体使用请登录后继续");
-    expect(tutorialWrapper.text()).not.toContain("具体使用请登录后继续");
+    expect(statusWrapper.text()).toContain("演示工作区 · 数据仅供体验");
+    expect(tutorialWrapper.text()).not.toContain("演示工作区 · 数据仅供体验");
   });
 
   it("routes anonymous visitors to login from the header action", async () => {
     const { wrapper, router } = await mountShellAt("/status", false);
-    const loginLink = wrapper.findAll("a").find((link) => link.text() === "登录");
+    const loginLink = wrapper.find("header a.ink-account");
 
     expect(loginLink?.exists()).toBe(true);
 

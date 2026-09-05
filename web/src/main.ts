@@ -7,6 +7,7 @@ import router from "@/router";
 import { pinia } from "@/stores/pinia";
 
 import "@/styles.css";
+import "@/visual-styles.css";
 
 const app = createApp(AppRoot);
 
