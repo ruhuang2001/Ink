@@ -1,6 +1,6 @@
 module github.com/ruhuang/ink/server
 
-go 1.25.13
+go 1.26.0
 
 require (
 	github.com/cyphar/filepath-securejoin v0.7.0
@@ -9,7 +9,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
 	github.com/ruhuang2001/memobird-go v0.0.0-20260409150855-96aef2c49999
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 )
 
 require (
