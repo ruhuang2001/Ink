@@ -1,6 +1,6 @@
 module github.com/ruhuang/ink/server
 
-go 1.26.0
+go 1.26.6
 
 require (
 	github.com/cyphar/filepath-securejoin v0.7.0
