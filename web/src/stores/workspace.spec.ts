@@ -1,4 +1,4 @@
-import { createPinia, disposePinia, getActivePinia, setActivePinia } from "pinia";
+import { createPinia, setActivePinia } from "pinia";
 import { afterEach, vi } from "vitest";
 
 import type { fetchAIConfigSummary, generateAIReply, saveAIConfig } from "@/services/ai";
@@ -9,7 +9,9 @@ import type {
   logoutWithApi,
   refreshAuthSession,
 } from "@/services/auth";
+import * as authService from "@/services/auth";
 import type { submitFeedbackToAdmin } from "@/services/feedback";
+import { request } from "@/services/http";
 import type {
   bindPrinter,
   cancelPrintJob,
@@ -240,6 +242,23 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function trackWorkspaceTimers() {
+  const scheduled = vi.spyOn(window, "setTimeout");
+  const cleared = vi.spyOn(window, "clearTimeout");
+  const applicationTimers = (start = 0) =>
+    scheduled.mock.calls
+      .slice(start)
+      .map(([, delay], index) => ({
+        delay,
+        handle: scheduled.mock.results[start + index]?.value,
+      }))
+      // jsdom queues zero-delay storage events when local/session storage changes.
+      // Those belong to the browser environment, rather than the store's timers.
+      .filter(({ delay }) => typeof delay === "number" && delay > 0);
+
+  return { scheduled, cleared, applicationTimers };
+}
+
 describe("workspace store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -262,8 +281,6 @@ describe("workspace store", () => {
   });
 
   afterEach(() => {
-    const pinia = getActivePinia();
-    if (pinia) disposePinia(pinia);
     vi.restoreAllMocks();
   });
 
@@ -884,5 +901,158 @@ describe("workspace store", () => {
       vi.useRealTimers();
       visibility.mockRestore();
     }
+  });
+
+  it("disposes pending workspace saves, flash timers and visibility listeners", async () => {
+    vi.useFakeTimers();
+    const timers = trackWorkspaceTimers();
+    const addListener = vi.spyOn(document, "addEventListener");
+    const removeListener = vi.spyOn(document, "removeEventListener");
+    try {
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      store.updateCurrentDraft("a draft from a disposed store");
+      const visibilityListener = addListener.mock.calls.find(
+        ([event]) => event === "visibilitychange",
+      )?.[1];
+      expect(visibilityListener).toBeDefined();
+      const pendingTimers = timers
+        .applicationTimers()
+        .filter(({ handle }) => !timers.cleared.mock.calls.some(([cleared]) => cleared === handle));
+      expect(pendingTimers.map(({ delay }) => delay)).toEqual(
+        expect.arrayContaining([750, 1500, 2600]),
+      );
+      const statusCalls = vi.mocked(fetchPrintJobStatuses).mock.calls.length;
+      const scheduledBeforeDisposal = timers.scheduled.mock.calls.length;
+
+      store.$dispose();
+
+      expect(removeListener).toHaveBeenCalledWith("visibilitychange", visibilityListener);
+      for (const { handle } of pendingTimers) expect(timers.cleared).toHaveBeenCalledWith(handle);
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(120000);
+      expect(saveWorkspaceStateWithApi).not.toHaveBeenCalled();
+      expect(fetchPrintJobStatuses).toHaveBeenCalledTimes(statusCalls);
+      expect(timers.applicationTimers(scheduledBeforeDisposal)).toEqual([]);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not restart polling when an in-flight status request finishes after disposal", async () => {
+    vi.useFakeTimers();
+    const timers = trackWorkspaceTimers();
+    try {
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      const statuses = deferred<Awaited<ReturnType<typeof fetchPrintJobStatuses>>>();
+      vi.mocked(fetchPrintJobStatuses).mockReturnValueOnce(statuses.promise);
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(fetchPrintJobStatuses).toHaveBeenCalledTimes(2);
+      const scheduledBeforeDisposal = timers.scheduled.mock.calls.length;
+
+      store.$dispose();
+      statuses.resolve({
+        printJobs: [],
+        counts: printCounts({ queued: 8 }),
+        latestJobId: "late-job",
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(timers.applicationTimers(scheduledBeforeDisposal)).toEqual([]);
+      await vi.advanceTimersByTimeAsync(120000);
+      expect(fetchPrintJobStatuses).toHaveBeenCalledTimes(2);
+      expect(fetchPrintJobs).toHaveBeenCalledTimes(2);
+      expect(store.remotePrintCounts?.queued).toBe(0);
+      expect(saveWorkspaceStateWithApi).not.toHaveBeenCalled();
+      expect(timers.applicationTimers(scheduledBeforeDisposal)).toEqual([]);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not send a queued workspace save after an in-flight save finishes on a disposed store", async () => {
+    vi.useFakeTimers();
+    const timers = trackWorkspaceTimers();
+    try {
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      let finishSave!: () => void;
+      vi.mocked(saveWorkspaceStateWithApi).mockImplementationOnce(
+        (_accessToken, state) =>
+          new Promise((resolve) => {
+            finishSave = () => resolve(state);
+          }),
+      );
+      store.setTheme("dark");
+      await vi.advanceTimersByTimeAsync(750);
+      expect(saveWorkspaceStateWithApi).toHaveBeenCalledTimes(1);
+      store.setTheme("light");
+      await vi.advanceTimersByTimeAsync(750);
+      const scheduledBeforeDisposal = timers.scheduled.mock.calls.length;
+
+      store.$dispose();
+      finishSave();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(120000);
+
+      expect(saveWorkspaceStateWithApi).toHaveBeenCalledTimes(1);
+      expect(timers.applicationTimers(scheduledBeforeDisposal)).toEqual([]);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels anonymous print completion when its store is disposed", async () => {
+    vi.useFakeTimers();
+    const timers = trackWorkspaceTimers();
+    try {
+      const store = useWorkspaceStore();
+      const job = await store.createManualPrint({ title: "guest print", content: "guest body" });
+      expect(job?.status).toBe("queued");
+      const pendingTimers = timers.applicationTimers();
+      expect(pendingTimers.map(({ delay }) => delay)).toEqual(expect.arrayContaining([500, 2600]));
+      const scheduledBeforeDisposal = timers.scheduled.mock.calls.length;
+
+      store.$dispose();
+      for (const { handle } of pendingTimers) expect(timers.cleared).toHaveBeenCalledWith(handle);
+      await vi.advanceTimersByTimeAsync(120000);
+
+      expect(timers.applicationTimers(scheduledBeforeDisposal)).toEqual([]);
+      expect(store.printJobs.find((item) => item.id === job!.id)?.status).toBe("queued");
+      expect(saveWorkspaceStateWithApi).not.toHaveBeenCalled();
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry an unauthorized request with a token refreshed after store disposal", async () => {
+    const store = authenticateStore();
+    const refreshed = deferred<Awaited<ReturnType<typeof authService.refreshAuthSession>>>();
+    const refreshStarted = deferred<void>();
+    vi.mocked(authService.refreshAuthSession).mockImplementationOnce(() => {
+      refreshStarted.resolve();
+      return refreshed.promise;
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "expired" }), { status: 401 }));
+    const response = request("/api/v1/disposal-check", {
+      headers: { Authorization: "Bearer access-token" },
+    }).catch((error: unknown) => error);
+    await refreshStarted.promise;
+
+    store.$dispose();
+    refreshed.resolve({
+      user: store.authUser!,
+      session: { ...store.authSession!, accessToken: "new-token" },
+    });
+
+    await expect(response).resolves.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(store.authSession?.accessToken).toBe("access-token");
   });
 });

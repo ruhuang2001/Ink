@@ -653,6 +653,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   let remotePrintStatusTimer = 0;
   let remotePrintStatusPromise: Promise<void> | null = null;
   let remotePrintStatusBackoffMs = REMOTE_PRINT_STATUS_POLL_MS;
+  let disposed = false;
+  const anonymousPrintCompletionTimers = new Set<number>();
   let remotePrintAccountVersion = 0;
   let remotePrintPageVersion = 0;
   let remotePrintMutationVersion = 0;
@@ -663,19 +665,20 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const removedRemotePrintJobIds = new Set<string>();
 
   configureAuthRefresh(async (accessToken) => {
+    if (disposed) return null;
     const current = authSession.value;
     if (!current || current.accessToken !== accessToken) {
       return null;
     }
     try {
       const refreshed = await refreshAuthSession(current.refreshToken);
-      if (authSession.value?.accessToken !== accessToken) {
+      if (disposed || authSession.value?.accessToken !== accessToken) {
         return null;
       }
       setAuthState(refreshed.user, refreshed.session);
       return refreshed.session.accessToken;
     } catch {
-      clearAuthState();
+      if (!disposed) clearAuthState();
       return null;
     }
   });
@@ -834,6 +837,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   function scheduleRemoteWorkspaceSave() {
     if (
+      disposed ||
       typeof window === "undefined" ||
       !authSession.value ||
       !authUser.value ||
@@ -900,11 +904,24 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     };
     document.addEventListener("visibilitychange", handlePrintVisibilityChange);
     onScopeDispose(() => {
-      remotePrintAccountVersion++;
-      clearRemotePrintStatusSync();
       document.removeEventListener("visibilitychange", handlePrintVisibilityChange);
     });
   }
+
+  onScopeDispose(() => {
+    disposed = true;
+    remotePrintAccountVersion++;
+    clearRemotePrintStatusSync();
+    if (typeof window !== "undefined") {
+      window.clearTimeout(remoteSaveTimer);
+      window.clearTimeout(flashTimer);
+      for (const timer of anonymousPrintCompletionTimers) window.clearTimeout(timer);
+    }
+    remoteSaveTimer = 0;
+    flashTimer = 0;
+    remoteSavePending = false;
+    anonymousPrintCompletionTimers.clear();
+  });
 
   function applyWorkspaceState(nextState: WorkspaceState) {
     const normalized = normalizeWorkspaceState(nextState);
@@ -958,6 +975,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function refreshRemotePrintJobs() {
+    if (disposed) return;
     if (printJobsRefreshPromise) return printJobsRefreshPromise;
     const session = authSession.value;
     if (!session || !isAuthenticated.value) return;
@@ -1009,6 +1027,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function loadMorePrintJobs(status: "active" | "history") {
+    if (disposed) return;
     const expectedAccountVersion = remotePrintAccountVersion;
     if (printJobsRefreshPromise) {
       try {
@@ -1052,6 +1071,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function loadPrintJobDetail(jobId: string) {
+    if (disposed) return null;
     if (!isAuthenticated.value) return printJobs.value.find((job) => job.id === jobId) ?? null;
     if (printDetailPromises.has(jobId)) return printDetailPromises.get(jobId)!;
     const session = authSession.value;
@@ -1094,7 +1114,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function scheduleRemotePrintStatusSync(immediate = false) {
-    if (typeof window === "undefined") {
+    if (disposed || typeof window === "undefined") {
       return;
     }
 
@@ -1118,6 +1138,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function syncRemotePrintStatus() {
+    if (disposed) return;
     if (remotePrintStatusPromise) return remotePrintStatusPromise;
     const currentSession = authSession.value;
     if (!currentSession || !shouldPollRemotePrintJobs.value) {
@@ -1222,6 +1243,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function persistRemoteWorkspace() {
+    if (disposed) return true;
     if (remoteSavePromise) {
       remoteSavePending = true;
       return remoteSavePromise;
@@ -1242,6 +1264,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           remoteSavePending = false;
           const saveSession = authSession.value;
           if (
+            disposed ||
             !saveSession ||
             authUser.value?.id !== currentUser.id ||
             workspaceOwnerId.value !== currentUser.id
@@ -1279,6 +1302,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function loadRemoteWorkspace() {
+    if (disposed) return false;
     const currentSession = authSession.value;
     const currentUser = authUser.value;
 
@@ -1312,6 +1336,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function loadLiveIntegrations(accessToken: string) {
+    if (disposed) return;
     aiConfigLoading.value = true;
     pluginLoading.value = true;
     printerSyncError.value = "";
@@ -1355,6 +1380,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function showFlash(message: string, tone: "success" | "error" | "info" = "info") {
+    if (disposed) return;
     flashMessage.value = message;
     flashTone.value = tone;
 
@@ -1637,7 +1663,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function maybeCompleteQueuedJob(jobId: string) {
-    window.setTimeout(() => {
+    if (disposed) return;
+    const timer = window.setTimeout(() => {
+      anonymousPrintCompletionTimers.delete(timer);
+      if (disposed) return;
       const target = printJobs.value.find((job) => job.id === jobId);
 
       if (!target || target.status !== "queued") {
@@ -1655,6 +1684,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       );
       scheduleRemoteWorkspaceSave();
     }, 500);
+    anonymousPrintCompletionTimers.add(timer);
   }
 
   async function addPrintJob(title: string, content: string, source: string) {
