@@ -8,6 +8,7 @@ import type { RouterHistory } from "vue-router";
 
 import { translate } from "@/i18n";
 import AppShell from "@/layouts/AppShell.vue";
+import SettingsLayout from "@/layouts/SettingsLayout.vue";
 import { DEFAULT_LOGIN_REDIRECT, resolveLoginRedirect } from "@/router/authRedirect";
 import { pinia } from "@/stores/pinia";
 import { useWorkspaceStore } from "@/stores/workspace";
@@ -44,14 +45,8 @@ const shellChildren: RouteRecordRaw[] = [
   },
   {
     path: "status",
-    name: "status",
-    component: StatusView,
-    meta: {
-      labelKey: "navigation.status.label",
-      titleKey: "navigation.status.title",
-      descriptionKey: "navigation.status.description",
-      navHintKey: "navigation.status.navHint",
-    },
+    redirect: "/settings/devices",
+    meta: { showInNav: false },
   },
   {
     path: "prints",
@@ -66,19 +61,12 @@ const shellChildren: RouteRecordRaw[] = [
   },
   {
     path: "tutorial",
-    name: "tutorial",
-    component: TutorialView,
-    meta: {
-      labelKey: "navigation.tutorial.label",
-      titleKey: "navigation.tutorial.title",
-      descriptionKey: "navigation.tutorial.description",
-      navHintKey: "navigation.tutorial.navHint",
-    },
+    redirect: "/settings/guide",
+    meta: { showInNav: false },
   },
   {
     path: "settings",
-    name: "settings",
-    component: SettingsView,
+    component: SettingsLayout,
     meta: {
       labelKey: "navigation.settings.label",
       titleKey: "navigation.settings.title",
@@ -86,13 +74,36 @@ const shellChildren: RouteRecordRaw[] = [
       navHintKey: "navigation.settings.navHint",
       requiresAuth: true,
     },
+    children: [
+      {
+        path: "",
+        name: "settings",
+        component: SettingsView,
+      },
+      {
+        path: "devices",
+        name: "settings-devices",
+        component: StatusView,
+        meta: {
+          titleKey: "navigation.status.title",
+        },
+      },
+      {
+        path: "guide",
+        name: "settings-guide",
+        component: TutorialView,
+        meta: {
+          titleKey: "navigation.tutorial.title",
+        },
+      },
+    ],
   },
 ];
 
 export const navigationItems = shellChildren
-  .filter((route) => route.meta?.showInNav !== false)
+  .filter((route) => route.meta?.showInNav !== false && route.meta?.labelKey)
   .map((route) => ({
-    name: route.name as string,
+    name: (route.name ?? route.path) as string,
     path: `/${route.path}`,
     labelKey: route.meta?.labelKey as string,
     navHintKey: route.meta?.navHintKey as string,

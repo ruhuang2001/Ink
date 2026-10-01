@@ -91,7 +91,7 @@ async function handleFeedbackSubmit() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-6xl space-y-6 pt-4 sm:space-y-8 lg:space-y-10">
+  <section class="mx-auto max-w-6xl space-y-6 pt-8 sm:space-y-8 lg:space-y-10">
     <AppDialog
       :open="feedbackOpen"
       :title="t('feedback.dialog.title')"
@@ -137,19 +137,8 @@ async function handleFeedbackSubmit() {
       </form>
     </AppDialog>
 
-    <div
-      class="tutorial-hero relative overflow-hidden rounded-[2rem] border border-stone-200 px-5 py-6 shadow-sm sm:px-7 sm:py-8 lg:px-10"
-    >
-      <div
-        aria-hidden="true"
-        class="tutorial-hero-glow tutorial-hero-glow-primary absolute top-0 right-0 h-40 w-40 rounded-full blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        class="tutorial-hero-glow tutorial-hero-glow-secondary absolute bottom-0 left-0 h-32 w-32 rounded-full blur-3xl"
-      />
-
-      <div class="relative space-y-6">
+    <div class="border-b border-stone-200 pb-8">
+      <div class="space-y-7">
         <div class="space-y-4">
           <p class="text-sm font-medium tracking-[0.2em] text-stone-500 uppercase">
             {{ t("tutorial.hero.eyebrow") }}
@@ -164,10 +153,10 @@ async function handleFeedbackSubmit() {
           </div>
         </div>
 
-        <div class="grid gap-3 sm:grid-cols-3">
+        <div class="grid border-y border-stone-200 sm:grid-cols-3 sm:divide-x sm:divide-stone-200">
           <RouterLink
             to="/conversations"
-            class="tutorial-feature-card rounded-2xl border px-4 py-4 shadow-sm backdrop-blur transition-colors"
+            class="border-b border-stone-200 px-4 py-5 transition-colors hover:bg-white/50 sm:border-b-0"
           >
             <p class="text-sm font-semibold text-stone-900">
               {{ t("tutorial.features.chat.title") }}
@@ -178,7 +167,7 @@ async function handleFeedbackSubmit() {
           </RouterLink>
           <RouterLink
             to="/prints"
-            class="tutorial-feature-card rounded-2xl border px-4 py-4 shadow-sm backdrop-blur transition-colors"
+            class="border-b border-stone-200 px-4 py-5 transition-colors hover:bg-white/50 sm:border-b-0"
           >
             <p class="text-sm font-semibold text-stone-900">
               {{ t("tutorial.features.print.title") }}
@@ -187,10 +176,7 @@ async function handleFeedbackSubmit() {
               {{ t("tutorial.features.print.body") }}
             </p>
           </RouterLink>
-          <RouterLink
-            to="/prints"
-            class="tutorial-feature-card rounded-2xl border px-4 py-4 shadow-sm backdrop-blur transition-colors"
-          >
+          <RouterLink to="/prints" class="px-4 py-5 transition-colors hover:bg-white/50">
             <p class="text-sm font-semibold text-stone-900">
               {{ t("tutorial.features.schedule.title") }}
             </p>
@@ -212,7 +198,7 @@ async function handleFeedbackSubmit() {
     </div>
 
     <div class="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_0.85fr]">
-      <article class="rounded-[1.8rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-7">
+      <article class="border-t border-stone-200 py-6 sm:py-7">
         <div class="max-w-2xl">
           <p class="text-sm font-medium tracking-[0.18em] text-stone-500 uppercase">
             {{ t("tutorial.stepsSection.eyebrow") }}
@@ -222,21 +208,20 @@ async function handleFeedbackSubmit() {
           </h3>
         </div>
 
-        <div class="mt-6 space-y-4">
+        <div class="mt-6 border-t border-stone-200">
           <article
             v-for="(step, index) in steps"
             :key="step.number"
-            class="rounded-[1.5rem] border px-5 py-5"
-            :class="
-              index === 0
-                ? 'tutorial-step-highlight border-amber-200 bg-amber-50/80'
-                : 'border-stone-200 bg-stone-50/70'
-            "
+            class="border-b border-stone-200 px-1 py-6"
           >
             <div class="grid gap-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-start">
               <div
-                class="inline-flex h-12 w-12 items-center justify-center rounded-2xl text-sm font-semibold"
-                :class="index === 0 ? 'bg-amber-100 text-amber-900' : 'bg-white text-stone-900'"
+                class="inline-flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold"
+                :class="
+                  index === 0
+                    ? 'border-amber-500 text-amber-800'
+                    : 'border-stone-300 text-stone-700'
+                "
               >
                 {{ step.number }}
               </div>
@@ -244,8 +229,12 @@ async function handleFeedbackSubmit() {
                 <h4 class="text-lg font-semibold text-stone-900">{{ step.title }}</h4>
                 <p class="mt-2 text-sm leading-7 text-stone-600">{{ step.body }}</p>
                 <p
-                  class="mt-4 rounded-2xl px-4 py-3 text-sm leading-6"
-                  :class="index === 0 ? 'bg-white text-amber-900' : 'bg-white text-stone-600'"
+                  class="mt-4 border-l-2 px-4 py-1 text-sm leading-6"
+                  :class="
+                    index === 0
+                      ? 'border-amber-500 text-amber-900'
+                      : 'border-stone-300 text-stone-600'
+                  "
                 >
                   {{ step.note }}
                 </p>
@@ -256,7 +245,7 @@ async function handleFeedbackSubmit() {
       </article>
 
       <div class="space-y-6">
-        <article class="rounded-[1.8rem] border border-stone-200 bg-stone-50 p-6 shadow-sm sm:p-7">
+        <article class="border-y border-stone-200 py-6 sm:py-7">
           <p class="text-sm font-medium tracking-[0.18em] text-stone-500 uppercase">
             {{ t("tutorial.mobile.eyebrow") }}
           </p>
@@ -268,22 +257,22 @@ async function handleFeedbackSubmit() {
           </p>
         </article>
 
-        <article class="rounded-[1.8rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-7">
+        <article class="border-y border-stone-200 py-6 sm:py-7">
           <h3 class="text-2xl font-semibold tracking-tight text-stone-900">
             {{ t("tutorial.faqSection.title") }}
           </h3>
-          <div class="mt-5 space-y-4">
+          <div class="mt-5 border-t border-stone-200">
             <article
               v-for="item in faqs"
               :key="item.question"
-              class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4"
+              class="border-b border-stone-200 px-1 py-4"
             >
               <p class="text-sm font-semibold text-stone-900">{{ item.question }}</p>
               <p class="mt-2 text-sm leading-7 text-stone-600">{{ item.answer }}</p>
             </article>
           </div>
 
-          <div class="mt-6 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
+          <div class="mt-6 border-l-2 border-amber-600 py-1 pl-4">
             <p class="text-sm font-semibold text-stone-900">
               {{ t("tutorial.faqSection.missingQuestionTitle") }}
             </p>
@@ -300,7 +289,7 @@ async function handleFeedbackSubmit() {
           </div>
         </article>
 
-        <aside class="rounded-[1.8rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-7">
+        <aside class="border-y border-stone-200 py-6 sm:py-7">
           <h3 class="text-xl font-semibold text-stone-900">
             {{ t("tutorial.start.title") }}
           </h3>

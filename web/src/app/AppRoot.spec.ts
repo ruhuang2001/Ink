@@ -128,11 +128,11 @@ async function mountAt(path: string, authenticated = true) {
 
 describe("AppRoot", () => {
   it.each([
-    ["/status", "设备"],
     ["/conversations", "对话"],
     ["/prints", "打印"],
     ["/settings", "设置"],
-    ["/tutorial", "教程"],
+    ["/settings/devices", "设备"],
+    ["/settings/guide", "使用指南"],
   ])("renders the workspace shell for %s when authenticated", async (path, heading) => {
     const { wrapper } = await mountAt(path, true);
 
@@ -141,10 +141,10 @@ describe("AppRoot", () => {
     expect(wrapper.text()).toContain(heading);
   });
 
-  it("renders the workspace shell for anonymous visitors on the public status page", async () => {
-    const { wrapper, router } = await mountAt("/status", false);
+  it("renders the workspace shell for anonymous visitors on the public conversations page", async () => {
+    const { wrapper, router } = await mountAt("/conversations", false);
 
-    expect(router.currentRoute.value.fullPath).toBe("/status");
+    expect(router.currentRoute.value.fullPath).toBe("/conversations");
     expect(wrapper.find("header nav").exists()).toBe(true);
     expect(wrapper.find("nav.fixed").exists()).toBe(true);
     expect(wrapper.text()).toContain("登录");
@@ -170,7 +170,7 @@ describe("AppRoot", () => {
     }
     themeMeta.setAttribute("content", "#000000");
 
-    const { store } = await mountAt("/status");
+    const { store } = await mountAt("/conversations");
     store.selectedTheme = "dark";
     await nextTick();
 
@@ -181,7 +181,7 @@ describe("AppRoot", () => {
   });
 
   it("reacts to system color-scheme changes when the theme follows the system", async () => {
-    const { store } = await mountAt("/status");
+    const { store } = await mountAt("/conversations");
     store.selectedTheme = "system";
     await nextTick();
 

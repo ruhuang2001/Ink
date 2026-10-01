@@ -8,9 +8,9 @@
   --panel-bg: rgba(255, 255, 255, 0.64);
   --surface-border: rgba(255, 255, 255, 0.6);
   --divider-strong: rgba(53, 38, 28, 0.16);
-  --app-bg: #fafaf9;
-  --app-surface: #ffffff;
-  --app-surface-soft: #f5f5f4;
+  --app-bg: #f7f5ef;
+  --app-surface: #fbfaf6;
+  --app-surface-soft: #f0ede5;
   --app-surface-muted: #e7e5e4;
   --app-surface-raised: #ffffff;
   --app-surface-floating: rgba(255, 255, 255, 0.92);
@@ -30,7 +30,7 @@
   --app-shadow-dialog: 0 24px 60px rgba(28, 25, 23, 0.18);
   --app-bg-blend: white;
   --app-glow-color: rgba(214, 188, 152, 0.12);
-  --theme-color: #fafaf9;
+  --theme-color: #f7f5ef;
 }
 
 :root[data-color-mode="dark"] {
@@ -73,7 +73,7 @@
     min-height: 100%;
     scroll-behavior: smooth;
     background: var(--app-bg);
-    overflow-y: scroll;
+    overflow-y: auto;
     overscroll-behavior-y: none;
   }
 
@@ -91,13 +91,7 @@
       -apple-system,
       sans-serif;
     color: var(--app-text);
-    background:
-      radial-gradient(circle at top left, var(--app-glow-color), transparent 32%),
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--app-bg) 92%, var(--app-bg-blend)) 0%,
-        var(--app-bg) 100%
-      );
+    background: var(--app-bg);
   }
 
   #app {
@@ -156,11 +150,11 @@
 
 @layer components {
   .ui-panel {
-    @apply rounded-xl border border-stone-200 bg-white p-6;
+    @apply border-y border-stone-200 bg-transparent py-6;
   }
 
   .ui-list-card {
-    @apply overflow-hidden rounded-lg border border-stone-200 bg-white;
+    @apply overflow-hidden border-y border-stone-200 bg-transparent;
   }
 
   .ui-list-row {
@@ -168,7 +162,7 @@
   }
 
   .ui-list-row + .ui-list-row {
-    @apply border-t border-stone-100;
+    @apply border-t border-stone-200/70;
   }
 
   .ui-list-row:hover {
@@ -176,19 +170,20 @@
   }
 
   .ui-list-row.is-active {
-    @apply bg-stone-100;
+    @apply bg-white/70;
+    box-shadow: inset 2px 0 0 #d97706;
   }
 
   .ui-settings-group {
-    @apply space-y-3;
+    @apply border-t border-stone-200;
   }
 
   .ui-settings-row {
-    @apply flex flex-col gap-3 rounded-2xl bg-stone-50 px-4 py-4 transition-colors duration-200 sm:flex-row sm:items-center sm:justify-between;
+    @apply flex flex-col gap-3 border-b border-stone-200 px-1 py-4 transition-colors duration-200 sm:flex-row sm:items-center sm:justify-between;
   }
 
   .ui-settings-row:hover {
-    @apply bg-stone-100/80;
+    @apply bg-white/50;
   }
 
   .ui-settings-copy {
@@ -196,7 +191,7 @@
   }
 
   .ui-settings-choice-grid {
-    @apply grid gap-2 rounded-2xl bg-stone-50 p-2 sm:grid-cols-3;
+    @apply grid gap-2 border-y border-stone-200 py-2 sm:grid-cols-3;
   }
 
   .ui-toggle {
@@ -264,19 +259,20 @@
   }
 
   .ui-tab-track {
-    @apply mx-auto flex w-fit min-w-max gap-1 rounded-lg border border-stone-200 bg-stone-50/50 p-1;
+    @apply mx-auto flex w-fit min-w-max gap-6 border-b border-stone-200;
   }
 
   .ui-tab-link {
-    @apply relative min-w-[108px] rounded-md px-4 py-2.5 text-center text-stone-600 transition-colors duration-200;
+    @apply relative min-w-[108px] px-2 py-3 text-center text-stone-600 transition-colors duration-200;
   }
 
   .ui-tab-link:hover {
-    @apply bg-stone-100/50 text-stone-900;
+    @apply text-stone-900;
   }
 
   .ui-tab-link.is-active {
-    @apply bg-white text-stone-900 shadow-sm ring-1 ring-stone-200/50;
+    @apply text-stone-900;
+    box-shadow: inset 0 -2px 0 #d97706;
   }
 
   .ui-tab-label {
@@ -292,11 +288,11 @@
   }
 
   .ui-btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-stone-800 active:scale-[0.98];
+    @apply inline-flex min-h-10 items-center justify-center rounded-md bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-stone-800 focus-visible:ring-2 focus-visible:ring-amber-700 focus-visible:ring-offset-2 focus-visible:outline-none;
   }
 
   .ui-btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-900 shadow-sm transition-all hover:border-stone-300 hover:bg-stone-50 active:scale-[0.98];
+    @apply inline-flex min-h-10 items-center justify-center rounded-md border border-stone-300 bg-transparent px-4 py-2 text-sm font-medium text-stone-800 transition-colors hover:border-stone-500 hover:bg-white/60 focus-visible:ring-2 focus-visible:ring-amber-700 focus-visible:ring-offset-2 focus-visible:outline-none;
   }
 
   .ui-status-badge {

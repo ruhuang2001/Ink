@@ -48,7 +48,7 @@ async function mountShellAt(path: string, authenticated = true) {
 
 describe("AppShell", () => {
   it("renders desktop and mobile navigation from router metadata", async () => {
-    const { wrapper } = await mountShellAt("/status");
+    const { wrapper } = await mountShellAt("/settings/devices");
 
     const desktopNavLinks = wrapper.findAll("header nav a");
     const mobileNavLinks = wrapper.findAll("nav.fixed a");
@@ -64,7 +64,7 @@ describe("AppShell", () => {
   });
 
   it("shows the pending print badge and authenticated account controls", async () => {
-    const { wrapper } = await mountShellAt("/status");
+    const { wrapper } = await mountShellAt("/settings/devices");
 
     expect(wrapper.text()).toContain("打印1");
     expect(wrapper.text()).toContain("name@example.com");
@@ -72,7 +72,7 @@ describe("AppShell", () => {
   });
 
   it("shows the author credit link next to the product name", async () => {
-    const { wrapper } = await mountShellAt("/status");
+    const { wrapper } = await mountShellAt("/settings/devices");
 
     const creditLink = wrapper
       .findAll("a")
@@ -82,7 +82,7 @@ describe("AppShell", () => {
   });
 
   it("hides account controls for anonymous visitors", async () => {
-    const { wrapper } = await mountShellAt("/status", false);
+    const { wrapper } = await mountShellAt("/conversations", false);
 
     expect(wrapper.text()).toContain("登录");
     expect(wrapper.text()).toContain("当前设备、对话、打印页均为演示内容");
@@ -90,16 +90,14 @@ describe("AppShell", () => {
     expect(wrapper.text()).not.toContain("退出");
   });
 
-  it("shows the demo banner only on the first three tabs for anonymous visitors", async () => {
-    const { wrapper: statusWrapper } = await mountShellAt("/status", false);
-    const { wrapper: tutorialWrapper } = await mountShellAt("/tutorial", false);
+  it("shows the demo banner on public workspace pages", async () => {
+    const { wrapper } = await mountShellAt("/conversations", false);
 
-    expect(statusWrapper.text()).toContain("具体使用请登录后继续");
-    expect(tutorialWrapper.text()).not.toContain("具体使用请登录后继续");
+    expect(wrapper.text()).toContain("具体使用请登录后继续");
   });
 
   it("routes anonymous visitors to login from the header action", async () => {
-    const { wrapper, router } = await mountShellAt("/status", false);
+    const { wrapper, router } = await mountShellAt("/conversations", false);
     const loginLink = wrapper.findAll("a").find((link) => link.text() === "登录");
 
     expect(loginLink?.exists()).toBe(true);
@@ -107,7 +105,7 @@ describe("AppShell", () => {
     await loginLink?.trigger("click");
     await flushPromises();
     await vi.waitFor(() => {
-      expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/status");
+      expect(router.currentRoute.value.fullPath).toBe("/login");
     });
   });
 
@@ -144,15 +142,16 @@ describe("AppShell", () => {
     expect(store.postLoginTutorialOpen).toBe(false);
   });
 
-  it("hides the tutorial tab when the preference is disabled", async () => {
-    const { wrapper, store } = await mountShellAt("/conversations");
+  it("keeps device and guide pages inside the settings navigation", async () => {
+    const { wrapper } = await mountShellAt("/settings/guide");
 
-    store.tutorialTabEnabled = false;
-    await flushPromises();
-
-    expect(wrapper.findAll("header nav a").some((link) => link.text().includes("教程"))).toBe(
-      false,
-    );
-    expect(wrapper.findAll("nav.fixed a").some((link) => link.text().includes("教程"))).toBe(false);
+    expect(wrapper.findAll("header nav a").map((link) => link.text())).toEqual([
+      "对话",
+      "打印1",
+      "设置",
+    ]);
+    expect(wrapper.text()).toContain("偏好");
+    expect(wrapper.text()).toContain("设备");
+    expect(wrapper.text()).toContain("使用指南");
   });
 });

@@ -38,9 +38,7 @@ describe("router configuration", () => {
     expect(navigationItems).toHaveLength(shellChildren.length);
     expect(navigationItems.map((item) => item.path)).toEqual([
       "/conversations",
-      "/status",
       "/prints",
-      "/tutorial",
       "/settings",
     ]);
   });
@@ -55,8 +53,30 @@ describe("router configuration", () => {
     expect(router.currentRoute.value.fullPath).toBe("/conversations");
   });
 
-  it.each(["/status", "/conversations", "/prints", "/tutorial"])(
-    "allows anonymous visitors to reach %s",
+  it.each(["/conversations", "/prints"])("allows anonymous visitors to reach %s", async (path) => {
+    const pinia = createPinia();
+    const router = createAppRouter(createMemoryHistory(), pinia);
+
+    router.push(path);
+    await router.isReady();
+
+    expect(router.currentRoute.value.fullPath).toBe(path);
+  });
+
+  it.each([
+    ["/status", "/settings/devices"],
+    ["/tutorial", "/settings/guide"],
+  ])("keeps the legacy %s route as a redirect to %s", async (source, destination) => {
+    const router = createAuthenticatedRouter();
+
+    router.push(source);
+    await router.isReady();
+
+    expect(router.currentRoute.value.fullPath).toBe(destination);
+  });
+
+  it.each(["/settings", "/settings/devices", "/settings/guide"])(
+    "requires authentication for %s",
     async (path) => {
       const pinia = createPinia();
       const router = createAppRouter(createMemoryHistory(), pinia);
@@ -64,19 +84,9 @@ describe("router configuration", () => {
       router.push(path);
       await router.isReady();
 
-      expect(router.currentRoute.value.fullPath).toBe(path);
+      expect(router.currentRoute.value.fullPath).toBe(`/login?redirect=${path}`);
     },
   );
-
-  it("redirects anonymous visitors from settings to login", async () => {
-    const pinia = createPinia();
-    const router = createAppRouter(createMemoryHistory(), pinia);
-
-    router.push("/settings");
-    await router.isReady();
-
-    expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/settings");
-  });
 
   it("redirects the retired connections route to /prints for authenticated visitors", async () => {
     const router = createAuthenticatedRouter();

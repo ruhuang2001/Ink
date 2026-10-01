@@ -60,21 +60,21 @@ async function submitAddDevice() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-6 pt-4 sm:space-y-8">
+  <section class="mx-auto max-w-5xl space-y-6 pt-8 sm:space-y-8">
     <div>
-      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">
+      <h2 class="text-2xl font-semibold tracking-tight text-stone-950 sm:text-3xl">
         {{ t("navigation.status.label") }}
       </h2>
     </div>
 
-    <div class="rounded-2xl border border-stone-200 bg-white shadow-sm">
+    <div class="grid border-y border-stone-200 sm:grid-cols-3 sm:divide-x sm:divide-stone-200">
       <article
         v-for="item in workspaceStore.summaryCards"
         :key="item.label"
-        class="flex items-center justify-between gap-4 border-b border-stone-100 px-5 py-4 last:border-b-0"
+        class="flex items-center justify-between gap-4 border-b border-stone-200 px-5 py-4 last:border-b-0 sm:block sm:border-b-0"
       >
         <p class="text-sm text-stone-500">{{ item.label }}</p>
-        <p class="text-sm font-medium text-stone-900">{{ item.value }}</p>
+        <p class="text-sm font-medium text-stone-900 sm:mt-2 sm:text-2xl">{{ item.value }}</p>
       </article>
     </div>
 
@@ -100,7 +100,7 @@ async function submitAddDevice() {
 
           <div
             v-if="workspaceStore.devices.length === 0"
-            class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
+            class="border-y border-stone-200 px-6 py-10 text-center"
           >
             <h4 class="text-base font-semibold text-stone-900">
               {{ t("status.emptyDevices.title") }}
@@ -184,7 +184,7 @@ async function submitAddDevice() {
 
           <div
             v-if="workspaceStore.activeSchedules.length === 0"
-            class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
+            class="border-y border-stone-200 px-6 py-10 text-center"
           >
             <h4 class="text-base font-semibold text-stone-900">
               {{ t("status.emptySchedules") }}

@@ -294,11 +294,9 @@ async function submitGitInstallForm(
 }
 
 async function openPluginConfigDialog(wrapper: ReturnType<typeof mount>, pluginName: string) {
-  const card = wrapper
-    .findAll("div.rounded-2xl")
-    .find((element) => element.text().includes(pluginName));
-  await card
-    ?.findAll("button")
+  expect(wrapper.text()).toContain(pluginName);
+  await wrapper
+    .findAll("button")
     .find((button) => button.text() === "配置插件")
     ?.trigger("click");
   await nextTick();

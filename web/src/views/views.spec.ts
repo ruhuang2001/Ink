@@ -450,7 +450,7 @@ describe("workspace views", () => {
     expect(router.currentRoute.value.fullPath).toBe("/conversations");
   });
 
-  it("renders the login title as two lines without welcome-back copy", async () => {
+  it("renders a focused login form without marketing copy", async () => {
     const { pinia, router } = await createWorkspaceContext("/login", false);
     const wrapper = mount(LoginView, {
       global: {
@@ -458,12 +458,11 @@ describe("workspace views", () => {
       },
     });
 
-    const titleLines = wrapper.findAll("h1 span");
-
-    expect(titleLines).toHaveLength(2);
-    expect(titleLines.map((line) => line.text())).toEqual(["打开 Ink", "继续你的纸条灵感"]);
-    expect(wrapper.text()).not.toContain("欢迎回来");
-    expect(wrapper.text()).not.toContain("打开 Ink，继续你的纸条灵感。");
+    expect(wrapper.find("h1").text()).toBe("登录账号");
+    expect(wrapper.text()).not.toContain("使用此 Ink 实例的本地账号登录");
+    expect(wrapper.text()).not.toContain("登录后就可以继续管理设备");
+    expect(wrapper.text()).not.toContain("继续你的纸条灵感");
+    expect(wrapper.find("button[type='submit']").classes()).toContain("w-full");
   });
 
   it("shows the password-updated notice and supports password visibility toggle on login", async () => {
@@ -501,14 +500,14 @@ describe("workspace views", () => {
   });
 
   it("renders the tutorial page with conversation and print guidance", async () => {
-    const { pinia, router } = await createWorkspaceContext("/tutorial", false);
+    const { pinia, router } = await createWorkspaceContext("/settings/guide");
     const wrapper = mount(TutorialView, {
       global: {
         plugins: [pinia, router],
       },
     });
 
-    expect(router.currentRoute.value.fullPath).toBe("/tutorial");
+    expect(router.currentRoute.value.fullPath).toBe("/settings/guide");
     expect(wrapper.text()).toContain("Ink 里最常用的三种打印方式");
     expect(wrapper.text()).toContain("三种常用使用方式");
     expect(wrapper.text()).toContain("添加到 iPhone 主屏幕");
@@ -590,23 +589,6 @@ describe("workspace views", () => {
     expect(wrapper.text()).toContain("AI 服务");
     expect(wrapper.text()).toContain("未配置");
     expect(wrapper.text()).toContain("服务商");
-  });
-
-  it("toggles the tutorial tab from settings", async () => {
-    const { pinia, router, store } = await createWorkspaceContext("/settings");
-    const wrapper = mount(SettingsView, {
-      global: {
-        plugins: [pinia, router],
-      },
-    });
-
-    const toggle = wrapper
-      .findAll("button")
-      .find((button) => button.attributes("aria-label") === "关闭教程标签");
-
-    await toggle?.trigger("click");
-
-    expect(store.tutorialTabEnabled).toBe(false);
   });
 
   it("lets administrators submit the real AI config form", async () => {

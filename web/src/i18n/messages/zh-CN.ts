@@ -302,10 +302,6 @@ const zhCN = {
     },
   },
   login: {
-    hero: {
-      titleLine1: "打开 Ink",
-      titleLine2: "继续你的纸条灵感",
-    },
     form: {
       title: "登录账号",
       accountLabel: "账号",
@@ -487,6 +483,11 @@ const zhCN = {
     },
   },
   settings: {
+    navigation: {
+      preferences: "偏好",
+      devices: "设备",
+      guide: "使用指南",
+    },
     account: {
       title: "账号管理",
       currentAccount: "当前账号",
@@ -659,6 +660,7 @@ const zhCN = {
     confirmDeleteSchedule: "确认删除这条定时任务吗？",
     recentPrints: "最近打印",
     connectedPlugins: "已连接插件",
+    noConnectedPlugins: "还没有已启用的插件，可在设置中添加。",
     moreSettings: "更多设置",
     actions: {
       bindingTutorial: "绑定教程",

@@ -532,13 +532,7 @@ void closeAccountCreationDialog;
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-8 pt-4">
-    <div class="max-w-2xl">
-      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">
-        {{ t("navigation.settings.label") }}
-      </h2>
-    </div>
-
+  <section class="mx-auto max-w-5xl space-y-8 pt-8">
     <div class="space-y-12">
       <article
         class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
@@ -871,27 +865,6 @@ void closeAccountCreationDialog;
                 </option>
               </select>
             </div>
-            <div class="ui-settings-row">
-              <div class="ui-settings-copy">
-                <p class="text-sm font-medium text-stone-900">
-                  {{ t("settings.printing.tutorialTab") }}
-                </p>
-              </div>
-              <button
-                type="button"
-                class="ui-toggle"
-                :class="{ 'is-on': workspaceStore.tutorialTabEnabled }"
-                :aria-label="
-                  workspaceStore.tutorialTabEnabled
-                    ? t('settings.printing.toggleAria.disableTutorialTab')
-                    : t('settings.printing.toggleAria.enableTutorialTab')
-                "
-                :aria-pressed="workspaceStore.tutorialTabEnabled"
-                @click="workspaceStore.setTutorialTabEnabled(!workspaceStore.tutorialTabEnabled)"
-              >
-                <span class="ui-toggle-thumb" />
-              </button>
-            </div>
           </div>
         </div>
       </article>
@@ -964,14 +937,11 @@ void closeAccountCreationDialog;
         </div>
         <div class="min-w-0">
           <div class="ui-settings-group">
-            <div
-              v-if="workspaceStore.aiConfigLoading"
-              class="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3"
-            >
+            <div v-if="workspaceStore.aiConfigLoading" class="border-b border-stone-200 px-1 py-4">
               <p class="text-sm text-stone-600">{{ t("settings.ai.loading") }}</p>
             </div>
 
-            <div class="rounded-xl border border-stone-200 bg-stone-50 p-4">
+            <div class="border-b border-stone-200 px-1 py-4">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <span
                   class="ui-status-badge"
@@ -1124,7 +1094,7 @@ void closeAccountCreationDialog;
           <template v-if="workspaceStore.isAuthenticated">
             <section class="ui-settings-group">
               <div
-                class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4"
+                class="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-1 py-4"
               >
                 <p class="text-sm font-medium text-stone-900">
                   {{ t("settings.plugins.installed") }}
@@ -1150,7 +1120,7 @@ void closeAccountCreationDialog;
               <div
                 v-for="plugin in pluginInstallations"
                 :key="plugin.installation.id"
-                class="rounded-2xl border border-stone-200 bg-white px-5 py-5 shadow-xs"
+                class="border-b border-stone-200 px-1 py-5"
               >
                 <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div class="min-w-0 flex-1">
