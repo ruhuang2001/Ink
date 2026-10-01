@@ -50,7 +50,11 @@ func (s *Service) GetState(ctx context.Context, accessToken string) (State, erro
 		return State{}, err
 	}
 	if current != nil {
-		return NormalizeState(*current), nil
+		state := NormalizeState(*current)
+		// Print history is owned by the printer repository and loaded through
+		// its paginated API, rather than duplicated in workspace snapshots.
+		state.PrintJobs = []PrintJob{}
+		return state, nil
 	}
 
 	seeded := EmptyState()
@@ -68,6 +72,7 @@ func (s *Service) SaveState(ctx context.Context, accessToken string, state State
 	}
 
 	normalized := NormalizeState(state)
+	normalized.PrintJobs = []PrintJob{}
 	if err := s.repo.SaveByUserID(ctx, currentUser.ID, normalized, s.clock.Now()); err != nil {
 		return State{}, err
 	}

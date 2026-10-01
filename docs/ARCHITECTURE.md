@@ -52,11 +52,13 @@ Important idempotency boundaries:
 
 ### Background workers
 
-The API process starts three periodic workers:
+The API process starts four periodic workers:
 
 - plugin fetch worker: claims enabled bindings whose `next_fetch_at` is due;
 - schedule worker: runs enabled print schedules and reserves deliveries;
 - inbox janitor: removes retained plugin items according to server configuration.
+- printer status worker: reads a bounded batch of due queued jobs and checks
+  Memobird independently of browser requests.
 
 This is currently a single-process operational model. Horizontal scaling requires careful coordination of rate limiting, migrations, and worker ownership.
 
@@ -88,6 +90,24 @@ plugin blocks
 ```
 
 Manual preview stops after PNG generation and never creates a job or contacts Memobird.
+
+Print lists return paginated summaries without the content body. A separate
+detail endpoint supplies content for preview, while a lightweight status
+endpoint supplies current states, global counts, and the latest job ID. List,
+detail, and status reads never contact Memobird. The browser can discover jobs
+created by schedules even when its current page has no queued jobs.
+
+The status worker persists the next check time and retries provider failures
+with backoff. Its conditional update checks the observed provider job and
+version so an old result cannot overwrite a cancelled or resubmitted job.
+Submission returns the accepted queued state; physical completion is observed
+asynchronously. This worker does not add cross-process claims or parallel
+provider calls.
+
+Account workspace snapshots exclude their old print-history copies when read
+and saved. The `print_jobs` table remains the source of print content and
+history; anonymous browser workspaces retain their local full-content jobs.
+See [Print API](PRINT_API.md) and [performance measurements](PRINT_PERFORMANCE.md).
 
 ## Plugin and schedule separation
 

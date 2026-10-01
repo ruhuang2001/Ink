@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
@@ -568,9 +569,12 @@ func (f fakeAIService) GenerateReply(_ context.Context, _ string, _ ai.ReplyInpu
 }
 
 type fakePrinterService struct {
-	devices   []workspace.Device
-	printJobs []workspace.PrintJob
-	err       error
+	devices     []workspace.Device
+	printJobs   []workspace.PrintJob
+	listInput   *printer.ListJobsInput
+	statusInput *printer.JobStatusesInput
+	latestJobID *string
+	err         error
 }
 
 func (f fakePrinterService) RenderPreview(_ context.Context, _ string, _ string) (string, error) {
@@ -599,8 +603,31 @@ func (f fakePrinterService) DeleteDevice(_ context.Context, _ string, _ string) 
 	return f.err
 }
 
-func (f fakePrinterService) ListPrintJobs(_ context.Context, _ string) ([]workspace.PrintJob, error) {
-	return f.printJobs, f.err
+func (f fakePrinterService) ListPrintJobs(_ context.Context, _ string, input printer.ListJobsInput) (printer.JobPage, error) {
+	if f.listInput != nil {
+		*f.listInput = input
+	}
+	page := printer.JobPage{PrintJobs: []printer.JobSummary{}}
+	for _, job := range f.printJobs {
+		page.PrintJobs = append(page.PrintJobs, printer.JobSummary{ID: job.ID, Title: job.Title, Source: job.Source, DeviceID: job.DeviceID, Status: job.Status, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt})
+	}
+	return page, f.err
+}
+
+func (f fakePrinterService) GetPrintJobStatuses(_ context.Context, _ string, input printer.JobStatusesInput) (printer.JobStatuses, error) {
+	if f.statusInput != nil {
+		*f.statusInput = input
+	}
+	return printer.JobStatuses{PrintJobs: []printer.JobStatus{}, Counts: printer.JobCounts{Queued: len(f.printJobs)}, LatestJobID: f.latestJobID}, f.err
+}
+
+func (f fakePrinterService) GetPrintJob(_ context.Context, _ string, id string) (workspace.PrintJob, error) {
+	for _, job := range f.printJobs {
+		if job.ID == id {
+			return job, f.err
+		}
+	}
+	return workspace.PrintJob{}, printer.ErrNotFound
 }
 
 func (f fakePrinterService) CreatePrintJob(_ context.Context, _ string, _ printer.CreateJobInput) (workspace.PrintJob, error) {
@@ -773,5 +800,49 @@ func TestSubmitFeedbackReturnsNoContent(t *testing.T) {
 
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", response.Code)
+	}
+}
+
+func TestPrintJobReadRoutes(t *testing.T) {
+	var listInput printer.ListJobsInput
+	var statusInput printer.JobStatusesInput
+	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{
+		printJobs: []workspace.PrintJob{{ID: "job-1", Title: "Row", Content: "full private body", Status: workspace.PrintStatusQueued}},
+		listInput: &listInput, statusInput: &statusInput, latestJobID: new("job-1"),
+	}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	for _, test := range []struct {
+		url      string
+		expected int
+		content  bool
+	}{
+		{"/api/v1/print-jobs?status=active&limit=10&cursor=token", 200, false},
+		{"/api/v1/print-jobs/status?ids=job-1&since=2026-10-01T00%3A00%3A00%2B08%3A00", 200, false},
+		{"/api/v1/print-jobs/job-1", 200, true},
+		{"/api/v1/print-jobs/missing", 404, false},
+		{"/api/v1/print-jobs?limit=101", 400, false},
+		{"/api/v1/print-jobs?limit=0", 400, false},
+		{"/api/v1/print-jobs?limit=abc", 400, false},
+		{"/api/v1/print-jobs/status?since=bad", 400, false},
+	} {
+		request := httptest.NewRequest(http.MethodGet, test.url, nil)
+		request.Header.Set("Authorization", "Bearer token")
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != test.expected || strings.Contains(response.Body.String(), "full private body") != test.content {
+			t.Fatalf("%s: code=%d body=%s", test.url, response.Code, response.Body.String())
+		}
+	}
+	if listInput.Status != "active" || listInput.Limit != 10 || listInput.Cursor != "token" {
+		t.Fatalf("list params: %+v", listInput)
+	}
+	if len(statusInput.IDs) != 1 || statusInput.IDs[0] != "job-1" || statusInput.Since.UTC().Format(time.RFC3339) != "2026-09-30T16:00:00Z" {
+		t.Fatalf("status params: %+v", statusInput)
+	}
+	for _, url := range []string{"/api/v1/print-jobs", "/api/v1/print-jobs/status", "/api/v1/print-jobs/job-1"} {
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, url, nil))
+		if response.Code != 401 {
+			t.Fatalf("unauthenticated %s: %d", url, response.Code)
+		}
 	}
 }

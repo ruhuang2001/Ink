@@ -155,6 +155,16 @@ func main() {
 		idgen.Generator{},
 		clock.SystemClock{},
 	)
+	var statusDone <-chan struct{}
+	if cfg.PrintStatusSyncEnabled {
+		statusRunner := scheduler.NewPrintStatusRunner(printer.NewStatusSynchronizer(printerService, cfg.PrintStatusTimeout), logger, cfg.PrintStatusPollInterval, cfg.PrintStatusBatchSize)
+		statusDone = statusRunner.Start(ctx)
+	} else {
+		done := make(chan struct{})
+		close(done)
+		statusDone = done
+	}
+
 	fetchRunner := scheduler.NewFetchRunner(pluginFetchService, logger, cfg.SchedulerPollInterval, 10)
 	fetchDone := fetchRunner.Start(ctx)
 
@@ -215,7 +225,7 @@ func main() {
 		}
 	}
 
-	for _, worker := range []<-chan struct{}{fetchDone, schedulerDone, janitorDone} {
+	for _, worker := range []<-chan struct{}{fetchDone, schedulerDone, janitorDone, statusDone} {
 		select {
 		case <-worker:
 		case <-shutdownCtx.Done():

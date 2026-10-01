@@ -23,6 +23,14 @@ async function mountShellAt(path: string, authenticated = true) {
       refreshToken: "refresh-token",
       accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
     };
+    store.remotePrintCounts = {
+      pending: 1,
+      queued: 0,
+      completed: 0,
+      failed: 0,
+      cancelled: 0,
+      todayCompleted: 0,
+    };
   }
 
   const router = createTestRouter(pinia);

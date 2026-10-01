@@ -2,6 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, vi } from "vitest";
 
+import PrintPreview from "@/components/PrintPreview.vue";
 import { createTestRouter } from "@/router";
 import type { fetchAIConfigSummary, generateAIReply, saveAIConfig } from "@/services/ai";
 import type {
@@ -19,9 +20,12 @@ import type {
   deletePrinter,
   fetchPrintJobs,
   fetchPrinters,
+  fetchPrintJob,
+  fetchPrintJobStatuses,
   submitPrintJob,
   updatePrintJobDevice,
 } from "@/services/printers";
+import * as printerService from "@/services/printers";
 import type {
   createUserWithApi,
   fetchWorkspaceStateWithApi,
@@ -148,6 +152,19 @@ vi.mock("@/services/printers", () => ({
   deletePrinter: vi.fn<typeof deletePrinter>(async () => undefined),
   fetchPrintJobs: vi.fn<typeof fetchPrintJobs>(async () => ({
     printJobs: [],
+    nextCursor: null,
+  })),
+  renderPrintPreview: vi.fn<typeof printerService.renderPrintPreview>(async () => "rendered-image"),
+  fetchPrintJob: vi.fn<typeof fetchPrintJob>(),
+  fetchPrintJobStatuses: vi.fn<typeof fetchPrintJobStatuses>(async (_token, ids) => ({
+    printJobs: ids.map((id) => ({
+      id,
+      status: "queued",
+      updatedAt: new Date().toISOString(),
+      deviceId: "device-api-1",
+    })),
+    counts: { pending: 0, queued: 0, completed: 0, failed: 0, cancelled: 0, todayCompleted: 0 },
+    latestJobId: null,
   })),
   fetchPrinters: vi.fn<typeof fetchPrinters>(async () => ({
     devices: [],
@@ -204,6 +221,9 @@ async function createWorkspaceContext(path = "/status", authenticated = true) {
       accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
     };
   }
+
+  if (authenticated)
+    store.remotePrintJobs = store.printJobs.map(({ content: _content, ...job }) => job);
 
   const router = createTestRouter(pinia);
   router.push(path);
@@ -385,7 +405,9 @@ describe("workspace views", () => {
       .find((button) => button.text() === "打印选中问答")
       ?.trigger("click");
 
-    expect(store.pendingPrintJobs.at(0)?.content).toContain("帮我整理一张温柔一点的今日提醒");
+    expect(vi.mocked(printerService.createPrintJob).mock.calls.at(-1)?.[1].content).toContain(
+      "帮我整理一张温柔一点的今日提醒",
+    );
   });
 
   it("deletes the current conversation from the conversations view", async () => {
@@ -507,7 +529,7 @@ describe("workspace views", () => {
 
     await pendingButton?.trigger("click");
 
-    expect(store.pendingPrintJobs.some((job: PrintJob) => job.status === "queued")).toBe(true);
+    expect(store.pendingPrintJobs.some((job) => job.status === "queued")).toBe(true);
     expect(wrapper.text()).toContain("默认打印设置");
     expect(wrapper.text()).toContain("书桌咕咕机");
     expect(wrapper.text()).toContain("绑定教程");
@@ -529,8 +551,8 @@ describe("workspace views", () => {
       .find((button) => button.text() === "取消打印")
       ?.trigger("click");
 
-    expect(store.pendingPrintJobs.some((job: PrintJob) => job.status === "pending")).toBe(false);
-    expect(store.printJobs.some((job: PrintJob) => job.status === "cancelled")).toBe(true);
+    expect(store.pendingPrintJobs.some((job) => job.status === "pending")).toBe(false);
+    expect(store.remotePrintJobs.some((job) => job.status === "cancelled")).toBe(true);
   });
 
   it("prevents cancelling or rebinding queued print jobs for authenticated users", async () => {
@@ -694,5 +716,44 @@ describe("workspace views", () => {
     await flushPromises();
 
     expect(wrapper.find("input[placeholder='例如：alice']").exists()).toBe(true);
+  });
+  it("loads print details on demand and ignores a closed preview even when titles match", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/prints");
+    const first = { ...store.remotePrintJobs[0]!, title: "same title" };
+    const second = { ...first, id: "second-job" };
+    store.remotePrintJobs = [first, second];
+    let resolveFirst!: (job: PrintJob) => void;
+    let resolveSecond!: (job: PrintJob) => void;
+    const firstDetail = new Promise<PrintJob>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondDetail = new Promise<PrintJob>((resolve) => {
+      resolveSecond = resolve;
+    });
+    vi.mocked(printerService.fetchPrintJob)
+      .mockReturnValueOnce(firstDetail)
+      .mockReturnValueOnce(secondDetail);
+    const wrapper = mount(PrintsView, { global: { plugins: [pinia, router] } });
+    expect(printerService.fetchPrintJob).not.toHaveBeenCalled();
+    const previewButtons = wrapper
+      .findAll("button")
+      .filter((button) => button.text() === "打印预览");
+    await previewButtons[0]!.trigger("click");
+    expect(wrapper.find('[role="status"]').text()).toBe("正在加载…");
+    await wrapper.find('[role="dialog"] button').trigger("click");
+    await previewButtons[1]!.trigger("click");
+    resolveSecond({ ...second, content: "second body" });
+    await flushPromises();
+    expect(wrapper.findComponent(PrintPreview).props("content")).toBe("second body");
+    resolveFirst({ ...first, content: "old private body" });
+    await flushPromises();
+    expect(wrapper.findComponent(PrintPreview).props("content")).toBe("second body");
+    expect(printerService.renderPrintPreview).toHaveBeenCalledTimes(1);
+    expect(printerService.renderPrintPreview).toHaveBeenCalledWith("access-token", {
+      title: "same title",
+      content: "second body",
+    });
+    expect(store.remotePrintJobs.every((job) => !("content" in job))).toBe(true);
+    wrapper.unmount();
   });
 });
