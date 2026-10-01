@@ -54,6 +54,17 @@ export interface PrintJob {
   content: string;
 }
 
+export type PrintJobSummary = Omit<PrintJob, "content">;
+
+export interface PrintJobCounts {
+  pending: number;
+  queued: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  todayCompleted: number;
+}
+
 export interface Schedule {
   id: string;
   title: string;

@@ -47,6 +47,8 @@ type Job struct {
 	ErrorMessage           *string
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
+	NextStatusCheckAt      *time.Time
+	StatusCheckAttempts    int
 }
 
 type Repository interface {
@@ -54,7 +56,11 @@ type Repository interface {
 	FindBindingByID(ctx context.Context, userID string, bindingID string) (*Binding, error)
 	SaveBinding(ctx context.Context, binding Binding) error
 	DeleteBinding(ctx context.Context, userID string, bindingID string) error
-	ListJobsByUserID(ctx context.Context, userID string) ([]Job, error)
+	ListJobSummaries(ctx context.Context, userID string, query JobPageQuery) ([]JobSummaryRecord, error)
+	ListJobStatuses(ctx context.Context, userID string, ids []string) ([]JobStatusRecord, error)
+	GetJobCounts(ctx context.Context, userID string, since time.Time) (JobCounts, *string, error)
+	ListDueStatusJobs(ctx context.Context, now time.Time, limit int) ([]StatusSyncJob, error)
+	SaveStatusCheck(ctx context.Context, job StatusSyncJob, result StatusCheckResult) (bool, error)
 	FindJobByID(ctx context.Context, userID string, jobID string) (*Job, error)
 	SaveJob(ctx context.Context, job Job) error
 }
@@ -86,7 +92,9 @@ type PrinterService interface {
 	ListDevices(ctx context.Context, accessToken string) ([]workspace.Device, error)
 	BindDevice(ctx context.Context, accessToken string, input BindInput) (workspace.Device, error)
 	DeleteDevice(ctx context.Context, accessToken string, bindingID string) error
-	ListPrintJobs(ctx context.Context, accessToken string) ([]workspace.PrintJob, error)
+	ListPrintJobs(ctx context.Context, accessToken string, input ListJobsInput) (JobPage, error)
+	GetPrintJobStatuses(ctx context.Context, accessToken string, input JobStatusesInput) (JobStatuses, error)
+	GetPrintJob(ctx context.Context, accessToken string, jobID string) (workspace.PrintJob, error)
 	CreatePrintJob(ctx context.Context, accessToken string, input CreateJobInput) (workspace.PrintJob, error)
 	SubmitPrintJob(ctx context.Context, accessToken string, jobID string) (workspace.PrintJob, error)
 	CancelPrintJob(ctx context.Context, accessToken string, jobID string) (workspace.PrintJob, error)
@@ -261,48 +269,6 @@ func (s *Service) DeleteDevice(ctx context.Context, accessToken string, bindingI
 	}
 
 	return s.repo.DeleteBinding(ctx, currentUser.ID, binding.ID)
-}
-
-func (s *Service) ListPrintJobs(ctx context.Context, accessToken string) ([]workspace.PrintJob, error) {
-	currentUser, err := s.auth.GetCurrentUser(ctx, accessToken)
-	if err != nil {
-		return nil, err
-	}
-
-	jobs, err := s.repo.ListJobsByUserID(ctx, currentUser.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if s.accessKey != "" {
-		for index := range jobs {
-			if jobs[index].Status != workspace.PrintStatusQueued || jobs[index].ProviderPrintContentID == nil {
-				continue
-			}
-
-			binding, findErr := s.repo.FindBindingByID(ctx, currentUser.ID, jobs[index].PrinterBindingID)
-			if findErr != nil || binding == nil {
-				continue
-			}
-			client, clientErr := s.newClient(*binding)
-			if clientErr != nil {
-				continue
-			}
-			statusResp, statusErr := client.GetPrintStatus(ctx, *jobs[index].ProviderPrintContentID)
-			if statusErr == nil && statusResp.IsPrinted() {
-				jobs[index].Status = workspace.PrintStatusCompleted
-				jobs[index].UpdatedAt = s.clock.Now()
-				_ = s.repo.SaveJob(ctx, jobs[index])
-			}
-		}
-	}
-
-	printJobs := make([]workspace.PrintJob, 0, len(jobs))
-	for _, job := range jobs {
-		printJobs = append(printJobs, mapJob(job))
-	}
-
-	return printJobs, nil
 }
 
 func (s *Service) CreatePrintJob(ctx context.Context, accessToken string, input CreateJobInput) (workspace.PrintJob, error) {
@@ -532,18 +498,16 @@ func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (Job,
 
 	client, err := s.newClient(binding)
 	if err != nil {
-		message := err.Error()
 		job.Status = workspace.PrintStatusFailed
-		job.ErrorMessage = &message
+		job.ErrorMessage = new(err.Error())
 		job.UpdatedAt = s.clock.Now()
 		_ = s.repo.SaveJob(ctx, job)
 		return Job{}, fmt.Errorf("%w: %s", ErrInvalidInput, err.Error())
 	}
 	resp, err := s.imagePrinter.PrintJob(ctx, client, job)
 	if err != nil {
-		message := err.Error()
 		job.Status = workspace.PrintStatusFailed
-		job.ErrorMessage = &message
+		job.ErrorMessage = new(err.Error())
 		job.UpdatedAt = s.clock.Now()
 		_ = s.repo.SaveJob(ctx, job)
 		return Job{}, fmt.Errorf("%w: %s", ErrUnavailable, err.Error())
@@ -553,19 +517,14 @@ func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (Job,
 	job.UpdatedAt = s.clock.Now()
 	job.ErrorMessage = nil
 	if resp.PrintContentID != 0 {
-		printID := resp.PrintContentID
-		job.ProviderPrintContentID = &printID
+		job.ProviderPrintContentID = new(resp.PrintContentID)
 	}
 	if strings.TrimSpace(resp.SmartGuid) != "" {
-		guid := strings.TrimSpace(resp.SmartGuid)
-		job.ProviderSmartGUID = &guid
+		job.ProviderSmartGUID = new(strings.TrimSpace(resp.SmartGuid))
 	}
 
-	if job.ProviderPrintContentID != nil {
-		if statusResp, statusErr := client.GetPrintStatus(ctx, *job.ProviderPrintContentID); statusErr == nil && statusResp.IsPrinted() {
-			job.Status = workspace.PrintStatusCompleted
-		}
-	}
+	job.NextStatusCheckAt = new(s.clock.Now())
+	job.StatusCheckAttempts = 0
 
 	if err := s.repo.SaveJob(ctx, job); err != nil {
 		return Job{}, err
@@ -590,8 +549,8 @@ func mapJob(job Job) workspace.PrintJob {
 		Source:    job.Source,
 		DeviceID:  job.PrinterBindingID,
 		Status:    job.Status,
-		CreatedAt: job.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt: job.UpdatedAt.UTC().Format(time.RFC3339),
+		CreatedAt: job.CreatedAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt: job.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		Content:   job.Content,
 	}
 }

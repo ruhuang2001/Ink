@@ -34,6 +34,8 @@ import type {
   deletePrinter,
   fetchPrintJobs,
   fetchPrinters,
+  fetchPrintJob,
+  fetchPrintJobStatuses,
   submitPrintJob,
   updatePrintJobDevice,
 } from "@/services/printers";
@@ -74,7 +76,18 @@ vi.mock("@/services/printers", () => ({
   cancelPrintJob: vi.fn<typeof cancelPrintJob>(),
   createPrintJob: vi.fn<typeof createPrintJob>(),
   deletePrinter: vi.fn<typeof deletePrinter>(),
-  fetchPrintJobs: vi.fn<typeof fetchPrintJobs>(),
+  fetchPrintJobs: vi.fn<typeof fetchPrintJobs>(async () => ({ printJobs: [], nextCursor: null })),
+  fetchPrintJob: vi.fn<typeof fetchPrintJob>(),
+  fetchPrintJobStatuses: vi.fn<typeof fetchPrintJobStatuses>(async (_token, ids) => ({
+    printJobs: ids.map((id) => ({
+      id,
+      status: "queued",
+      updatedAt: new Date().toISOString(),
+      deviceId: "device-api-1",
+    })),
+    counts: { pending: 0, queued: 0, completed: 0, failed: 0, cancelled: 0, todayCompleted: 0 },
+    latestJobId: null,
+  })),
   fetchPrinters: vi.fn<typeof fetchPrinters>(),
   submitPrintJob: vi.fn<typeof submitPrintJob>(),
   updatePrintJobDevice: vi.fn<typeof updatePrintJobDevice>(),
@@ -268,6 +281,7 @@ describe("workspace store plugin flows", () => {
     });
     vi.mocked(printerService.fetchPrintJobs).mockResolvedValueOnce({
       printJobs: [],
+      nextCursor: null,
     });
     vi.mocked(pluginService.fetchPlugins).mockResolvedValueOnce({
       plugins: [createPluginDetails()],
@@ -555,7 +569,7 @@ describe("workspace store plugin flows", () => {
       },
     ];
     store.defaultDeviceId = "device-1";
-    store.printJobs = [
+    store.remotePrintJobs = [
       {
         id: "print-1",
         title: "Desk Job",
@@ -564,7 +578,6 @@ describe("workspace store plugin flows", () => {
         status: "pending",
         createdAt: new Date("2026-04-10T00:00:00.000Z").toISOString(),
         updatedAt: new Date("2026-04-10T00:00:00.000Z").toISOString(),
-        content: "hello",
       },
       {
         id: "print-2",
@@ -574,7 +587,6 @@ describe("workspace store plugin flows", () => {
         status: "pending",
         createdAt: new Date("2026-04-10T00:00:00.000Z").toISOString(),
         updatedAt: new Date("2026-04-10T00:00:00.000Z").toISOString(),
-        content: "world",
       },
     ];
     store.remoteSchedules = [
@@ -594,7 +606,7 @@ describe("workspace store plugin flows", () => {
 
     expect(store.devices.map((device) => device.id)).toEqual(["device-2"]);
     expect(store.defaultDeviceId).toBe("device-2");
-    expect(store.printJobs.map((job) => job.id)).toEqual(["print-2"]);
+    expect(store.remotePrintJobs.map((job) => job.id)).toEqual(["print-2"]);
     expect(store.remoteSchedules.map((schedule) => schedule.id)).toEqual(["schedule-2"]);
   });
 });

@@ -141,6 +141,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/printers/{printerID}", s.wrap(s.handleDeletePrinter))
 	mux.HandleFunc("POST /api/v1/feedback/print", s.wrap(s.handleSubmitFeedback))
 	mux.HandleFunc("GET /api/v1/print-jobs", s.wrap(s.handleListPrintJobs))
+	mux.HandleFunc("GET /api/v1/print-jobs/status", s.wrap(s.handlePrintJobStatuses))
+	mux.HandleFunc("GET /api/v1/print-jobs/{jobID}", s.wrap(s.handleGetPrintJob))
 	mux.HandleFunc("POST /api/v1/print-jobs", s.wrap(s.handleCreatePrintJob))
 	mux.HandleFunc("POST /api/v1/print-preview", s.wrap(s.handlePrintPreview))
 	mux.HandleFunc("POST /api/v1/print-jobs/{jobID}/submit", s.wrap(s.handleSubmitPrintJob))
@@ -611,13 +613,64 @@ func (s *Server) handleListPrintJobs(w http.ResponseWriter, r *http.Request, req
 		return
 	}
 
-	jobs, err := s.printer.ListPrintJobs(r.Context(), accessToken)
+	limit := 0
+	if value := r.URL.Query().Get("limit"); value != "" {
+		var err error
+		limit, err = strconv.Atoi(value)
+		if err != nil || limit < 1 || limit > printer.MaxJobPageSize {
+			s.writePrinterError(w, requestID, printer.ErrInvalidInput)
+			return
+		}
+	}
+	jobs, err := s.printer.ListPrintJobs(r.Context(), accessToken, printer.ListJobsInput{
+		Status: r.URL.Query().Get("status"), Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	})
 	if err != nil {
 		s.writePrinterError(w, requestID, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string][]workspace.PrintJob{"printJobs": jobs})
+	writeJSON(w, http.StatusOK, jobs)
+}
+
+func (s *Server) handlePrintJobStatuses(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+	var input printer.JobStatusesInput
+	if value := r.URL.Query().Get("ids"); value != "" {
+		input.IDs = strings.Split(value, ",")
+	}
+	if value := r.URL.Query().Get("since"); value != "" {
+		var err error
+		input.Since, err = time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			s.writePrinterError(w, requestID, printer.ErrInvalidInput)
+			return
+		}
+	}
+	result, err := s.printer.GetPrintJobStatuses(r.Context(), accessToken, input)
+	if err != nil {
+		s.writePrinterError(w, requestID, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleGetPrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+	job, err := s.printer.GetPrintJob(r.Context(), accessToken, r.PathValue("jobID"))
+	if err != nil {
+		s.writePrinterError(w, requestID, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]workspace.PrintJob{"printJob": job})
 }
 
 func (s *Server) handleCreatePrintJob(w http.ResponseWriter, r *http.Request, requestID string) {

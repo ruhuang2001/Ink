@@ -1,5 +1,5 @@
-import { createPinia, setActivePinia } from "pinia";
-import { vi } from "vitest";
+import { createPinia, disposePinia, getActivePinia, setActivePinia } from "pinia";
+import { afterEach, vi } from "vitest";
 
 import type { fetchAIConfigSummary, generateAIReply, saveAIConfig } from "@/services/ai";
 import type {
@@ -19,11 +19,12 @@ import type {
   submitPrintJob,
   updatePrintJobDevice,
 } from "@/services/printers";
-import { fetchPrintJobs } from "@/services/printers";
+import { fetchPrintJob, fetchPrintJobs, fetchPrintJobStatuses } from "@/services/printers";
+import * as printerService from "@/services/printers";
 import type { createUserWithApi, fetchWorkspaceStateWithApi } from "@/services/workspace";
 import { saveWorkspaceStateWithApi } from "@/services/workspace";
 import { useWorkspaceStore } from "@/stores/workspace";
-import type { PrintJob } from "@/types/workspace";
+import type { PrintJob, PrintJobCounts, PrintJobSummary } from "@/types/workspace";
 
 vi.mock("@/services/auth", () => ({
   changePasswordWithApi: vi.fn<typeof changePasswordWithApi>(async () => undefined),
@@ -103,6 +104,19 @@ vi.mock("@/services/ai", () => ({
   })),
 }));
 
+vi.mock("@/services/plugins", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/plugins")>()),
+  fetchPlugins: vi.fn<typeof import("@/services/plugins").fetchPlugins>(async () => ({
+    plugins: [],
+  })),
+  fetchPrintSchedules: vi.fn<typeof import("@/services/plugins").fetchPrintSchedules>(async () => ({
+    schedules: [],
+  })),
+  fetchAdminPlugins: vi.fn<typeof import("@/services/plugins").fetchAdminPlugins>(async () => ({
+    plugins: [],
+  })),
+}));
+
 vi.mock("@/services/feedback", () => ({
   submitFeedbackToAdmin: vi.fn<typeof submitFeedbackToAdmin>(async () => undefined),
 }));
@@ -137,6 +151,18 @@ vi.mock("@/services/printers", () => ({
   deletePrinter: vi.fn<typeof deletePrinter>(async () => undefined),
   fetchPrintJobs: vi.fn<typeof fetchPrintJobs>(async () => ({
     printJobs: [],
+    nextCursor: null,
+  })),
+  fetchPrintJob: vi.fn<typeof fetchPrintJob>(),
+  fetchPrintJobStatuses: vi.fn<typeof fetchPrintJobStatuses>(async (_token, ids) => ({
+    printJobs: ids.map((id) => ({
+      id,
+      status: "queued",
+      updatedAt: new Date().toISOString(),
+      deviceId: "device-api-1",
+    })),
+    counts: { pending: 0, queued: 0, completed: 0, failed: 0, cancelled: 0, todayCompleted: 0 },
+    latestJobId: null,
   })),
   fetchPrinters: vi.fn<typeof fetchPrinters>(async () => ({
     devices: [],
@@ -182,12 +208,63 @@ function authenticateStore(role: "admin" | "member" = "member") {
   return store;
 }
 
+function printSummary(id: string, status: PrintJobSummary["status"] = "pending"): PrintJobSummary {
+  return {
+    id,
+    title: id,
+    source: "manual",
+    deviceId: "device-api-1",
+    status,
+    createdAt: "2026-04-10T00:00:00.123400Z",
+    updatedAt: "2026-04-10T00:00:00.123400Z",
+  };
+}
+
+function printCounts(overrides: Partial<PrintJobCounts> = {}): PrintJobCounts {
+  return {
+    pending: 0,
+    queued: 0,
+    completed: 0,
+    failed: 0,
+    cancelled: 0,
+    todayCompleted: 0,
+    ...overrides,
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((fulfill) => {
+    resolve = fulfill;
+  });
+  return { promise, resolve };
+}
+
 describe("workspace store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     window.localStorage.clear();
     window.sessionStorage.clear();
     vi.clearAllMocks();
+    vi.mocked(fetchPrintJobs).mockReset().mockResolvedValue({ printJobs: [], nextCursor: null });
+    vi.mocked(fetchPrintJobStatuses)
+      .mockReset()
+      .mockImplementation(async (_token, ids) => ({
+        printJobs: ids.map((id) => ({
+          id,
+          status: "queued",
+          updatedAt: new Date().toISOString(),
+          deviceId: "device-api-1",
+        })),
+        counts: { pending: 0, queued: 0, completed: 0, failed: 0, cancelled: 0, todayCompleted: 0 },
+        latestJobId: null,
+      }));
+  });
+
+  afterEach(() => {
+    const pinia = getActivePinia();
+    if (pinia) disposePinia(pinia);
+    vi.restoreAllMocks();
   });
 
   it("exposes stable defaults and derived summaries", () => {
@@ -337,7 +414,7 @@ describe("workspace store", () => {
 
   it("supports print queue updates and source state cycling", async () => {
     const store = useWorkspaceStore();
-    const pendingJob = store.pendingPrintJobs.find((job: PrintJob) => job.status === "pending");
+    const pendingJob = store.pendingPrintJobs.find((job) => job.status === "pending");
     const schedule = store.schedules[0];
     const source = store.sources[0];
 
@@ -507,7 +584,7 @@ describe("workspace store", () => {
     expect(device?.status).toBe("connected");
     expect(store.defaultDeviceId).toBe(device?.id);
     expect(job?.deviceId).toBe(device?.id);
-    expect(store.printJobs.find((item) => item.id === job!.id)?.status).toBe("queued");
+    expect(store.remotePrintJobs.find((item) => item.id === job!.id)?.status).toBe("queued");
   });
 
   it("refreshes queued authenticated print jobs until they complete", async () => {
@@ -515,7 +592,7 @@ describe("workspace store", () => {
 
     try {
       const store = useWorkspaceStore();
-      store.printJobs = store.printJobs.filter((job) => job.status !== "queued");
+      store.remotePrintJobs = store.remotePrintJobs.filter((job) => job.status !== "queued");
       authenticateStore();
 
       const job = await store.createManualPrint({
@@ -523,8 +600,8 @@ describe("workspace store", () => {
         content: "这是一条真实打印任务。",
       });
 
-      vi.mocked(fetchPrintJobs).mockResolvedValueOnce({
-        printJobs: store.printJobs.map((item) =>
+      vi.mocked(fetchPrintJobStatuses).mockResolvedValueOnce({
+        printJobs: store.remotePrintJobs.map((item) =>
           item.id === job!.id
             ? {
                 ...item,
@@ -533,13 +610,15 @@ describe("workspace store", () => {
               }
             : item,
         ),
+        counts: { pending: 0, queued: 0, completed: 1, failed: 0, cancelled: 0, todayCompleted: 1 },
+        latestJobId: job!.id,
       });
 
-      expect(store.printJobs.find((item) => item.id === job!.id)?.status).toBe("queued");
+      expect(store.remotePrintJobs.find((item) => item.id === job!.id)?.status).toBe("queued");
 
       await vi.advanceTimersByTimeAsync(1500);
 
-      expect(store.printJobs.find((item) => item.id === job!.id)?.status).toBe("completed");
+      expect(store.remotePrintJobs.find((item) => item.id === job!.id)?.status).toBe("completed");
     } finally {
       vi.useRealTimers();
     }
@@ -590,5 +669,220 @@ describe("workspace store", () => {
     expect(window.localStorage.getItem("ink.auth.session.v1")).toBeNull();
     expect(window.localStorage.getItem("ink.workspace.v1") ?? "").not.toContain("refresh-token");
     expect(window.localStorage.getItem("ink.workspace.v1") ?? "").not.toContain("access-token");
+  });
+  it("keeps global counts accurate while paging summaries and loads bodies only on demand", async () => {
+    vi.useFakeTimers();
+    try {
+      const first = printSummary("pending-1");
+      vi.mocked(fetchPrintJobs)
+        .mockResolvedValueOnce({ printJobs: [first], nextCursor: "active-first" })
+        .mockResolvedValueOnce({
+          printJobs: [printSummary("history-1", "completed")],
+          nextCursor: "history-first",
+        });
+      vi.mocked(fetchPrintJobStatuses).mockResolvedValueOnce({
+        printJobs: [],
+        counts: printCounts({ pending: 120, queued: 30, completed: 300, todayCompleted: 9 }),
+        latestJobId: first.id,
+      });
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      expect(fetchPrintJobs).toHaveBeenCalledWith("access-token", { status: "active" });
+      expect(fetchPrintJobs).toHaveBeenCalledWith("access-token", { status: "history" });
+      expect(store.pendingConfirmationCount).toBe(120);
+      expect(store.todayPrintCount).toBe(9);
+      expect(store.printJobs).toEqual([]);
+
+      const page = deferred<Awaited<ReturnType<typeof fetchPrintJobs>>>();
+      vi.mocked(fetchPrintJobs).mockReturnValueOnce(page.promise);
+      const loads = [store.loadMorePrintJobs("active"), store.loadMorePrintJobs("active")];
+      await Promise.resolve();
+      expect(fetchPrintJobs).toHaveBeenCalledTimes(3);
+      page.resolve({ printJobs: [first, printSummary("pending-2")], nextCursor: null });
+      await Promise.all(loads);
+      expect(store.pendingPrintJobs.map((job) => job.id)).toEqual(["pending-1", "pending-2"]);
+      expect(store.activePrintJobsCursor).toBeNull();
+      expect(store.pendingConfirmationCount).toBe(120);
+
+      const detail = deferred<PrintJob>();
+      vi.mocked(fetchPrintJob).mockReturnValueOnce(detail.promise);
+      const details = [store.loadPrintJobDetail(first.id), store.loadPrintJobDetail(first.id)];
+      expect(fetchPrintJob).toHaveBeenCalledTimes(1);
+      detail.resolve({ ...first, content: "the full printable body" });
+      expect((await Promise.all(details))[0]?.content).toBe("the full printable body");
+      expect(store.remotePrintJobs[0]).not.toHaveProperty("content");
+      expect(saveWorkspaceStateWithApi).not.toHaveBeenCalled();
+      store.setTheme("dark");
+      await vi.advanceTimersByTimeAsync(750);
+      expect(vi.mocked(saveWorkspaceStateWithApi).mock.calls.at(-1)?.[1].printJobs).toEqual([]);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses only statuses on steady polls and discovers scheduled jobs after the queue becomes empty", async () => {
+    vi.useFakeTimers();
+    try {
+      const counts = printCounts({ completed: 1, todayCompleted: 1 });
+      vi.mocked(fetchPrintJobs)
+        .mockResolvedValueOnce({ printJobs: [], nextCursor: null })
+        .mockResolvedValueOnce({
+          printJobs: [printSummary("history-old", "completed")],
+          nextCursor: "old-history",
+        });
+      vi.mocked(fetchPrintJobStatuses)
+        .mockResolvedValueOnce({ printJobs: [], counts, latestJobId: "history-old" })
+        .mockResolvedValueOnce({ printJobs: [], counts, latestJobId: "history-old" })
+        .mockResolvedValueOnce({
+          printJobs: [],
+          counts: printCounts({ queued: 1, completed: 1, todayCompleted: 1 }),
+          latestJobId: "scheduled-new",
+        });
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(fetchPrintJobs).toHaveBeenCalledTimes(2);
+      expect(fetchPrintJobStatuses).toHaveBeenCalledTimes(2);
+      vi.mocked(fetchPrintJobs)
+        .mockResolvedValueOnce({
+          printJobs: [printSummary("scheduled-new", "queued")],
+          nextCursor: "new-active",
+        })
+        .mockResolvedValueOnce({
+          printJobs: [printSummary("history-new", "completed")],
+          nextCursor: "restarted-history",
+        });
+      await vi.advanceTimersByTimeAsync(30000);
+      expect(store.pendingPrintJobs.map((job) => job.id)).toEqual(["scheduled-new"]);
+      expect(store.printHistoryJobs.map((job) => job.id)).toContain("history-old");
+      expect(store.historyPrintJobsCursor).toBe("restarted-history");
+      expect(saveWorkspaceStateWithApi).not.toHaveBeenCalled();
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("preserves newer mutations when status and page requests finish late within the same millisecond", async () => {
+    vi.useFakeTimers();
+    try {
+      const first = printSummary("pending-1");
+      vi.mocked(fetchPrintJobs)
+        .mockResolvedValueOnce({ printJobs: [first], nextCursor: "more-active" })
+        .mockResolvedValueOnce({ printJobs: [], nextCursor: null });
+      vi.mocked(fetchPrintJobStatuses).mockResolvedValueOnce({
+        printJobs: [],
+        counts: printCounts({ pending: 1 }),
+        latestJobId: first.id,
+      });
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      const page = deferred<Awaited<ReturnType<typeof fetchPrintJobs>>>();
+      const statuses = deferred<Awaited<ReturnType<typeof fetchPrintJobStatuses>>>();
+      vi.mocked(fetchPrintJobs).mockReturnValueOnce(page.promise);
+      vi.mocked(fetchPrintJobStatuses).mockReturnValueOnce(statuses.promise);
+      const loading = store.loadMorePrintJobs("active");
+      await vi.advanceTimersByTimeAsync(1500);
+      vi.mocked(printerService.cancelPrintJob).mockResolvedValueOnce({
+        ...first,
+        status: "cancelled",
+        updatedAt: "2026-04-10T00:00:00.123456Z",
+        content: "body",
+      });
+      await expect(store.cancelPrint(first.id)).resolves.toBe(true);
+      page.resolve({
+        printJobs: [{ ...first, updatedAt: "2026-04-10T00:00:00.123455Z" }],
+        nextCursor: null,
+      });
+      statuses.resolve({
+        printJobs: [{ ...first, updatedAt: "2026-04-10T00:00:00.123455Z" }],
+        counts: printCounts({ pending: 1 }),
+        latestJobId: first.id,
+      });
+      await loading;
+      await Promise.resolve();
+      expect(store.remotePrintJobs[0]?.status).toBe("cancelled");
+      expect(store.remotePrintJobs[0]?.updatedAt).toBe("2026-04-10T00:00:00.123456Z");
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("discards old-account pages, details and status responses after switching accounts", async () => {
+    vi.useFakeTimers();
+    try {
+      const first = printSummary("account-a-job");
+      vi.mocked(fetchPrintJobs)
+        .mockResolvedValueOnce({ printJobs: [first], nextCursor: "a-cursor" })
+        .mockResolvedValueOnce({ printJobs: [], nextCursor: null });
+      vi.mocked(fetchPrintJobStatuses).mockResolvedValueOnce({
+        printJobs: [],
+        counts: printCounts({ pending: 1 }),
+        latestJobId: first.id,
+      });
+      const store = useWorkspaceStore();
+      await store.login("a@example.com", "secret");
+      const page = deferred<Awaited<ReturnType<typeof fetchPrintJobs>>>();
+      const detail = deferred<PrintJob>();
+      const statuses = deferred<Awaited<ReturnType<typeof fetchPrintJobStatuses>>>();
+      vi.mocked(fetchPrintJobs).mockReturnValueOnce(page.promise);
+      vi.mocked(fetchPrintJob).mockReturnValueOnce(detail.promise);
+      vi.mocked(fetchPrintJobStatuses).mockReturnValueOnce(statuses.promise);
+      const loading = store.loadMorePrintJobs("active");
+      const preview = store.loadPrintJobDetail(first.id);
+      await vi.advanceTimersByTimeAsync(1500);
+      store.authUser = { ...store.authUser!, id: "user-b" };
+      store.authSession = { ...store.authSession!, accessToken: "b-token" };
+      store.remotePrintJobs = [printSummary("account-b-job")];
+      store.activePrintJobsCursor = "b-cursor";
+      page.resolve({ printJobs: [first], nextCursor: "a-next" });
+      detail.resolve({ ...first, content: "a private body" });
+      statuses.resolve({
+        printJobs: [first],
+        counts: printCounts({ pending: 9 }),
+        latestJobId: first.id,
+      });
+      await loading;
+      await expect(preview).resolves.toBeNull();
+      await Promise.resolve();
+      expect(store.remotePrintJobs.map((job) => job.id)).toEqual(["account-b-job"]);
+      expect(store.activePrintJobsCursor).toBe("b-cursor");
+      expect(store.remotePrintCounts).toBeNull();
+      expect(store.printerSyncError).toBe("");
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds status batches and pauses them while the page is hidden", async () => {
+    vi.useFakeTimers();
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    try {
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      store.remotePrintJobs = Array.from({ length: 205 }, (_, index) =>
+        printSummary(`job-${index}`, "queued"),
+      );
+      vi.mocked(fetchPrintJobStatuses).mockClear();
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(vi.mocked(fetchPrintJobStatuses).mock.calls.map((call) => call[1].length)).toEqual([
+        100, 100, 5,
+      ]);
+      visibility.mockReturnValue("hidden");
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(120000);
+      expect(fetchPrintJobStatuses).toHaveBeenCalledTimes(3);
+      visibility.mockReturnValue("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(fetchPrintJobStatuses).toHaveBeenCalledTimes(6);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+      visibility.mockRestore();
+    }
   });
 });

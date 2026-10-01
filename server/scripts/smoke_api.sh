@@ -36,7 +36,7 @@ cleanup() {
     "${LOGIN_JSON:-}" "${UPDATED_PAYLOAD:-}" "${CONFIRMATION_PAYLOAD:-}" "${PLUGIN_ZIP:-}" \
     "${UPLOAD_JSON:-}" "${BINDING_PAYLOAD:-}" "${BINDING_JSON:-}" "${VALIDATION_JSON:-}" \
     "${RUN_JSON:-}" "${SCHEDULE_PAYLOAD:-}" "${SCHEDULE_JSON:-}" "${SCHEDULE_RUN_JSON:-}" \
-    "${PRINT_JOBS_JSON:-}" "${SERVER_BINARY:-}"
+    "${PRINT_JOBS_JSON:-}" "${PRINT_STATUS_JSON:-}" "${PRINT_DETAIL_JSON:-}" "${SERVER_BINARY:-}"
 }
 
 trap cleanup EXIT INT TERM
@@ -59,7 +59,7 @@ fi
   cd "$SERVER_DIR"
   go run ./cmd/migrate up
   INK_TEST_DATABASE_URL="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/ink?sslmode=disable}" \
-    go test ./internal/platform/store/postgres -run '^TestDeliveryMigrationUpgradeAndClaims$' -count=1
+    go test ./internal/platform/store/postgres -count=1
   go run ./cmd/seed dev
   go run ./cmd/smoke-fixture cleanup
   go run ./cmd/smoke-fixture setup
@@ -98,6 +98,8 @@ SCHEDULE_PAYLOAD=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-schedule.XXXXXX.json")
 SCHEDULE_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-schedule-result.XXXXXX.json")
 SCHEDULE_RUN_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-schedule-run.XXXXXX.json")
 PRINT_JOBS_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-print-jobs.XXXXXX.json")
+PRINT_STATUS_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-print-status.XXXXXX.json")
+PRINT_DETAIL_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-print-detail.XXXXXX.json")
 SMOKE_PLUGIN_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/ink-smoke-plugins.XXXXXX")
 
 (cd "$SERVER_DIR" && go build -o "$SERVER_BINARY" ./cmd/api)
@@ -330,10 +332,45 @@ job_ids = result.get("printJobIds", [])
 if result.get("printedCount") != 1 or result.get("failedCount") != 0 or len(job_ids) != 1:
     raise SystemExit("schedule did not create exactly one delivery job")
 with open(sys.argv[2], "r", encoding="utf-8") as fh:
-    jobs = json.load(fh).get("printJobs", [])
+    page = json.load(fh)
+jobs = page.get("printJobs", [])
+if "nextCursor" not in page or len(jobs) > 20 or any("content" in job for job in jobs):
+    raise SystemExit("print list did not return bounded content-free summaries")
 matching = [job for job in jobs if job.get("id") == job_ids[0]]
 if len(matching) != 1 or matching[0].get("status") != "pending":
     raise SystemExit("delivery job is missing or contacted the provider unexpectedly")
+PY
+
+PRINT_JOB_ID=$(python3 - "$SCHEDULE_RUN_JSON" <<'PY'
+import json
+import sys
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    print(json.load(fh)["result"]["printJobIds"][0])
+PY
+)
+
+curl --silent --show-error --fail \
+  -H "$AUTH_HEADER" \
+  "$SMOKE_BASE_URL/api/v1/print-jobs/status?ids=$PRINT_JOB_ID" >"$PRINT_STATUS_JSON"
+
+curl --silent --show-error --fail \
+  -H "$AUTH_HEADER" \
+  "$SMOKE_BASE_URL/api/v1/print-jobs/$PRINT_JOB_ID" >"$PRINT_DETAIL_JSON"
+
+python3 - "$PRINT_STATUS_JSON" "$PRINT_DETAIL_JSON" "$PRINT_JOB_ID" <<'PY'
+import json
+import sys
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    status = json.load(fh)
+with open(sys.argv[2], "r", encoding="utf-8") as fh:
+    detail = json.load(fh).get("printJob", {})
+rows = status.get("printJobs", [])
+if len(rows) != 1 or rows[0].get("id") != sys.argv[3] or rows[0].get("status") != "pending" or "content" in rows[0]:
+    raise SystemExit("lightweight status response is missing or contains print content")
+if status.get("counts", {}).get("pending", 0) < 1 or not status.get("latestJobId"):
+    raise SystemExit("global print status metadata is missing")
+if detail.get("id") != sys.argv[3] or not detail.get("content"):
+    raise SystemExit("print detail did not preserve the job body")
 PY
 
 curl --silent --show-error --fail \
@@ -356,4 +393,4 @@ if expected != restored:
     raise SystemExit("workspace state was not restored after smoke test")
 PY
 
-echo "Smoke test passed: auth, workspace persistence, plugin upload/binding/fetch, and schedule delivery succeeded."
+echo "Smoke test passed: auth, workspace persistence, plugin lifecycle, schedule delivery, and paginated print/status/detail reads succeeded."
