@@ -149,7 +149,7 @@ const enUS = {
         calendar: {
           name: "Family calendar",
           type: "Calendar",
-          note: "Recent sync failed. Re-authorize to continue.",
+          note: "The latest update failed. Re-authorize to continue.",
         },
       },
     },
@@ -205,8 +205,8 @@ const enUS = {
       accountCreated: "Created the new account.",
     },
     errors: {
-      syncPrintStatus: "Unable to sync print status. Please try again later.",
-      syncWorkspace: "Unable to sync workspace data. Please try again later.",
+      syncPrintStatus: "Unable to load print status. Please try again later.",
+      syncWorkspace: "Unable to load data. Please try again later.",
       loadAccountData: "Unable to load account data. Please try again later.",
       loadIntegrations:
         "Unable to load plugins, devices, and AI configuration. Please try again later.",
@@ -377,7 +377,6 @@ const enUS = {
     },
   },
   status: {
-    syncErrorTitle: "Device sync error",
     boundDevices: "Bound devices",
     autoPrint: "Auto print",
     recentPrints: "Recent prints",
@@ -401,11 +400,6 @@ const enUS = {
     },
     dialog: {
       title: "Add device",
-      description: {
-        authenticated:
-          "After sign-in, the device will be bound to the current account and can be set as default or removed later.",
-        anonymous: "In demo mode, added devices are saved only in local sample data.",
-      },
       fields: {
         name: "Device name",
         note: "Device note",
@@ -519,19 +513,11 @@ const enUS = {
         disableLoginProtection: "Disable sign-in protection",
       },
       passwordCard: {
-        title: "Change password",
-        description:
-          "Password editing stays in a separate dialog. This page only shows the security summary.",
+        title: "Password",
         action: "Change password",
-        securityRule: "Security rule",
-        securityRuleValue: "New password must be at least 8 characters",
-        result: "After submit",
-        resultValue: "You will be sent back to the sign-in page to authenticate again",
       },
       passwordDialog: {
         title: "Change password",
-        description:
-          "Enter your current password and set a new one. After a successful update, you will be sent back to sign in again.",
         currentPassword: "Current password",
         newPassword: "New password",
         confirmPassword: "Confirm new password",
@@ -545,18 +531,10 @@ const enUS = {
       },
       createAccountCard: {
         title: "Create account",
-        description:
-          "Create separate accounts for members. Each account loads its own workspace after sign-in.",
         action: "Create account",
-        accountType: "Account style",
-        accountTypeValue: "Use a short username when possible, for example alice",
-        initialRole: "Initial role",
-        initialRoleValue: "New accounts are created as members by default",
       },
       createAccountDialog: {
         title: "Create account",
-        description:
-          "Create a separate sign-in account for a member. It syncs into the current workspace immediately after submission.",
         account: "Account",
         displayName: "Display name",
         initialPassword: "Initial password",
@@ -574,12 +552,9 @@ const enUS = {
     },
     printing: {
       title: "Printing",
-      syncErrorTitle: "Account sync issue",
       defaultDevice: "Default device",
       noDefaultDevice: "No device selected",
       tutorialTab: "Tutorial tab",
-      tutorialTabShown: 'The "Tutorial" tab is shown in the top and bottom navigation.',
-      tutorialTabHidden: 'The "Tutorial" tab is hidden in the top and bottom navigation.',
       toggleAria: {
         enableTutorialTab: "Enable tutorial tab",
         disableTutorialTab: "Disable tutorial tab",
@@ -587,13 +562,9 @@ const enUS = {
     },
     appearance: {
       title: "Appearance",
-      currentTheme: "Current theme: {value}",
-      description: 'Choose "System" to follow the device light or dark appearance automatically.',
     },
     language: {
       title: "Language",
-      current: "Current language: {value}",
-      description: "Changes apply immediately on this page and are saved as your preference.",
       options: {
         system: "System",
         zhCN: "简体中文",
@@ -672,11 +643,8 @@ const enUS = {
         fetchEveryMinutes: "Fetch every {minutes} minutes",
         nextFetchAt: "Next fetch {time}",
         noFetchScheduled: "No automatic fetch is scheduled right now",
-        enableWorkspaceBinding: "Enable binding for this workspace",
-        enableWorkspaceBindingHint:
-          "After enabling it, this workspace can test the plugin and create related scheduled tasks.",
-        noWorkspaceConfig:
-          "This plugin has no workspace-level configuration. You can test or save it directly.",
+        enableWorkspaceBinding: "Enable plugin",
+        noWorkspaceConfig: "This plugin needs no additional settings.",
         checkboxFallback: "Enable this option",
         secretPlaceholder: "Leave blank to keep the current secret",
         testing: "Testing...",
@@ -701,7 +669,6 @@ const enUS = {
     },
   },
   prints: {
-    syncErrorTitle: "Device status sync error",
     confirmDeleteSchedule: "Delete this scheduled task?",
     recentPrints: "Recent prints",
     connectedPlugins: "Connected plugins",
@@ -748,7 +715,6 @@ const enUS = {
     },
     printDialog: {
       title: "New print",
-      description: "Create a new print item.",
       submit: "Create print",
       fields: {
         title: "Print title",
@@ -767,10 +733,6 @@ const enUS = {
     scheduleDialog: {
       title: "New scheduled task",
       manualSourceFallback: "Created manually",
-      description: {
-        authenticated: "Choose a connected plugin as the source and configure when it should run.",
-        anonymous: "Create an automatic printing plan.",
-      },
       fields: {
         title: "Task name",
         plugin: "Source plugin",
@@ -795,23 +757,20 @@ const enUS = {
         daily: "Every day",
         weekly: "Every week",
       },
-      emptyPlugins:
-        "No plugin is available right now. Finish plugin installation and workspace setup in Settings first.",
+      emptyPlugins: "No plugins are available. Install and enable one in Settings first.",
       pluginDetails: {
         fetchFrequency: "Fetch frequency",
         fetchEveryMinutes: "Fetch every {minutes} minutes",
         fetchHint:
-          "Fetching runs independently on the plugin binding. Scheduled tasks only consume already fetched content.",
+          "The plugin gets content at the interval above. Scheduled tasks select items that have not been printed yet.",
         fetchStatus: "Fetch status",
         lastFetchedAt: "Last fetched {time}",
         neverFetched: "No fetch has run yet",
         nextFetchAt: "Next fetch {time}",
         noNextFetch: "No automatic fetch is scheduled right now",
-        batchSizeHint:
-          "Each schedule tick prints up to this many items from the earliest fetched content that has not yet been delivered by this task.",
+        batchSizeHint: "Print up to this many items each time, starting with older content.",
       },
-      emptyPluginSelection:
-        "Choose a connected plugin first, then decide how many fetched items this task should print each time.",
+      emptyPluginSelection: "Choose a connected plugin and set how many items to print each time.",
       submit: "Create task",
       errors: {
         titleRequired: "Enter a task name.",

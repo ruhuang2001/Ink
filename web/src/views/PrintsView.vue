@@ -277,14 +277,6 @@ async function submitScheduleDialog() {
 
     <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div class="space-y-8">
-        <section
-          v-if="workspaceStore.printerSyncError"
-          class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4"
-        >
-          <p class="text-sm font-medium text-amber-900">{{ t("prints.syncErrorTitle") }}</p>
-          <p class="mt-1 text-sm text-amber-700">{{ workspaceStore.printerSyncError }}</p>
-        </section>
-
         <section>
           <div class="mb-4">
             <h3 class="text-base leading-6 font-semibold text-stone-900">
@@ -593,7 +585,6 @@ async function submitScheduleDialog() {
     <AppDialog
       :open="printDialogOpen"
       :title="t('prints.printDialog.title')"
-      :description="t('prints.printDialog.description')"
       @close="closePrintDialog"
     >
       <form class="space-y-4" @submit.prevent="submitPrintDialog">
@@ -650,11 +641,6 @@ async function submitScheduleDialog() {
     <AppDialog
       :open="scheduleDialogOpen"
       :title="t('prints.scheduleDialog.title')"
-      :description="
-        workspaceStore.isAuthenticated
-          ? t('prints.scheduleDialog.description.authenticated')
-          : t('prints.scheduleDialog.description.anonymous')
-      "
       @close="closeScheduleDialog"
     >
       <form class="space-y-4" @submit.prevent="submitScheduleDialog">

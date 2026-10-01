@@ -147,7 +147,7 @@ const zhCN = {
         calendar: {
           name: "家庭日历",
           type: "日历",
-          note: "最近同步失败，请重新授权",
+          note: "最近更新失败，请重新授权",
         },
       },
     },
@@ -203,8 +203,8 @@ const zhCN = {
       accountCreated: "新账号已创建。",
     },
     errors: {
-      syncPrintStatus: "同步打印状态失败，请稍后重试。",
-      syncWorkspace: "同步数据失败，请稍后重试。",
+      syncPrintStatus: "加载打印状态失败，请稍后重试。",
+      syncWorkspace: "加载数据失败，请稍后重试。",
       loadAccountData: "加载账号数据失败，请稍后重试。",
       loadIntegrations: "加载插件、设备与 AI 配置失败，请稍后重试。",
       promptRequired: "请先输入要整理的内容。",
@@ -368,7 +368,6 @@ const zhCN = {
     },
   },
   status: {
-    syncErrorTitle: "设备同步异常",
     boundDevices: "已绑定设备",
     autoPrint: "自动打印",
     recentPrints: "最近打印",
@@ -390,10 +389,6 @@ const zhCN = {
     },
     dialog: {
       title: "添加设备",
-      description: {
-        authenticated: "登录后会把设备真实绑定到当前账号下，并可继续设为默认或删除。",
-        anonymous: "当前为演示模式，添加后只会保存在本地示例数据里。",
-      },
       fields: {
         name: "设备名称",
         note: "设备备注",
@@ -504,17 +499,11 @@ const zhCN = {
         disableLoginProtection: "关闭登录保护",
       },
       passwordCard: {
-        title: "修改密码",
-        description: "密码编辑收进独立窗口，设置页只保留安全状态摘要。",
+        title: "登录密码",
         action: "修改密码",
-        securityRule: "安全规则",
-        securityRuleValue: "新密码至少 8 位",
-        result: "提交结果",
-        resultValue: "更新后会跳回登录页重新认证",
       },
       passwordDialog: {
         title: "修改密码",
-        description: "输入当前密码并设置新的登录密码。提交成功后会回到登录页重新认证。",
         currentPassword: "当前密码",
         newPassword: "新密码",
         confirmPassword: "确认新密码",
@@ -528,16 +517,10 @@ const zhCN = {
       },
       createAccountCard: {
         title: "创建新账号",
-        description: "为成员创建独立账号，登录后会加载各自的工作区。",
         action: "创建账号",
-        accountType: "账号形式",
-        accountTypeValue: "推荐使用简短用户名，例如 alice",
-        initialRole: "初始权限",
-        initialRoleValue: "新账号默认创建为成员角色",
       },
       createAccountDialog: {
         title: "创建新账号",
-        description: "为成员创建独立登录账号，提交后会立即同步到当前工作区。",
         account: "账号",
         displayName: "显示名称",
         initialPassword: "初始密码",
@@ -555,12 +538,9 @@ const zhCN = {
     },
     printing: {
       title: "打印设置",
-      syncErrorTitle: "账号数据同步异常",
       defaultDevice: "默认设备",
       noDefaultDevice: "暂未设置设备",
       tutorialTab: "教程标签",
-      tutorialTabShown: "顶部和底部导航会显示“教程”标签。",
-      tutorialTabHidden: "顶部和底部导航会隐藏“教程”标签。",
       toggleAria: {
         enableTutorialTab: "开启教程标签",
         disableTutorialTab: "关闭教程标签",
@@ -568,13 +548,9 @@ const zhCN = {
     },
     appearance: {
       title: "页面主题",
-      currentTheme: "当前主题：{value}",
-      description: "选择“跟随系统”后，会自动根据设备当前的深浅色设置切换。",
     },
     language: {
       title: "语言",
-      current: "当前语言：{value}",
-      description: "切换后会立即作用于当前页面，并按你的偏好保存。",
       options: {
         system: "跟随系统",
         zhCN: "简体中文",
@@ -652,9 +628,8 @@ const zhCN = {
         fetchEveryMinutes: "每 {minutes} 分钟抓取一次",
         nextFetchAt: "下次抓取 {time}",
         noFetchScheduled: "当前未安排自动抓取",
-        enableWorkspaceBinding: "启用当前工作区绑定",
-        enableWorkspaceBindingHint: "启用后，这个工作区就可以测试该插件并创建相关定时任务。",
-        noWorkspaceConfig: "这个插件没有工作区级配置项，直接测试或保存即可。",
+        enableWorkspaceBinding: "启用插件",
+        noWorkspaceConfig: "这个插件无需额外设置。",
         checkboxFallback: "启用此选项",
         secretPlaceholder: "留空则保持当前密钥",
         testing: "测试中...",
@@ -679,7 +654,6 @@ const zhCN = {
     },
   },
   prints: {
-    syncErrorTitle: "设备状态同步异常",
     confirmDeleteSchedule: "确认删除这条定时任务吗？",
     recentPrints: "最近打印",
     connectedPlugins: "已连接插件",
@@ -723,7 +697,6 @@ const zhCN = {
     },
     printDialog: {
       title: "新建打印",
-      description: "创建一条新的打印内容。",
       submit: "创建打印",
       fields: {
         title: "打印标题",
@@ -742,10 +715,6 @@ const zhCN = {
     scheduleDialog: {
       title: "新建定时任务",
       manualSourceFallback: "手动创建",
-      description: {
-        authenticated: "选择已连接插件作为来源，并配置执行时间。",
-        anonymous: "创建一条自动打印计划。",
-      },
       fields: {
         title: "任务名称",
         plugin: "来源插件",
@@ -770,20 +739,19 @@ const zhCN = {
         daily: "每天",
         weekly: "每周",
       },
-      emptyPlugins: "当前没有可用插件，请先去设置页完成插件安装和工作区配置。",
+      emptyPlugins: "当前没有可用插件，请先去设置页安装并启用插件。",
       pluginDetails: {
         fetchFrequency: "抓取频率",
         fetchEveryMinutes: "每 {minutes} 分钟抓取一次",
-        fetchHint: "抓取由插件 binding 独立执行，定时任务只消费已抓取内容。",
+        fetchHint: "插件会按上方频率获取内容，定时任务会从中选择未打印的内容。",
         fetchStatus: "抓取状态",
         lastFetchedAt: "最近抓取 {time}",
         neverFetched: "尚未抓取过",
         nextFetchAt: "下次抓取 {time}",
         noNextFetch: "当前未安排自动抓取",
-        batchSizeHint:
-          "每次 schedule tick 会按最早抓取、尚未由此任务递送的内容，最多打印这几个条目。",
+        batchSizeHint: "每次最多打印这里设置的条数，并优先选择较早获取的内容。",
       },
-      emptyPluginSelection: "请选择一个已连接插件，然后设置这个任务每次打印多少条已抓取内容。",
+      emptyPluginSelection: "请选择一个已连接插件，并设置每次打印条数。",
       submit: "创建任务",
       errors: {
         titleRequired: "请输入任务名称。",

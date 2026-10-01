@@ -15,7 +15,6 @@ import {
   getPluginInstallationStatusBadgeClass,
   getPluginInstallationStatusLabel,
   getServiceBindingStatusBadgeClass,
-  getThemeDescription,
   getUserRoleBadgeClass,
   getUserRoleLabel,
 } from "@/utils/workspace";
@@ -604,93 +603,34 @@ void closeAccountCreationDialog;
                 <span class="ui-toggle-thumb" />
               </button>
             </div>
-            <div class="rounded-xl border border-stone-200 bg-white p-4">
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p class="text-sm font-medium text-stone-900">
-                    {{ t("settings.account.passwordCard.title") }}
-                  </p>
-                  <p class="mt-1 text-sm text-stone-500">
-                    {{ t("settings.account.passwordCard.description") }}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  class="ui-btn-primary px-4 py-2 text-sm"
-                  @click="openPasswordDialog"
-                >
-                  {{ t("settings.account.passwordCard.action") }}
-                </button>
-              </div>
-              <div class="mt-4 grid gap-4 md:grid-cols-2">
-                <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
-                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                    {{ t("settings.account.passwordCard.securityRule") }}
-                  </p>
-                  <p class="mt-1 text-sm text-stone-900">
-                    {{ t("settings.account.passwordCard.securityRuleValue") }}
-                  </p>
-                </div>
-                <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
-                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                    {{ t("settings.account.passwordCard.result") }}
-                  </p>
-                  <p class="mt-1 text-sm text-stone-900">
-                    {{ t("settings.account.passwordCard.resultValue") }}
-                  </p>
-                </div>
-              </div>
+            <div class="ui-settings-row">
+              <p class="text-sm font-medium text-stone-900">
+                {{ t("settings.account.passwordCard.title") }}
+              </p>
+              <button
+                type="button"
+                class="ui-btn-secondary px-3 py-1.5 text-sm"
+                @click="openPasswordDialog"
+              >
+                {{ t("settings.account.passwordCard.action") }}
+              </button>
             </div>
-            <div
-              v-if="workspaceStore.isAdmin"
-              class="rounded-xl border border-stone-200 bg-white p-4"
-            >
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p class="text-sm font-medium text-stone-900">
-                    {{ t("settings.account.createAccountCard.title") }}
-                  </p>
-                  <p class="mt-1 text-sm text-stone-500">
-                    {{ t("settings.account.createAccountCard.description") }}
-                  </p>
-                </div>
-                <div class="flex items-center gap-3">
-                  <span class="ui-status-badge self-start" :class="getUserRoleBadgeClass('admin')">
-                    {{ getUserRoleLabel("admin") }}
-                  </span>
-                  <button
-                    type="button"
-                    class="ui-btn-primary px-4 py-2 text-sm"
-                    @click="openAccountCreationDialog"
-                  >
-                    {{ t("settings.account.createAccountCard.action") }}
-                  </button>
-                </div>
-              </div>
-              <div class="mt-4 grid gap-4 md:grid-cols-2">
-                <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
-                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                    {{ t("settings.account.createAccountCard.accountType") }}
-                  </p>
-                  <p class="mt-1 text-sm text-stone-900">
-                    {{ t("settings.account.createAccountCard.accountTypeValue") }}
-                  </p>
-                </div>
-                <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
-                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                    {{ t("settings.account.createAccountCard.initialRole") }}
-                  </p>
-                  <p class="mt-1 text-sm text-stone-900">
-                    {{ t("settings.account.createAccountCard.initialRoleValue") }}
-                  </p>
-                </div>
-              </div>
+            <div v-if="workspaceStore.isAdmin" class="ui-settings-row">
+              <p class="text-sm font-medium text-stone-900">
+                {{ t("settings.account.createAccountCard.title") }}
+              </p>
+              <button
+                type="button"
+                class="ui-btn-secondary px-3 py-1.5 text-sm"
+                @click="openAccountCreationDialog"
+              >
+                {{ t("settings.account.createAccountCard.action") }}
+              </button>
             </div>
 
             <AppDialog
               :open="passwordDialogOpen"
               :title="t('settings.account.passwordDialog.title')"
-              :description="t('settings.account.passwordDialog.description')"
               @close="closePasswordDialog"
             >
               <form class="space-y-4" @submit.prevent="handlePasswordSubmit">
@@ -804,7 +744,6 @@ void closeAccountCreationDialog;
             <AppDialog
               :open="accountCreationDialogOpen"
               :title="t('settings.account.createAccountDialog.title')"
-              :description="t('settings.account.createAccountDialog.description')"
               @close="closeAccountCreationDialog"
             >
               <form class="space-y-4" @submit.prevent="handleCreateAccountSubmit">
@@ -903,14 +842,6 @@ void closeAccountCreationDialog;
         </div>
         <div class="min-w-0">
           <div class="ui-settings-group">
-            <div v-if="workspaceStore.workspaceSyncError" class="rounded-xl bg-amber-50 p-4">
-              <p class="text-sm font-medium text-amber-900">
-                {{ t("settings.printing.syncErrorTitle") }}
-              </p>
-              <p class="mt-1 text-sm text-amber-700">
-                {{ workspaceStore.workspaceSyncError }}
-              </p>
-            </div>
             <div class="ui-settings-row">
               <div class="ui-settings-copy">
                 <p class="text-sm font-medium text-stone-900">
@@ -944,13 +875,6 @@ void closeAccountCreationDialog;
               <div class="ui-settings-copy">
                 <p class="text-sm font-medium text-stone-900">
                   {{ t("settings.printing.tutorialTab") }}
-                </p>
-                <p class="mt-0.5 text-sm text-stone-500">
-                  {{
-                    workspaceStore.tutorialTabEnabled
-                      ? t("settings.printing.tutorialTabShown")
-                      : t("settings.printing.tutorialTabHidden")
-                  }}
                 </p>
               </div>
               <button
@@ -998,16 +922,6 @@ void closeAccountCreationDialog;
               {{ theme.label }}
             </button>
           </div>
-          <p class="mt-2 text-sm text-stone-500">
-            {{
-              t("settings.appearance.currentTheme", {
-                value: getThemeDescription(workspaceStore.selectedTheme),
-              })
-            }}
-          </p>
-          <p class="mt-1 text-sm text-stone-500">
-            {{ t("settings.appearance.description") }}
-          </p>
         </div>
       </article>
 
@@ -1037,18 +951,6 @@ void closeAccountCreationDialog;
               {{ option.label }}
             </button>
           </div>
-          <p class="mt-2 text-sm text-stone-500">
-            {{
-              t("settings.language.current", {
-                value:
-                  localeOptions.find((option) => option.value === workspaceStore.localePreference)
-                    ?.label ?? workspaceStore.localePreference,
-              })
-            }}
-          </p>
-          <p class="mt-1 text-sm text-stone-500">
-            {{ t("settings.language.description") }}
-          </p>
         </div>
       </article>
 
@@ -1550,14 +1452,9 @@ void closeAccountCreationDialog;
                   <label
                     class="flex items-center justify-between gap-4 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3"
                   >
-                    <div>
-                      <span class="block text-sm font-medium text-stone-900">
-                        {{ t("settings.plugins.configDialog.enableWorkspaceBinding") }}
-                      </span>
-                      <span class="mt-1 block text-sm text-stone-500">
-                        {{ t("settings.plugins.configDialog.enableWorkspaceBindingHint") }}
-                      </span>
-                    </div>
+                    <span class="block text-sm font-medium text-stone-900">
+                      {{ t("settings.plugins.configDialog.enableWorkspaceBinding") }}
+                    </span>
                     <input
                       :checked="
                         pluginEnabledDrafts[activePluginConfig.installation.id] ??
