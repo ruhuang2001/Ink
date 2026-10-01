@@ -127,6 +127,36 @@ func (successfulImagePipeline) PrintJob(context.Context, *memobirdapi.Client, Jo
 	return &memobirdapi.PrintResponse{PrintContentID: 123}, nil
 }
 
+type countingImagePipeline struct {
+	calls atomic.Int32
+}
+
+func (p *countingImagePipeline) PrintJob(context.Context, *memobirdapi.Client, Job) (*memobirdapi.PrintResponse, error) {
+	p.calls.Add(1)
+	return &memobirdapi.PrintResponse{PrintContentID: 123}, nil
+}
+
+func TestSubmitDoesNotPrintAfterPendingVersionChanges(t *testing.T) {
+	now := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	repo := statusFixture(now, 0)
+	repo.jobs["job-1"] = Job{ID: "job-1", UserID: "user-1", PrinterBindingID: "device-1", Status: workspace.PrintStatusPending, CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Second)}
+	repo.forcePendingSaveMiss = true
+	pipeline := &countingImagePipeline{}
+	service := NewService(repo, fakeAuthenticator{}, nil, fakeClock{now: now}, "key", "", time.Second)
+	service.imagePrinter = pipeline
+
+	_, err := service.SubmitPrintJob(t.Context(), "token", "job-1")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected stale submit to be rejected, got %v", err)
+	}
+	if pipeline.calls.Load() != 0 {
+		t.Fatalf("stale submit reached printer %d times", pipeline.calls.Load())
+	}
+	if repo.jobs["job-1"].Status != workspace.PrintStatusPending {
+		t.Fatalf("stale submit changed stored job: %+v", repo.jobs["job-1"])
+	}
+}
+
 func TestSubmitOnlySendsPrintAndSchedulesBackgroundCheck(t *testing.T) {
 	var calls atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
