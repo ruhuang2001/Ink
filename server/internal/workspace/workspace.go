@@ -89,6 +89,7 @@ type SourceConnection struct {
 type Preferences struct {
 	LoginProtectionEnabled  bool             `json:"loginProtectionEnabled"`
 	SendConfirmationEnabled bool             `json:"sendConfirmationEnabled"`
+	TutorialTabEnabled      *bool            `json:"tutorialTabEnabled"`
 	Theme                   ThemeMode        `json:"theme"`
 	DefaultDeviceID         string           `json:"defaultDeviceId"`
 	Locale                  LocalePreference `json:"locale"`
@@ -289,6 +290,7 @@ func SeedState(now time.Time) State {
 		Preferences: Preferences{
 			LoginProtectionEnabled:  false,
 			SendConfirmationEnabled: true,
+			TutorialTabEnabled:      new(true),
 			Theme:                   ThemeModeLight,
 			DefaultDeviceID:         "device-desk",
 			Locale:                  LocalePreferenceSystem,
@@ -311,6 +313,7 @@ func EmptyState() State {
 		Preferences: Preferences{
 			LoginProtectionEnabled:  false,
 			SendConfirmationEnabled: true,
+			TutorialTabEnabled:      new(true),
 			Theme:                   ThemeModeLight,
 			Locale:                  LocalePreferenceSystem,
 		},
@@ -337,6 +340,9 @@ func NormalizeState(state State) State {
 	}
 	if state.Sources == nil {
 		state.Sources = []SourceConnection{}
+	}
+	if state.Preferences.TutorialTabEnabled == nil {
+		state.Preferences.TutorialTabEnabled = new(true)
 	}
 	if state.Preferences.Theme == "" {
 		state.Preferences.Theme = ThemeModeLight

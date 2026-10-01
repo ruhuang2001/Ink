@@ -62,6 +62,7 @@ type Repository interface {
 	ListDueStatusJobs(ctx context.Context, now time.Time, limit int) ([]StatusSyncJob, error)
 	SaveStatusCheck(ctx context.Context, job StatusSyncJob, result StatusCheckResult) (bool, error)
 	FindJobByID(ctx context.Context, userID string, jobID string) (*Job, error)
+	SavePendingJob(ctx context.Context, job Job, expectedUpdatedAt time.Time) (bool, error)
 	SaveJob(ctx context.Context, job Job) error
 }
 
@@ -418,6 +419,17 @@ func (s *Service) SubmitPrintJob(ctx context.Context, accessToken string, jobID 
 		return workspace.PrintJob{}, ErrInvalidInput
 	}
 
+	expectedUpdatedAt := job.UpdatedAt
+	job.Status = workspace.PrintStatusQueued
+	job.UpdatedAt = nextVersionTime(s.clock.Now(), expectedUpdatedAt)
+	claimed, err := s.repo.SavePendingJob(ctx, *job, expectedUpdatedAt)
+	if err != nil {
+		return workspace.PrintJob{}, err
+	}
+	if !claimed {
+		return workspace.PrintJob{}, ErrInvalidInput
+	}
+
 	submitted, err := s.submitJob(ctx, *binding, *job)
 	if err != nil {
 		return workspace.PrintJob{}, err
@@ -443,11 +455,16 @@ func (s *Service) CancelPrintJob(ctx context.Context, accessToken string, jobID 
 		return workspace.PrintJob{}, ErrInvalidInput
 	}
 
+	expectedUpdatedAt := job.UpdatedAt
 	job.Status = workspace.PrintStatusCancelled
-	job.UpdatedAt = s.clock.Now()
+	job.UpdatedAt = nextVersionTime(s.clock.Now(), expectedUpdatedAt)
 	job.ErrorMessage = nil
-	if err := s.repo.SaveJob(ctx, *job); err != nil {
+	updated, err := s.repo.SavePendingJob(ctx, *job, expectedUpdatedAt)
+	if err != nil {
 		return workspace.PrintJob{}, err
+	}
+	if !updated {
+		return workspace.PrintJob{}, ErrInvalidInput
 	}
 
 	return mapJob(*job), nil
@@ -482,13 +499,25 @@ func (s *Service) UpdatePrintJobDevice(ctx context.Context, accessToken string, 
 		return workspace.PrintJob{}, ErrInvalidInput
 	}
 
+	expectedUpdatedAt := job.UpdatedAt
 	job.PrinterBindingID = bindingID
-	job.UpdatedAt = s.clock.Now()
-	if err := s.repo.SaveJob(ctx, *job); err != nil {
+	job.UpdatedAt = nextVersionTime(s.clock.Now(), expectedUpdatedAt)
+	updated, err := s.repo.SavePendingJob(ctx, *job, expectedUpdatedAt)
+	if err != nil {
 		return workspace.PrintJob{}, err
+	}
+	if !updated {
+		return workspace.PrintJob{}, ErrInvalidInput
 	}
 
 	return mapJob(*job), nil
+}
+
+func nextVersionTime(now time.Time, previous time.Time) time.Time {
+	if !now.After(previous) {
+		return previous.Add(time.Microsecond)
+	}
+	return now
 }
 
 func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (Job, error) {

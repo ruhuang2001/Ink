@@ -438,6 +438,26 @@ func TestWorkspaceHandlersRequireAuthorization(t *testing.T) {
 	}
 }
 
+func TestSaveWorkspaceAcceptsTutorialPreference(t *testing.T) {
+	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/workspace", bytes.NewBufferString(`{
+		"devices":[],"conversations":[],"activeConversationId":"","printJobs":[],"schedules":[],"sources":[],
+		"preferences":{"loginProtectionEnabled":false,"sendConfirmationEnabled":true,"tutorialTabEnabled":false,"theme":"light","defaultDeviceId":"","locale":"system"},
+		"serviceBinding":{"providerName":null,"modelName":"Ink AI","bound":false}
+	}`))
+	request.Header.Set("Authorization", "Bearer access-token")
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected tutorial preference to be accepted, got %d: %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"tutorialTabEnabled":false`) {
+		t.Fatalf("expected disabled tutorial preference to be preserved: %s", response.Body.String())
+	}
+}
+
 func TestAIConfigRequiresAuthorization(t *testing.T) {
 	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/ai/config", nil)

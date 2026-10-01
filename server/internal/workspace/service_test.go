@@ -45,6 +45,20 @@ func TestSaveStatePersistsNormalizedWorkspace(t *testing.T) {
 	if saved.Devices == nil || repo.savedState == nil || repo.savedState.ServiceBinding.ModelName != "Ink AI" {
 		t.Fatalf("expected normalized workspace to be persisted")
 	}
+	if saved.Preferences.TutorialTabEnabled == nil || !*saved.Preferences.TutorialTabEnabled {
+		t.Fatalf("expected legacy workspace to default tutorial tab to enabled")
+	}
+
+	disabled := false
+	saved, err = service.SaveState(context.Background(), "access-token", State{
+		Preferences: Preferences{TutorialTabEnabled: &disabled},
+	})
+	if err != nil {
+		t.Fatalf("save disabled tutorial preference: %v", err)
+	}
+	if saved.Preferences.TutorialTabEnabled == nil || *saved.Preferences.TutorialTabEnabled {
+		t.Fatalf("expected explicit disabled tutorial preference to be preserved")
+	}
 }
 
 func TestAccountWorkspaceExcludesPrintHistory(t *testing.T) {

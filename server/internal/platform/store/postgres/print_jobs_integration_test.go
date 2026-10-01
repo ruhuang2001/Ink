@@ -95,6 +95,19 @@ func TestPrintJobsMigrationPaginationAndStatusCAS(t *testing.T) {
 	if err != nil || counts.Queued != 9 || latest == nil || *latest != "page-7" {
 		t.Fatalf("global counts: %+v latest=%v err=%v", counts, latest, err)
 	}
+	pending := printer.Job{ID: "pending-cas", UserID: "print-user", PrinterBindingID: "print-device", Title: "Pending", Source: "Manual", Content: "body", Status: workspace.PrintStatusPending, CreatedAt: now, UpdatedAt: now}
+	if err := store.SaveJob(ctx, pending); err != nil {
+		t.Fatal(err)
+	}
+	claimed := pending
+	claimed.Status = workspace.PrintStatusQueued
+	claimed.UpdatedAt = now.Add(time.Microsecond)
+	if changed, err := store.SavePendingJob(ctx, claimed, pending.UpdatedAt); err != nil || !changed {
+		t.Fatalf("claim pending job: %v, %v", changed, err)
+	}
+	if changed, err := store.SavePendingJob(ctx, claimed, pending.UpdatedAt); err != nil || changed {
+		t.Fatalf("stale pending mutation should fail: %v, %v", changed, err)
+	}
 
 	jobs, err := store.ListDueStatusJobs(ctx, now.Add(time.Second), 3)
 	if err != nil || len(jobs) != 3 {

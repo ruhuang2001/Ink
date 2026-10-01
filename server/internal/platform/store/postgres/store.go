@@ -549,6 +549,30 @@ func (s *Store) SaveJob(ctx context.Context, job printer.Job) error {
 	return err
 }
 
+func (s *Store) SavePendingJob(ctx context.Context, job printer.Job, expectedUpdatedAt time.Time) (bool, error) {
+	tag, err := s.db.Exec(ctx, `
+		update print_jobs set
+			printer_binding_id = $4,
+			status = $5,
+			error_message = $6,
+			updated_at = $7,
+			next_status_check_at = $8,
+			status_check_attempts = $9
+		where id = $1 and user_id = $2 and status = 'pending' and updated_at = $3
+	`,
+		job.ID,
+		job.UserID,
+		expectedUpdatedAt,
+		job.PrinterBindingID,
+		job.Status,
+		job.ErrorMessage,
+		job.UpdatedAt,
+		job.NextStatusCheckAt,
+		job.StatusCheckAttempts,
+	)
+	return tag.RowsAffected() == 1, err
+}
+
 func scanUser(row pgx.Row) (*user.User, error) {
 	var account user.User
 	var lastLoginAt *time.Time

@@ -102,6 +102,37 @@ func TestUpdatePrintJobDeviceRejectsQueuedJobs(t *testing.T) {
 	}
 }
 
+func TestPendingJobMutationsRejectStaleVersions(t *testing.T) {
+	now := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	newService := func() (*Service, *fakePrinterRepo) {
+		repo := newFakePrinterRepo()
+		repo.jobs["job-1"] = Job{ID: "job-1", UserID: "user-1", PrinterBindingID: "device-1", Status: workspace.PrintStatusPending, CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Second)}
+		repo.bindings["device-2"] = Binding{ID: "device-2", UserID: "user-1", Status: workspace.DeviceStatusConnected}
+		repo.forcePendingSaveMiss = true
+		return NewService(repo, fakeAuthenticator{}, fakeIDGenerator{}, fakeClock{now: now}, "", "", time.Second), repo
+	}
+
+	t.Run("cancel", func(t *testing.T) {
+		service, repo := newService()
+		if _, err := service.CancelPrintJob(t.Context(), "token", "job-1"); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("expected stale cancellation to be rejected, got %v", err)
+		}
+		if repo.jobs["job-1"].Status != workspace.PrintStatusPending {
+			t.Fatalf("stale cancellation changed stored job: %+v", repo.jobs["job-1"])
+		}
+	})
+
+	t.Run("device", func(t *testing.T) {
+		service, repo := newService()
+		if _, err := service.UpdatePrintJobDevice(t.Context(), "token", "job-1", UpdateJobDeviceInput{PrinterBindingID: "device-2"}); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("expected stale device update to be rejected, got %v", err)
+		}
+		if repo.jobs["job-1"].PrinterBindingID != "device-1" {
+			t.Fatalf("stale device update changed stored job: %+v", repo.jobs["job-1"])
+		}
+	})
+}
+
 func TestDeleteDeviceRemovesBinding(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
 	repo := newFakePrinterRepo()
@@ -310,9 +341,10 @@ func TestPrinterFontDataIsAvailable(t *testing.T) {
 }
 
 type fakePrinterRepo struct {
-	bindings      map[string]Binding
-	jobs          map[string]Job
-	statusSaveErr error
+	bindings             map[string]Binding
+	jobs                 map[string]Job
+	statusSaveErr        error
+	forcePendingSaveMiss bool
 }
 
 func TestCreatePrintJobForUserReusesInternalJobID(t *testing.T) {
@@ -476,6 +508,15 @@ func (f *fakePrinterRepo) FindJobByID(_ context.Context, userID string, jobID st
 
 	copy := job
 	return &copy, nil
+}
+
+func (f *fakePrinterRepo) SavePendingJob(_ context.Context, job Job, expectedUpdatedAt time.Time) (bool, error) {
+	current, ok := f.jobs[job.ID]
+	if f.forcePendingSaveMiss || !ok || current.UserID != job.UserID || current.Status != workspace.PrintStatusPending || !current.UpdatedAt.Equal(expectedUpdatedAt) {
+		return false, nil
+	}
+	f.jobs[job.ID] = job
+	return true, nil
 }
 
 func (f *fakePrinterRepo) SaveJob(_ context.Context, job Job) error {
