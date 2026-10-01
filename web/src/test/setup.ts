@@ -1,7 +1,18 @@
-import { config } from "@vue/test-utils";
-import { beforeEach, vi } from "vitest";
+import { config, enableAutoUnmount } from "@vue/test-utils";
+import { disposePinia, getActivePinia, setActivePinia } from "pinia";
+import { afterEach, beforeEach, vi } from "vitest";
 
 import i18n, { setI18nLocale } from "@/i18n";
+import { configureAuthRefresh } from "@/services/http";
+
+enableAutoUnmount(afterEach);
+
+afterEach(() => {
+  const pinia = getActivePinia();
+  if (pinia) disposePinia(pinia);
+  setActivePinia(undefined);
+  configureAuthRefresh(null);
+});
 
 type MatchMediaEventHandler = (
   type: string,
