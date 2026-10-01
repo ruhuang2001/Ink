@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { computed, ref, watch } from "vue";
+import { computed, onScopeDispose, ref, watch } from "vue";
 
 import {
   normalizeLocalePreference,
@@ -41,7 +41,9 @@ import {
   cancelPrintJob,
   createPrintJob,
   deletePrinter,
+  fetchPrintJob,
   fetchPrintJobs,
+  fetchPrintJobStatuses,
   fetchPrinters,
   submitPrintJob,
   updatePrintJobDevice as updatePrintJobDeviceWithApi,
@@ -62,6 +64,8 @@ import type {
   PersistedWorkspaceState,
   Preferences,
   PrintJob,
+  PrintJobCounts,
+  PrintJobSummary,
   Schedule,
   ServiceBinding,
   SourceConnection,
@@ -83,6 +87,7 @@ const AUTH_SESSION_STORAGE_KEY = "ink.auth.session.v1";
 const REMOTE_SAVE_DEBOUNCE_MS = 750;
 const REMOTE_PRINT_STATUS_POLL_MS = 5000;
 const REMOTE_PRINT_STATUS_INITIAL_POLL_MS = 1500;
+const REMOTE_PRINT_STATUS_IDLE_POLL_MS = 30000;
 const REMOTE_PRINT_STATUS_MAX_BACKOFF_MS = 120000;
 
 type ActiveSchedule = Schedule & {
@@ -506,12 +511,23 @@ function writePersistedAuthSession(session: AuthSession | null, persistAcrossRes
   storage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
 }
 
-function sortPrintJobsByUpdatedAt(printJobs: PrintJob[]) {
+function sortPrintJobsByUpdatedAt<T extends PrintJobSummary>(printJobs: T[]) {
   // The project targets ES2022; use a copied array so the fallback remains non-mutating.
   // oxlint-disable-next-line unicorn/no-array-sort
   return [...printJobs].sort(
     (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
   );
+}
+
+function comparePrintJobTimestamp(left: string, right: string) {
+  const milliseconds = Date.parse(left) - Date.parse(right);
+  if (milliseconds) return milliseconds;
+  // RFC3339Nano can distinguish mutations within one millisecond. Date.parse alone cannot.
+  return printJobSubmillisecondFraction(left) - printJobSubmillisecondFraction(right);
+}
+
+function printJobSubmillisecondFraction(value: string) {
+  return Number((value.match(/\.(\d+)(?:Z|[+-])/)?.[1] ?? "").padEnd(9, "0").slice(3, 9));
 }
 
 function buildAIReplyMessages(messages: ConversationMessage[]) {
@@ -591,6 +607,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const conversations = ref<Conversation[]>(persisted.conversations);
   const activeConversationId = ref(persisted.activeConversationId);
   const printJobs = ref<PrintJob[]>(persisted.printJobs);
+  const remotePrintJobs = ref<PrintJobSummary[]>([]);
+  const remotePrintCounts = ref<PrintJobCounts | null>(null);
+  const remotePrintJobsReady = ref(false);
+  const activePrintJobsCursor = ref<string | null>(null);
+  const historyPrintJobsCursor = ref<string | null>(null);
+  const printJobsLoading = ref(false);
+  const activePrintJobsLoading = ref(false);
+  const historyPrintJobsLoading = ref(false);
   const schedules = ref<Schedule[]>(persisted.schedules);
   const sources = ref<SourceConnection[]>(persisted.sources);
   const availablePlugins = ref<PluginDetails[]>([]);
@@ -629,6 +653,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   let remotePrintStatusTimer = 0;
   let remotePrintStatusPromise: Promise<void> | null = null;
   let remotePrintStatusBackoffMs = REMOTE_PRINT_STATUS_POLL_MS;
+  let remotePrintAccountVersion = 0;
+  let remotePrintPageVersion = 0;
+  let remotePrintMutationVersion = 0;
+  let latestRemotePrintJobId: string | null = null;
+  let printJobsRefreshPromise: Promise<void> | null = null;
+  const printPagePromises = new Map<"active" | "history", Promise<void>>();
+  const printDetailPromises = new Map<string, Promise<PrintJob | null>>();
+  const removedRemotePrintJobIds = new Set<string>();
 
   configureAuthRefresh(async (accessToken) => {
     const current = authSession.value;
@@ -670,11 +702,20 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const defaultDevice = computed(
     () => devices.value.find((device) => device.id === defaultDeviceId.value) ?? null,
   );
-  const sortedPrintJobs = computed(() => sortPrintJobsByUpdatedAt(printJobs.value));
+  const sortedPrintJobs = computed(() =>
+    sortPrintJobsByUpdatedAt<PrintJobSummary & { content?: string }>(
+      isAuthenticated.value ? remotePrintJobs.value : printJobs.value,
+    ),
+  );
   const pendingPrintJobs = computed(() =>
     sortedPrintJobs.value.filter((job) => job.status === "pending" || job.status === "queued"),
   );
   const recentPrintJobs = computed(() => sortedPrintJobs.value.slice(0, 5));
+  const printHistoryJobs = computed(() =>
+    isAuthenticated.value
+      ? sortedPrintJobs.value.filter((job) => job.status !== "pending" && job.status !== "queued")
+      : recentPrintJobs.value,
+  );
   const activeSchedules = computed(() => {
     const locale = effectiveLocale.value;
     return isAuthenticated.value
@@ -690,10 +731,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const enabledSchedulesCount = computed(
     () => activeSchedules.value.filter((schedule) => schedule.enabled).length,
   );
-  const pendingConfirmationCount = computed(
-    () => printJobs.value.filter((job) => job.status === "pending").length,
+  const pendingConfirmationCount = computed(() =>
+    isAuthenticated.value
+      ? (remotePrintCounts.value?.pending ?? 0)
+      : printJobs.value.filter((job) => job.status === "pending").length,
   );
   const todayCompletedCount = computed(() => {
+    if (isAuthenticated.value) return remotePrintCounts.value?.todayCompleted ?? 0;
     const today = new Date();
 
     return printJobs.value.filter(
@@ -715,8 +759,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const isConfigured = computed(() => activeDeviceLabel.value !== "");
   const isAuthenticated = computed(() => authUser.value !== null && authSession.value !== null);
   const isAdmin = computed(() => authUser.value?.role === "admin");
-  const hasQueuedRemotePrintJobs = computed(
-    () => isAuthenticated.value && printJobs.value.some((job) => job.status === "queued"),
+  const shouldPollRemotePrintJobs = computed(
+    () => isAuthenticated.value && remotePrintJobsReady.value,
   );
 
   const summaryCards = computed(() => {
@@ -806,9 +850,35 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   watch(
-    hasQueuedRemotePrintJobs,
-    (hasQueuedJobs) => {
-      if (!hasQueuedJobs) {
+    [() => authUser.value?.id, () => !!authSession.value],
+    () => {
+      remotePrintAccountVersion++;
+      remotePrintPageVersion++;
+      remotePrintMutationVersion++;
+      clearRemotePrintStatusSync();
+      remotePrintStatusPromise = null;
+      printJobsRefreshPromise = null;
+      printPagePromises.clear();
+      printDetailPromises.clear();
+      removedRemotePrintJobIds.clear();
+      remotePrintJobs.value = [];
+      remotePrintCounts.value = null;
+      remotePrintJobsReady.value = false;
+      activePrintJobsCursor.value = null;
+      historyPrintJobsCursor.value = null;
+      latestRemotePrintJobId = null;
+      printJobsLoading.value = false;
+      activePrintJobsLoading.value = false;
+      historyPrintJobsLoading.value = false;
+      remotePrintStatusBackoffMs = REMOTE_PRINT_STATUS_POLL_MS;
+    },
+    { flush: "sync" },
+  );
+
+  watch(
+    shouldPollRemotePrintJobs,
+    (shouldPoll) => {
+      if (!shouldPoll) {
         clearRemotePrintStatusSync();
         return;
       }
@@ -819,14 +889,20 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   );
 
   if (typeof window !== "undefined") {
-    document.addEventListener("visibilitychange", () => {
+    const handlePrintVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         clearRemotePrintStatusSync();
         return;
       }
-      if (hasQueuedRemotePrintJobs.value) {
+      if (shouldPollRemotePrintJobs.value) {
         scheduleRemotePrintStatusSync(true);
       }
+    };
+    document.addEventListener("visibilitychange", handlePrintVisibilityChange);
+    onScopeDispose(() => {
+      remotePrintAccountVersion++;
+      clearRemotePrintStatusSync();
+      document.removeEventListener("visibilitychange", handlePrintVisibilityChange);
     });
   }
 
@@ -861,8 +937,144 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function upsertPrintJob(nextJob: PrintJob) {
-    printJobs.value = [nextJob, ...printJobs.value.filter((job) => job.id !== nextJob.id)];
-    scheduleRemoteWorkspaceSave();
+    remotePrintMutationVersion++;
+    mergeRemotePrintJobs([nextJob]);
+    remotePrintJobsReady.value = true;
+    scheduleRemotePrintStatusSync(true);
+  }
+
+  function mergeRemotePrintJobs(nextJobs: PrintJobSummary[], preserveExisting = false) {
+    const jobs = new Map(remotePrintJobs.value.map((job) => [job.id, job]));
+    for (const nextJob of nextJobs) {
+      if (removedRemotePrintJobIds.has(nextJob.id)) continue;
+      const previous = jobs.get(nextJob.id);
+      if (previous && preserveExisting) continue;
+      if (!previous || comparePrintJobTimestamp(nextJob.updatedAt, previous.updatedAt) >= 0) {
+        const { id, title, source, deviceId, status, createdAt, updatedAt } = nextJob;
+        jobs.set(id, { id, title, source, deviceId, status, createdAt, updatedAt });
+      }
+    }
+    remotePrintJobs.value = [...jobs.values()];
+  }
+
+  async function refreshRemotePrintJobs() {
+    if (printJobsRefreshPromise) return printJobsRefreshPromise;
+    const session = authSession.value;
+    if (!session || !isAuthenticated.value) return;
+    const accountVersion = remotePrintAccountVersion;
+    const mutationVersion = remotePrintMutationVersion;
+    remotePrintPageVersion++;
+    printJobsLoading.value = true;
+    let promise!: Promise<void>;
+    promise = Promise.resolve().then(async () => {
+      try {
+        const midnight = new Date();
+        midnight.setHours(0, 0, 0, 0);
+        const [active, history, metadata] = await Promise.all([
+          fetchPrintJobs(session.accessToken, { status: "active" }),
+          fetchPrintJobs(session.accessToken, { status: "history" }),
+          remotePrintCounts.value
+            ? Promise.resolve(null)
+            : fetchPrintJobStatuses(session.accessToken, [], midnight.toISOString()),
+        ]);
+        if (accountVersion !== remotePrintAccountVersion) return;
+        mergeRemotePrintJobs(
+          [...active.printJobs, ...history.printJobs],
+          mutationVersion !== remotePrintMutationVersion,
+        );
+        // Restart cursors after membership changes. Existing rows are retained and deduplicated,
+        // so a formerly active job cannot be skipped when it enters an already paged history.
+        activePrintJobsCursor.value = active.nextCursor;
+        historyPrintJobsCursor.value = history.nextCursor;
+        if (metadata && mutationVersion === remotePrintMutationVersion) {
+          remotePrintCounts.value = metadata.counts;
+          latestRemotePrintJobId = metadata.latestJobId;
+        }
+        remotePrintJobsReady.value = true;
+        printerSyncError.value = "";
+      } catch (error) {
+        if (accountVersion === remotePrintAccountVersion) {
+          printerSyncError.value = getErrorMessage(error, "store.errors.loadIntegrations");
+        }
+        throw error;
+      } finally {
+        if (printJobsRefreshPromise === promise) {
+          printJobsRefreshPromise = null;
+          printJobsLoading.value = false;
+        }
+      }
+    });
+    printJobsRefreshPromise = promise;
+    return promise;
+  }
+
+  async function loadMorePrintJobs(status: "active" | "history") {
+    const expectedAccountVersion = remotePrintAccountVersion;
+    if (printJobsRefreshPromise) {
+      try {
+        await printJobsRefreshPromise;
+      } catch {
+        return;
+      }
+    }
+    if (expectedAccountVersion !== remotePrintAccountVersion) return;
+    if (printPagePromises.has(status)) return printPagePromises.get(status);
+    const cursor = status === "active" ? activePrintJobsCursor : historyPrintJobsCursor;
+    const loading = status === "active" ? activePrintJobsLoading : historyPrintJobsLoading;
+    const session = authSession.value;
+    if (!session || !isAuthenticated.value || !cursor.value) return;
+    const nextCursor = cursor.value;
+    const accountVersion = remotePrintAccountVersion;
+    const pageVersion = remotePrintPageVersion;
+    const mutationVersion = remotePrintMutationVersion;
+    loading.value = true;
+    let promise!: Promise<void>;
+    promise = Promise.resolve().then(async () => {
+      try {
+        const page = await fetchPrintJobs(session.accessToken, { status, cursor: nextCursor });
+        if (accountVersion !== remotePrintAccountVersion) return;
+        mergeRemotePrintJobs(page.printJobs, mutationVersion !== remotePrintMutationVersion);
+        if (pageVersion === remotePrintPageVersion) cursor.value = page.nextCursor;
+        printerSyncError.value = "";
+      } catch (error) {
+        if (accountVersion === remotePrintAccountVersion) {
+          printerSyncError.value = getErrorMessage(error, "store.errors.loadIntegrations");
+        }
+      } finally {
+        if (printPagePromises.get(status) === promise) {
+          printPagePromises.delete(status);
+          loading.value = false;
+        }
+      }
+    });
+    printPagePromises.set(status, promise);
+    return promise;
+  }
+
+  async function loadPrintJobDetail(jobId: string) {
+    if (!isAuthenticated.value) return printJobs.value.find((job) => job.id === jobId) ?? null;
+    if (printDetailPromises.has(jobId)) return printDetailPromises.get(jobId)!;
+    const session = authSession.value;
+    if (!session) return null;
+    const accountVersion = remotePrintAccountVersion;
+    const promise = fetchPrintJob(session.accessToken, jobId)
+      .then((job) => (accountVersion === remotePrintAccountVersion ? job : null))
+      .catch((error: unknown) => {
+        if (
+          accountVersion === remotePrintAccountVersion &&
+          error instanceof AuthApiError &&
+          error.status === 404
+        ) {
+          removedRemotePrintJobIds.add(jobId);
+          remotePrintJobs.value = remotePrintJobs.value.filter((job) => job.id !== jobId);
+        }
+        throw error;
+      })
+      .finally(() => {
+        if (printDetailPromises.get(jobId) === promise) printDetailPromises.delete(jobId);
+      });
+    printDetailPromises.set(jobId, promise);
+    return promise;
   }
 
   function upsertDevice(nextDevice: Device) {
@@ -888,7 +1100,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     clearRemotePrintStatusSync();
 
-    if (!hasQueuedRemotePrintJobs.value) {
+    if (!shouldPollRemotePrintJobs.value) {
       return;
     }
 
@@ -906,44 +1118,84 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function syncRemotePrintStatus() {
-    if (remotePrintStatusPromise) {
-      return remotePrintStatusPromise;
-    }
-
+    if (remotePrintStatusPromise) return remotePrintStatusPromise;
     const currentSession = authSession.value;
-    if (!currentSession || !hasQueuedRemotePrintJobs.value) {
+    if (!currentSession || !shouldPollRemotePrintJobs.value) {
       clearRemotePrintStatusSync();
       return;
     }
-
-    remotePrintStatusPromise = (async () => {
+    const accountVersion = remotePrintAccountVersion;
+    const mutationVersion = remotePrintMutationVersion;
+    let promise!: Promise<void>;
+    promise = Promise.resolve().then(async () => {
       try {
-        const accessToken = currentSession.accessToken;
-        const { printJobs: latestPrintJobs } = await fetchPrintJobs(accessToken);
-
-        if (authSession.value?.accessToken !== accessToken) {
-          return;
+        const midnight = new Date();
+        midnight.setHours(0, 0, 0, 0);
+        const ids = remotePrintJobs.value
+          .filter((job) => job.status === "pending" || job.status === "queued")
+          .map((job) => job.id);
+        // Keep each status response bounded even after the user loads many active pages.
+        const chunks = Array.from({ length: Math.max(1, Math.ceil(ids.length / 100)) }, (_, i) =>
+          ids.slice(i * 100, (i + 1) * 100),
+        );
+        let metadata: Awaited<ReturnType<typeof fetchPrintJobStatuses>> | null = null;
+        for (const chunk of chunks) {
+          const response = await fetchPrintJobStatuses(
+            currentSession.accessToken,
+            chunk,
+            midnight.toISOString(),
+          );
+          if (accountVersion !== remotePrintAccountVersion) return;
+          metadata = response;
+          const updates = new Map(response.printJobs.map((job) => [job.id, job]));
+          if (mutationVersion === remotePrintMutationVersion) {
+            for (const id of chunk) {
+              if (!updates.has(id)) removedRemotePrintJobIds.add(id);
+            }
+            remotePrintJobs.value = remotePrintJobs.value.filter(
+              (job) => !removedRemotePrintJobIds.has(job.id),
+            );
+          }
+          mergeRemotePrintJobs(
+            remotePrintJobs.value.map((job) => {
+              const update = updates.get(job.id);
+              return update ? { ...job, ...update } : job;
+            }),
+            mutationVersion !== remotePrintMutationVersion,
+          );
         }
-
-        printJobs.value = latestPrintJobs;
+        if (metadata && mutationVersion === remotePrintMutationVersion) {
+          const changed =
+            latestRemotePrintJobId !== metadata.latestJobId ||
+            JSON.stringify(remotePrintCounts.value) !== JSON.stringify(metadata.counts);
+          if (changed) await refreshRemotePrintJobs();
+          if (accountVersion !== remotePrintAccountVersion) return;
+          if (mutationVersion === remotePrintMutationVersion) {
+            remotePrintCounts.value = metadata.counts;
+            latestRemotePrintJobId = metadata.latestJobId;
+          }
+        }
         printerSyncError.value = "";
-        remotePrintStatusBackoffMs = REMOTE_PRINT_STATUS_POLL_MS;
+        remotePrintStatusBackoffMs =
+          (remotePrintCounts.value?.queued ?? 0) > 0
+            ? REMOTE_PRINT_STATUS_POLL_MS
+            : REMOTE_PRINT_STATUS_IDLE_POLL_MS;
       } catch (error) {
+        if (accountVersion !== remotePrintAccountVersion) return;
         printerSyncError.value = getErrorMessage(error, "store.errors.syncPrintStatus");
         remotePrintStatusBackoffMs = Math.min(
           Math.max(remotePrintStatusBackoffMs * 2, REMOTE_PRINT_STATUS_POLL_MS),
           REMOTE_PRINT_STATUS_MAX_BACKOFF_MS,
         );
       } finally {
-        remotePrintStatusPromise = null;
-
-        if (hasQueuedRemotePrintJobs.value) {
-          scheduleRemotePrintStatusSync();
+        if (remotePrintStatusPromise === promise) {
+          remotePrintStatusPromise = null;
+          if (shouldPollRemotePrintJobs.value) scheduleRemotePrintStatusSync();
         }
       }
-    })();
-
-    return remotePrintStatusPromise;
+    });
+    remotePrintStatusPromise = promise;
+    return promise;
   }
 
   function restoreAnonymousWorkspace() {
@@ -1033,6 +1285,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     if (!currentSession || !currentUser) {
       return false;
     }
+    const accountVersion = remotePrintAccountVersion;
 
     workspaceLoading.value = true;
     workspaceSyncError.value = "";
@@ -1040,16 +1293,21 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     try {
       const state = await fetchWorkspaceStateWithApi(currentSession.accessToken);
+      if (accountVersion !== remotePrintAccountVersion) return false;
       applyWorkspaceState(state);
       await loadLiveIntegrations(currentSession.accessToken);
+      if (accountVersion !== remotePrintAccountVersion) return false;
       workspaceOwnerId.value = currentUser.id;
       return true;
     } catch (error) {
+      if (accountVersion !== remotePrintAccountVersion) return false;
       workspaceSyncError.value = getErrorMessage(error, "store.errors.loadAccountData");
       return false;
     } finally {
-      workspaceHydrating.value = false;
-      workspaceLoading.value = false;
+      if (accountVersion === remotePrintAccountVersion) {
+        workspaceHydrating.value = false;
+        workspaceLoading.value = false;
+      }
     }
   }
 
@@ -1058,37 +1316,41 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     pluginLoading.value = true;
     printerSyncError.value = "";
     pluginError.value = "";
+    const accountVersion = remotePrintAccountVersion;
 
     try {
-      const [aiSummary, printerResponse, printJobResponse, pluginResponse, scheduleResponse] =
-        await Promise.all([
-          fetchAIConfigSummary(accessToken),
-          fetchPrinters(accessToken),
-          fetchPrintJobs(accessToken),
-          fetchPlugins(accessToken),
-          fetchPrintSchedules(accessToken),
-        ]);
+      const [aiSummary, printerResponse, , pluginResponse, scheduleResponse] = await Promise.all([
+        fetchAIConfigSummary(accessToken),
+        fetchPrinters(accessToken),
+        refreshRemotePrintJobs(),
+        fetchPlugins(accessToken),
+        fetchPrintSchedules(accessToken),
+      ]);
 
+      if (accountVersion !== remotePrintAccountVersion) return;
       applyAIConfig(aiSummary);
       devices.value = printerResponse.devices.filter((device) => device.status !== "offline");
-      printJobs.value = printJobResponse.printJobs;
       availablePlugins.value = pluginResponse.plugins;
       remoteSchedules.value = scheduleResponse.schedules;
 
       if (authUser.value?.role === "admin") {
         const adminResponse = await fetchAdminPlugins(accessToken);
+        if (accountVersion !== remotePrintAccountVersion) return;
         adminPlugins.value = adminResponse.plugins;
       } else {
         adminPlugins.value = [];
       }
     } catch (error) {
+      if (accountVersion !== remotePrintAccountVersion) return;
       const message = getErrorMessage(error, "store.errors.loadIntegrations");
       aiConfigError.value = message;
       printerSyncError.value = message;
       pluginError.value = message;
     } finally {
-      aiConfigLoading.value = false;
-      pluginLoading.value = false;
+      if (accountVersion === remotePrintAccountVersion) {
+        aiConfigLoading.value = false;
+        pluginLoading.value = false;
+      }
     }
   }
 
@@ -1401,6 +1663,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
 
     isCreatingPrint.value = true;
+    const accountVersion = remotePrintAccountVersion;
     try {
       if (isAuthenticated.value && authSession.value) {
         if (!defaultDeviceId.value) {
@@ -1415,6 +1678,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           printerBindingId: defaultDeviceId.value,
           submitImmediately: true,
         });
+        if (accountVersion !== remotePrintAccountVersion) return null;
         upsertPrintJob(job);
         showFlashKey("store.flash.printQueuedDirectly", "success");
         return job;
@@ -1429,6 +1693,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
       return job;
     } catch (error) {
+      if (accountVersion !== remotePrintAccountVersion) return null;
       const message = getErrorMessage(error, "store.errors.createPrint");
       showFlash(message, "error");
       return null;
@@ -1495,19 +1760,24 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function confirmPrint(jobId: string) {
-    const target = printJobs.value.find((job) => job.id === jobId);
+    const target = (isAuthenticated.value ? remotePrintJobs.value : printJobs.value).find(
+      (job) => job.id === jobId,
+    );
 
     if (!target || target.status !== "pending") {
       return false;
     }
 
     if (isAuthenticated.value && authSession.value) {
+      const accountVersion = remotePrintAccountVersion;
       try {
         const submitted = await submitPrintJob(authSession.value.accessToken, jobId);
+        if (accountVersion !== remotePrintAccountVersion) return false;
         upsertPrintJob(submitted);
         showFlashKey("store.flash.printQueued", "success");
         return true;
       } catch (error) {
+        if (accountVersion !== remotePrintAccountVersion) return false;
         showFlash(getErrorMessage(error, "store.errors.submitPrint"), "error");
         return false;
       }
@@ -1529,19 +1799,24 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function cancelPrint(jobId: string) {
-    const target = printJobs.value.find((job) => job.id === jobId);
+    const target = (isAuthenticated.value ? remotePrintJobs.value : printJobs.value).find(
+      (job) => job.id === jobId,
+    );
 
     if (!target || (target.status !== "pending" && target.status !== "queued")) {
       return false;
     }
 
     if (isAuthenticated.value && authSession.value) {
+      const accountVersion = remotePrintAccountVersion;
       try {
         const cancelled = await cancelPrintJob(authSession.value.accessToken, jobId);
+        if (accountVersion !== remotePrintAccountVersion) return false;
         upsertPrintJob(cancelled);
         showFlashKey("store.flash.printCancelled", "success");
         return true;
       } catch (error) {
+        if (accountVersion !== remotePrintAccountVersion) return false;
         showFlash(getErrorMessage(error, "store.errors.cancelPrint"), "error");
         return false;
       }
@@ -1563,14 +1838,17 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   async function updatePrintDevice(jobId: string, deviceId: string) {
     if (isAuthenticated.value && authSession.value) {
+      const accountVersion = remotePrintAccountVersion;
       try {
         const updated = await updatePrintJobDeviceWithApi(authSession.value.accessToken, jobId, {
           printerBindingId: deviceId,
         });
+        if (accountVersion !== remotePrintAccountVersion) return;
         upsertPrintJob(updated);
         showFlashKey("store.flash.printDeviceUpdated", "success");
         return;
       } catch (error) {
+        if (accountVersion !== remotePrintAccountVersion) return;
         showFlash(getErrorMessage(error, "store.errors.updatePrintDevice"), "error");
         return;
       }
@@ -1648,9 +1926,12 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
 
     if (isAuthenticated.value && authSession.value) {
+      const accountVersion = remotePrintAccountVersion;
       try {
         await deletePrinter(authSession.value.accessToken, deviceId);
+        if (accountVersion !== remotePrintAccountVersion) return false;
       } catch (error) {
+        if (accountVersion !== remotePrintAccountVersion) return false;
         showFlash(getErrorMessage(error, "store.errors.deleteDevice"), "error");
         return false;
       }
@@ -1662,7 +1943,12 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           : defaultDeviceId.value;
 
       devices.value = remainingDevices;
-      printJobs.value = printJobs.value.filter((job) => job.deviceId !== deviceId);
+      remotePrintMutationVersion++;
+      for (const job of remotePrintJobs.value) {
+        if (job.deviceId === deviceId) removedRemotePrintJobIds.add(job.id);
+      }
+      remotePrintJobs.value = remotePrintJobs.value.filter((job) => job.deviceId !== deviceId);
+      scheduleRemotePrintStatusSync(true);
       remoteSchedules.value = remoteSchedules.value.filter(
         (schedule) => schedule.deviceId !== deviceId,
       );
@@ -2445,6 +2731,12 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     aiConfigSaving,
     aiConfigError,
     printerSyncError,
+    printJobsLoading,
+    activePrintJobsLoading,
+    historyPrintJobsLoading,
+    activePrintJobsCursor,
+    historyPrintJobsCursor,
+    remotePrintCounts,
     pluginLoading,
     pluginSaving,
     pluginUploadLoading,
@@ -2458,6 +2750,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     conversations,
     activeConversationId,
     printJobs,
+    remotePrintJobs,
     schedules,
     sources,
     availablePlugins,
@@ -2484,6 +2777,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     defaultDevice,
     pendingPrintJobs,
     recentPrintJobs,
+    printHistoryJobs,
     activeSchedules,
     activeSources,
     connectedDevicesCount,
@@ -2507,6 +2801,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     createPrintFromSelectedMessages,
     createPrintFromConversation,
     createManualPrint,
+    loadMorePrintJobs,
+    loadPrintJobDetail,
     confirmPrint,
     cancelPrint,
     updatePrintDevice,

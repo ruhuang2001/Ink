@@ -2,10 +2,12 @@ package printer
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/base64"
 	"errors"
 	"image/png"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -308,8 +310,9 @@ func TestPrinterFontDataIsAvailable(t *testing.T) {
 }
 
 type fakePrinterRepo struct {
-	bindings map[string]Binding
-	jobs     map[string]Job
+	bindings      map[string]Binding
+	jobs          map[string]Job
+	statusSaveErr error
 }
 
 func TestCreatePrintJobForUserReusesInternalJobID(t *testing.T) {
@@ -372,14 +375,97 @@ func (f *fakePrinterRepo) DeleteBinding(_ context.Context, userID string, bindin
 	return nil
 }
 
-func (f *fakePrinterRepo) ListJobsByUserID(_ context.Context, userID string) ([]Job, error) {
-	jobs := make([]Job, 0, len(f.jobs))
+func (f *fakePrinterRepo) ListJobSummaries(_ context.Context, userID string, query JobPageQuery) ([]JobSummaryRecord, error) {
+	jobs := []JobSummaryRecord{}
 	for _, job := range f.jobs {
-		if job.UserID == userID {
-			jobs = append(jobs, job)
+		active := job.Status == workspace.PrintStatusPending || job.Status == workspace.PrintStatusQueued
+		if job.UserID != userID || query.Status == "active" && !active || query.Status == "history" && active {
+			continue
+		}
+		if query.Cursor != nil && (job.CreatedAt.After(query.Cursor.CreatedAt) || job.CreatedAt.Equal(query.Cursor.CreatedAt) && job.ID >= query.Cursor.ID) {
+			continue
+		}
+		jobs = append(jobs, JobSummaryRecord{ID: job.ID, Title: job.Title, Source: job.Source, DeviceID: job.PrinterBindingID, Status: job.Status, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt})
+	}
+	slices.SortFunc(jobs, func(a, b JobSummaryRecord) int {
+		return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.ID, a.ID))
+	})
+	return jobs[:min(len(jobs), query.Limit)], nil
+}
+
+func (f *fakePrinterRepo) ListJobStatuses(_ context.Context, userID string, ids []string) ([]JobStatusRecord, error) {
+	jobs := []JobStatusRecord{}
+	for _, id := range ids {
+		if job, ok := f.jobs[id]; ok && job.UserID == userID {
+			jobs = append(jobs, JobStatusRecord{ID: job.ID, DeviceID: job.PrinterBindingID, Status: job.Status, UpdatedAt: job.UpdatedAt})
 		}
 	}
 	return jobs, nil
+}
+
+func (f *fakePrinterRepo) GetJobCounts(_ context.Context, userID string, since time.Time) (JobCounts, *string, error) {
+	var counts JobCounts
+	var latest *Job
+	for _, job := range f.jobs {
+		if job.UserID != userID {
+			continue
+		}
+		if latest == nil || job.CreatedAt.After(latest.CreatedAt) || job.CreatedAt.Equal(latest.CreatedAt) && job.ID > latest.ID {
+			latest = new(job)
+		}
+		switch job.Status {
+		case workspace.PrintStatusPending:
+			counts.Pending++
+		case workspace.PrintStatusQueued:
+			counts.Queued++
+		case workspace.PrintStatusCompleted:
+			counts.Completed++
+			if !job.UpdatedAt.Before(since) {
+				counts.TodayCompleted++
+			}
+		case workspace.PrintStatusFailed:
+			counts.Failed++
+		case workspace.PrintStatusCancelled:
+			counts.Cancelled++
+		}
+	}
+	if latest == nil {
+		return counts, nil, nil
+	}
+	return counts, new(latest.ID), nil
+}
+
+func (f *fakePrinterRepo) ListDueStatusJobs(_ context.Context, now time.Time, limit int) ([]StatusSyncJob, error) {
+	jobs := []StatusSyncJob{}
+	for _, job := range f.jobs {
+		if job.Status != workspace.PrintStatusQueued || job.ProviderPrintContentID == nil || job.NextStatusCheckAt == nil || job.NextStatusCheckAt.After(now) {
+			continue
+		}
+		jobs = append(jobs, StatusSyncJob{ID: job.ID, UserID: job.UserID, ProviderPrintID: *job.ProviderPrintContentID, Binding: f.bindings[job.PrinterBindingID], UpdatedAt: job.UpdatedAt, NextStatusCheckAt: *job.NextStatusCheckAt, Attempts: job.StatusCheckAttempts})
+	}
+	slices.SortFunc(jobs, func(a, b StatusSyncJob) int {
+		return cmp.Or(a.NextStatusCheckAt.Compare(b.NextStatusCheckAt), cmp.Compare(a.ID, b.ID))
+	})
+	return jobs[:min(len(jobs), limit)], nil
+}
+
+func (f *fakePrinterRepo) SaveStatusCheck(_ context.Context, expected StatusSyncJob, result StatusCheckResult) (bool, error) {
+	if f.statusSaveErr != nil {
+		return false, f.statusSaveErr
+	}
+	job := f.jobs[expected.ID]
+	if job.Status != workspace.PrintStatusQueued || job.ProviderPrintContentID == nil || *job.ProviderPrintContentID != expected.ProviderPrintID || !job.UpdatedAt.Equal(expected.UpdatedAt) || job.NextStatusCheckAt == nil || !job.NextStatusCheckAt.Equal(expected.NextStatusCheckAt) {
+		return false, nil
+	}
+	job.NextStatusCheckAt = new(result.NextCheck)
+	job.StatusCheckAttempts = result.Attempts
+	if result.Completed {
+		job.Status = workspace.PrintStatusCompleted
+		job.UpdatedAt = result.CheckedAt
+		job.NextStatusCheckAt = nil
+	}
+	f.jobs[job.ID] = job
+	return true, nil
 }
 
 func (f *fakePrinterRepo) FindJobByID(_ context.Context, userID string, jobID string) (*Job, error) {

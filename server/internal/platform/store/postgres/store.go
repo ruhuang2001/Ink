@@ -270,7 +270,7 @@ func (s *Store) Log(ctx context.Context, event auth.AuditEvent) error {
 // FindByUserID loads a persisted workspace snapshot for a user.
 func (s *Store) FindByUserID(ctx context.Context, userID string) (*workspace.State, error) {
 	row := s.db.QueryRow(ctx, `
-		select state
+		select state - 'printJobs'
 		from workspace_snapshots
 		where user_id = $1
 	`, userID)
@@ -298,6 +298,7 @@ func (s *Store) SaveByUserID(
 	state workspace.State,
 	updatedAt time.Time,
 ) error {
+	state.PrintJobs = []workspace.PrintJob{}
 	payload, err := json.Marshal(state)
 	if err != nil {
 		return err
@@ -470,54 +471,10 @@ func (s *Store) DeleteBinding(ctx context.Context, userID string, bindingID stri
 	return err
 }
 
-func (s *Store) ListJobsByUserID(ctx context.Context, userID string) ([]printer.Job, error) {
-	rows, err := s.db.Query(ctx, `
-		select id, user_id, printer_binding_id, title, source, content, status,
-			provider_print_content_id, provider_smart_guid, error_message, created_at, updated_at
-		from print_jobs
-		where user_id = $1
-		order by updated_at desc, created_at desc
-	`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var jobs []printer.Job
-	for rows.Next() {
-		var job printer.Job
-		var providerPrintContentID *int
-		var providerSmartGUID *string
-		var errorMessage *string
-		if err := rows.Scan(
-			&job.ID,
-			&job.UserID,
-			&job.PrinterBindingID,
-			&job.Title,
-			&job.Source,
-			&job.Content,
-			&job.Status,
-			&providerPrintContentID,
-			&providerSmartGUID,
-			&errorMessage,
-			&job.CreatedAt,
-			&job.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		job.ProviderPrintContentID = providerPrintContentID
-		job.ProviderSmartGUID = providerSmartGUID
-		job.ErrorMessage = errorMessage
-		jobs = append(jobs, job)
-	}
-
-	return jobs, rows.Err()
-}
-
 func (s *Store) FindJobByID(ctx context.Context, userID string, jobID string) (*printer.Job, error) {
 	row := s.db.QueryRow(ctx, `
 		select id, user_id, printer_binding_id, title, source, content, status,
-			provider_print_content_id, provider_smart_guid, error_message, created_at, updated_at
+			provider_print_content_id, provider_smart_guid, error_message, created_at, updated_at, next_status_check_at, status_check_attempts
 		from print_jobs
 		where user_id = $1 and id = $2
 	`, userID, jobID)
@@ -539,6 +496,8 @@ func (s *Store) FindJobByID(ctx context.Context, userID string, jobID string) (*
 		&errorMessage,
 		&job.CreatedAt,
 		&job.UpdatedAt,
+		&job.NextStatusCheckAt,
+		&job.StatusCheckAttempts,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -556,8 +515,8 @@ func (s *Store) SaveJob(ctx context.Context, job printer.Job) error {
 	_, err := s.db.Exec(ctx, `
 		insert into print_jobs (
 			id, user_id, printer_binding_id, title, source, content, status,
-			provider_print_content_id, provider_smart_guid, error_message, created_at, updated_at
-		) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			provider_print_content_id, provider_smart_guid, error_message, created_at, updated_at, next_status_check_at, status_check_attempts
+		) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		on conflict (id)
 		do update set
 			printer_binding_id = excluded.printer_binding_id,
@@ -568,7 +527,9 @@ func (s *Store) SaveJob(ctx context.Context, job printer.Job) error {
 			provider_print_content_id = excluded.provider_print_content_id,
 			provider_smart_guid = excluded.provider_smart_guid,
 			error_message = excluded.error_message,
-			updated_at = excluded.updated_at
+			updated_at = excluded.updated_at,
+			next_status_check_at = excluded.next_status_check_at,
+			status_check_attempts = excluded.status_check_attempts
 	`,
 		job.ID,
 		job.UserID,
@@ -582,6 +543,8 @@ func (s *Store) SaveJob(ctx context.Context, job printer.Job) error {
 		job.ErrorMessage,
 		job.CreatedAt,
 		job.UpdatedAt,
+		job.NextStatusCheckAt,
+		job.StatusCheckAttempts,
 	)
 	return err
 }

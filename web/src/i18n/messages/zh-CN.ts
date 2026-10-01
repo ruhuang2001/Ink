@@ -654,6 +654,8 @@ const zhCN = {
     },
   },
   prints: {
+    loading: "正在加载…",
+    loadMore: "加载更多",
     confirmDeleteSchedule: "确认删除这条定时任务吗？",
     recentPrints: "最近打印",
     connectedPlugins: "已连接插件",
@@ -667,6 +669,7 @@ const zhCN = {
       preview: "打印预览",
     },
     preview: {
+      error: "无法加载打印内容，请稍后重试。",
       title: "打印预览",
       hint: "预览按咕咕机约 384px 宽、22px 字号的黑白图片效果展示，实际出纸可能因设备略有差异。",
     },

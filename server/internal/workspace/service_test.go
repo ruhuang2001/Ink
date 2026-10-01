@@ -47,6 +47,33 @@ func TestSaveStatePersistsNormalizedWorkspace(t *testing.T) {
 	}
 }
 
+func TestAccountWorkspaceExcludesPrintHistory(t *testing.T) {
+	state := EmptyState()
+	state.PrintJobs = []PrintJob{{ID: "legacy-copy", Content: "print body", Status: PrintStatusCompleted}}
+	state.Conversations = []Conversation{{ID: "conversation", Title: "keep me"}}
+	repo := &fakeRepository{current: &state}
+	service := NewService(repo, fakeAuthenticator{}, fakeClock{now: time.Now()})
+
+	loaded, err := service.GetState(t.Context(), "access-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.PrintJobs == nil || len(loaded.PrintJobs) != 0 || len(loaded.Conversations) != 1 {
+		t.Fatalf("workspace should load conversations without copied print bodies: %+v", loaded)
+	}
+	if len(state.PrintJobs) != 1 {
+		t.Fatal("loading must not mutate the existing snapshot")
+	}
+
+	saved, err := service.SaveState(t.Context(), "access-token", state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.PrintJobs) != 0 || len(repo.savedState.PrintJobs) != 0 || len(saved.Conversations) != 1 {
+		t.Fatalf("workspace save should exclude duplicate history and preserve conversations: %+v", saved)
+	}
+}
+
 type fakeRepository struct {
 	current     *State
 	savedUserID string

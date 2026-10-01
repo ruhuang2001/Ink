@@ -31,6 +31,10 @@ type Config struct {
 	MemobirdAccessKey           string
 	MemobirdBaseURL             string
 	MemobirdTimeout             time.Duration
+	PrintStatusSyncEnabled      bool
+	PrintStatusPollInterval     time.Duration
+	PrintStatusBatchSize        int
+	PrintStatusTimeout          time.Duration
 	PluginRoot                  string
 	PluginExecTimeout           time.Duration
 	PluginInstallTimeout        time.Duration
@@ -94,6 +98,19 @@ func Load() (Config, error) {
 	}
 
 	memobirdTimeout, err := envDuration("MEMOBIRD_TIMEOUT", 30*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+
+	printStatusPollInterval, err := envDuration("PRINT_STATUS_POLL_INTERVAL", 2*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+	printStatusBatchSize, err := envInt("PRINT_STATUS_BATCH_SIZE", 20)
+	if err != nil {
+		return Config{}, err
+	}
+	printStatusTimeout, err := envDuration("PRINT_STATUS_TIMEOUT", 5*time.Second)
 	if err != nil {
 		return Config{}, err
 	}
@@ -171,6 +188,10 @@ func Load() (Config, error) {
 		MemobirdAccessKey:           os.Getenv("MEMOBIRD_ACCESS_KEY"),
 		MemobirdBaseURL:             os.Getenv("MEMOBIRD_BASE_URL"),
 		MemobirdTimeout:             memobirdTimeout,
+		PrintStatusSyncEnabled:      envBool("PRINT_STATUS_SYNC_ENABLED", true),
+		PrintStatusPollInterval:     printStatusPollInterval,
+		PrintStatusBatchSize:        printStatusBatchSize,
+		PrintStatusTimeout:          printStatusTimeout,
 		PluginRoot:                  envString("PLUGIN_ROOT", ".plugins"),
 		PluginExecTimeout:           pluginExecTimeout,
 		PluginInstallTimeout:        pluginInstallTimeout,
@@ -226,6 +247,16 @@ func Load() (Config, error) {
 	if cfg.MemobirdTimeout <= 0 {
 		return Config{}, fmt.Errorf("MEMOBIRD_TIMEOUT must be positive")
 	}
+	if cfg.PrintStatusPollInterval <= 0 {
+		return Config{}, fmt.Errorf("PRINT_STATUS_POLL_INTERVAL must be positive")
+	}
+	if cfg.PrintStatusBatchSize < 1 || cfg.PrintStatusBatchSize > 100 {
+		return Config{}, fmt.Errorf("PRINT_STATUS_BATCH_SIZE must be between 1 and 100")
+	}
+	if cfg.PrintStatusTimeout <= 0 {
+		return Config{}, fmt.Errorf("PRINT_STATUS_TIMEOUT must be positive")
+	}
+
 	if cfg.PluginExecTimeout <= 0 {
 		return Config{}, fmt.Errorf("PLUGIN_EXEC_TIMEOUT must be positive")
 	}

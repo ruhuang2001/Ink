@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { RouterLink } from "vue-router";
 
@@ -50,6 +50,12 @@ const scheduleBatchSize = ref(1);
 const scheduleDeviceId = ref("");
 const scheduleError = ref("");
 const previewJob = ref<{ title: string; content: string; image?: string } | null>(null);
+const previewLoading = ref(false);
+const previewError = ref("");
+let previewRequestVersion = 0;
+
+watch(() => workspaceStore.authUser?.id, closePreview);
+onBeforeUnmount(closePreview);
 
 function getInvalidBatchSizeMessage() {
   return t("prints.errors.invalidBatchSize");
@@ -108,20 +114,37 @@ function closePrintDialog() {
   printDialogOpen.value = false;
 }
 
-async function openPreview(item: { title: string; content: string }) {
-  previewJob.value = { title: item.title, content: item.content };
-  const token = workspaceStore.authSession?.accessToken;
-  if (!token) return;
+async function openPreview(item: { id?: string; title: string; content?: string }) {
+  const requestVersion = ++previewRequestVersion;
+  previewJob.value = { title: item.title, content: item.content ?? "" };
+  previewError.value = "";
+  previewLoading.value = !!item.id && workspaceStore.isAuthenticated;
   try {
-    const image = await renderPrintPreview(token, { title: item.title, content: item.content });
-    if (previewJob.value?.title === item.title) previewJob.value = { ...item, image };
+    const detail = item.id ? await workspaceStore.loadPrintJobDetail(item.id) : item;
+    if (requestVersion !== previewRequestVersion || !detail) return;
+    const payload = { title: detail.title, content: detail.content ?? "" };
+    previewJob.value = payload;
+    previewLoading.value = false;
+    const token = workspaceStore.authSession?.accessToken;
+    if (!token) return;
+    try {
+      const image = await renderPrintPreview(token, payload);
+      if (requestVersion === previewRequestVersion) previewJob.value = { ...payload, image };
+    } catch {
+      // Keep the CSS fallback visible when the preview endpoint is unavailable.
+    }
   } catch {
-    // Keep the CSS fallback visible when the preview endpoint is unavailable.
+    if (requestVersion === previewRequestVersion) previewError.value = t("prints.preview.error");
+  } finally {
+    if (requestVersion === previewRequestVersion) previewLoading.value = false;
   }
 }
 
 function closePreview() {
+  previewRequestVersion++;
   previewJob.value = null;
+  previewLoading.value = false;
+  previewError.value = "";
 }
 
 function previewManualPrint() {
@@ -319,6 +342,7 @@ async function submitScheduleDialog() {
                     {{ workspaceStore.formatPrintTime(item.updatedAt) }}
                   </p>
                   <p
+                    v-if="!workspaceStore.isAuthenticated && 'content' in item"
                     class="mt-2 rounded-lg bg-stone-50 px-3 py-2 text-sm leading-relaxed text-stone-600"
                   >
                     {{ item.content }}
@@ -380,6 +404,14 @@ async function submitScheduleDialog() {
               </div>
             </article>
           </div>
+          <button
+            v-if="workspaceStore.isAuthenticated && workspaceStore.activePrintJobsCursor"
+            class="ui-btn-secondary mt-4 px-3 py-1.5 text-sm"
+            :disabled="workspaceStore.activePrintJobsLoading || workspaceStore.printJobsLoading"
+            @click="workspaceStore.loadMorePrintJobs('active')"
+          >
+            {{ t(workspaceStore.activePrintJobsLoading ? "prints.loading" : "prints.loadMore") }}
+          </button>
         </section>
 
         <section>
@@ -502,7 +534,7 @@ async function submitScheduleDialog() {
           <div class="ui-list-card p-4">
             <div class="ui-timeline">
               <article
-                v-for="item in workspaceStore.recentPrintJobs"
+                v-for="item in workspaceStore.printHistoryJobs"
                 :key="item.id"
                 class="ui-timeline-item"
               >
@@ -513,6 +545,12 @@ async function submitScheduleDialog() {
                       {{ workspaceStore.getDeviceName(item.deviceId) }} ·
                       {{ workspaceStore.formatPrintTime(item.updatedAt) }}
                     </p>
+                    <button
+                      class="mt-2 text-sm text-stone-600 hover:text-stone-900"
+                      @click="openPreview(item)"
+                    >
+                      {{ t("prints.actions.preview") }}
+                    </button>
                   </div>
                   <span
                     class="ui-status-badge sm:self-center"
@@ -524,6 +562,14 @@ async function submitScheduleDialog() {
               </article>
             </div>
           </div>
+          <button
+            v-if="workspaceStore.isAuthenticated && workspaceStore.historyPrintJobsCursor"
+            class="ui-btn-secondary mt-4 px-3 py-1.5 text-sm"
+            :disabled="workspaceStore.historyPrintJobsLoading || workspaceStore.printJobsLoading"
+            @click="workspaceStore.loadMorePrintJobs('history')"
+          >
+            {{ t(workspaceStore.historyPrintJobsLoading ? "prints.loading" : "prints.loadMore") }}
+          </button>
         </section>
       </div>
 
@@ -934,7 +980,12 @@ async function submitScheduleDialog() {
       @close="closePreview"
     >
       <p class="mb-4 text-sm text-stone-500">{{ t("prints.preview.hint") }}</p>
+      <p v-if="previewLoading" role="status" class="py-8 text-center text-sm text-stone-500">
+        {{ t("prints.loading") }}
+      </p>
+      <p v-else-if="previewError" role="alert" class="text-sm text-rose-700">{{ previewError }}</p>
       <PrintPreview
+        v-else
         :title="previewJob.title"
         :content="previewJob.content"
         :image="previewJob.image"

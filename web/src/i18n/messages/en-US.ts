@@ -669,6 +669,8 @@ const enUS = {
     },
   },
   prints: {
+    loading: "Loading…",
+    loadMore: "Load more",
     confirmDeleteSchedule: "Delete this scheduled task?",
     recentPrints: "Recent prints",
     connectedPlugins: "Connected plugins",
@@ -682,6 +684,7 @@ const enUS = {
       preview: "Print preview",
     },
     preview: {
+      error: "Unable to load print content. Please try again.",
       title: "Print preview",
       hint: "This preview approximates the Memobird's 384px-wide black-and-white image output at 22px text size. The physical print may vary slightly by device.",
     },

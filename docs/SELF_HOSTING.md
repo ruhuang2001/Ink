@@ -70,6 +70,10 @@ Important settings:
 | `AI_CONFIG_ENCRYPTION_KEY` | Encrypts stored AI keys and plugin binding secrets. Back it up securely.              |
 | `MEMOBIRD_ACCESS_KEY`      | Enables Memobird device binding and physical printing.                                |
 | `MEMOBIRD_BASE_URL`        | Optional provider endpoint override; leave empty for the SDK default.                 |
+| `PRINT_STATUS_SYNC_ENABLED` | Enables background completion checks (default `true`). Disable only when another process owns synchronization. |
+| `PRINT_STATUS_POLL_INTERVAL` | Interval for scanning due print jobs (default `2s`). Each healthy queued job is checked about every `10s`. |
+| `PRINT_STATUS_BATCH_SIZE` | Maximum jobs considered per synchronization round (default `20`, maximum `100`). |
+| `PRINT_STATUS_TIMEOUT` | Timeout for each provider status request (default `5s`), independent of print submission timeout. |
 | `PLUGIN_ROOT`              | Persistent plugin installation directory. It must survive API restarts.               |
 | `PLUGIN_GIT_ALLOWED_HOSTS` | Comma-separated allowlist for Git plugin installation. Keep it narrow.                |
 | `PLUGIN_ENV_ALLOWLIST`     | Explicit server environment variables passed to plugin subprocesses. Empty is safest. |
@@ -98,6 +102,14 @@ cd server
 ../bin/ink-migrate up
 ../bin/ink-api
 ```
+
+The print-status migration adds persisted check times and pagination indexes,
+and schedules previously queued provider jobs for background reconciliation.
+Deploy the frontend and API from the same revision because print lists now
+return summaries; full content is fetched from the job detail endpoint.
+Completion checks run without an open browser. Keep a single status-worker
+owner when running multiple API processes; distributed claims are not added
+by this optimization.
 
 Serve `web/dist/` as static files and proxy `/api/` to `127.0.0.1:8080`. The API does not serve frontend assets itself.
 
