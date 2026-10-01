@@ -76,15 +76,16 @@ async function handleFeedbackSubmit() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-6 pt-4 sm:space-y-8">
+  <section class="mx-auto max-w-6xl space-y-7 pt-3 sm:space-y-9">
     <div>
-      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">
+      <p class="text-xs font-semibold tracking-[0.16em] text-amber-700 uppercase">Ink</p>
+      <h2 class="mt-2 text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
         {{ t("navigation.conversations.label") }}
       </h2>
     </div>
 
     <section class="space-y-4 lg:hidden">
-      <div class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
+      <div class="border-l-2 border-amber-600 py-1 pl-4">
         <div class="flex flex-col gap-3">
           <div>
             <p class="text-sm font-medium text-stone-900">{{ t("feedback.card.title") }}</p>
@@ -121,11 +122,11 @@ async function handleFeedbackSubmit() {
           v-for="chat in workspaceStore.conversations"
           :key="chat.id"
           type="button"
-          class="max-w-[18rem] min-w-[85%] snap-center rounded-xl border p-5 text-left transition-colors"
+          class="max-w-[18rem] min-w-[85%] snap-center border-y p-5 text-left transition-colors"
           :class="
             workspaceStore.activeConversationId === chat.id
-              ? 'border-stone-900 bg-stone-900 text-white'
-              : 'border-stone-200 bg-white text-stone-900 hover:border-stone-300'
+              ? 'border-amber-600 bg-white/70 text-stone-900'
+              : 'border-stone-200 bg-transparent text-stone-900 hover:border-stone-400'
           "
           @click="workspaceStore.selectConversation(chat.id)"
         >
@@ -133,7 +134,9 @@ async function handleFeedbackSubmit() {
             <p
               class="text-sm font-medium"
               :class="
-                workspaceStore.activeConversationId === chat.id ? 'text-white' : 'text-stone-900'
+                workspaceStore.activeConversationId === chat.id
+                  ? 'text-stone-950'
+                  : 'text-stone-900'
               "
             >
               {{ chat.title }}
@@ -142,7 +145,7 @@ async function handleFeedbackSubmit() {
               class="text-xs"
               :class="
                 workspaceStore.activeConversationId === chat.id
-                  ? 'text-stone-300'
+                  ? 'text-stone-500'
                   : 'text-stone-500'
               "
             >
@@ -152,7 +155,7 @@ async function handleFeedbackSubmit() {
           <p
             class="mt-2 text-sm leading-relaxed"
             :class="
-              workspaceStore.activeConversationId === chat.id ? 'text-stone-300' : 'text-stone-500'
+              workspaceStore.activeConversationId === chat.id ? 'text-stone-600' : 'text-stone-500'
             "
           >
             {{ chat.preview }}
@@ -163,7 +166,7 @@ async function handleFeedbackSubmit() {
 
     <div class="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-8">
       <aside class="hidden min-w-0 space-y-4 lg:block">
-        <div class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
+        <div class="border-l-2 border-amber-600 py-1 pl-4">
           <div class="flex flex-col gap-3">
             <div>
               <p class="text-sm font-medium text-stone-900">{{ t("feedback.card.title") }}</p>
@@ -234,7 +237,7 @@ async function handleFeedbackSubmit() {
       </aside>
 
       <div
-        class="flex min-h-[24rem] min-w-0 flex-col rounded-[1.5rem] border border-stone-200 bg-white/90 p-4 shadow-sm sm:min-h-[28rem] lg:h-[calc(100dvh-16rem)] lg:min-h-[500px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none"
+        class="flex min-h-[24rem] min-w-0 flex-col border-y border-stone-200 bg-transparent py-4 sm:min-h-[28rem] lg:h-[calc(100dvh-16rem)] lg:min-h-[500px] lg:border-0 lg:py-0"
       >
         <div
           class="mb-4 flex shrink-0 flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between"
@@ -266,7 +269,7 @@ async function handleFeedbackSubmit() {
 
         <div
           v-if="!hasMessages"
-          class="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 text-center"
+          class="flex flex-1 items-center justify-center border-y border-stone-200 px-6 text-center"
         >
           <div class="space-y-2">
             <h4 class="text-base font-semibold text-stone-900">
@@ -290,7 +293,7 @@ async function handleFeedbackSubmit() {
             >
               <button
                 type="button"
-                class="block max-w-[88%] rounded-2xl border px-5 py-3.5 text-left text-[15px] leading-relaxed shadow-sm transition-colors"
+                class="block max-w-[88%] rounded-xl border px-5 py-3.5 text-left text-[15px] leading-relaxed transition-colors"
                 :class="
                   message.role === 'user'
                     ? workspaceStore.selectedConversationMessageIds.includes(message.id)
@@ -334,7 +337,7 @@ async function handleFeedbackSubmit() {
 
           <article
             v-if="workspaceStore.isGenerating"
-            class="max-w-[85%] rounded-2xl rounded-bl-sm border border-stone-200 bg-white px-5 py-3.5 text-[15px] leading-relaxed text-stone-500 shadow-sm"
+            class="max-w-[85%] rounded-xl rounded-bl-sm border border-stone-200 bg-white px-5 py-3.5 text-[15px] leading-relaxed text-stone-500"
           >
             {{ t("conversations.generating") }}
           </article>
@@ -377,7 +380,7 @@ async function handleFeedbackSubmit() {
           </p>
 
           <div
-            class="relative rounded-xl border border-stone-200 bg-white shadow-sm transition-all focus-within:ring-2 focus-within:ring-stone-900 focus-within:ring-offset-2"
+            class="relative rounded-md border border-stone-300 bg-white transition-all focus-within:ring-2 focus-within:ring-amber-700 focus-within:ring-offset-2"
           >
             <textarea
               :value="workspaceStore.activeConversation?.draft ?? ''"
@@ -387,7 +390,7 @@ async function handleFeedbackSubmit() {
               @input="handleDraftInput"
             />
             <div
-              class="flex flex-col gap-3 rounded-b-xl border-t border-stone-100 bg-stone-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              class="flex flex-col gap-3 rounded-b-md border-t border-stone-200 bg-stone-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div class="flex flex-wrap items-center gap-2 text-xs text-stone-500">
                 <span>

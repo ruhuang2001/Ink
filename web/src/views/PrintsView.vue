@@ -278,15 +278,16 @@ async function submitScheduleDialog() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-6 pt-4 sm:space-y-8">
+  <section class="mx-auto max-w-6xl space-y-7 pt-3 sm:space-y-9">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h2 class="text-2xl font-semibold tracking-tight text-stone-900">
+        <p class="text-xs font-semibold tracking-[0.16em] text-amber-700 uppercase">Ink</p>
+        <h2 class="mt-2 text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
           {{ t("navigation.prints.label") }}
         </h2>
       </div>
       <div class="flex flex-wrap gap-2">
-        <RouterLink to="/tutorial" class="ui-btn-secondary px-3 py-1.5 text-sm">
+        <RouterLink to="/settings/guide" class="ui-btn-secondary px-3 py-1.5 text-sm">
           {{ t("prints.actions.bindingTutorial") }}
         </RouterLink>
         <button class="ui-btn-primary px-3 py-1.5 text-sm" @click="openPrintDialog">
@@ -309,7 +310,7 @@ async function submitScheduleDialog() {
 
           <div
             v-if="workspaceStore.pendingPrintJobs.length === 0"
-            class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
+            class="border-y border-stone-200 px-6 py-10 text-center"
           >
             <h4 class="text-base font-semibold text-stone-900">
               {{ t("prints.pending.emptyTitle") }}
@@ -423,7 +424,7 @@ async function submitScheduleDialog() {
 
           <div
             v-if="workspaceStore.activeSchedules.length === 0"
-            class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
+            class="border-y border-stone-200 px-6 py-10 text-center"
           >
             <h4 class="text-base font-semibold text-stone-900">
               {{ t("prints.schedules.emptyTitle") }}
@@ -608,6 +609,12 @@ async function submitScheduleDialog() {
           </div>
 
           <div class="ui-list-card">
+            <p
+              v-if="workspaceStore.activeSources.length === 0"
+              class="ui-list-row text-sm leading-6 text-stone-500"
+            >
+              {{ t("prints.noConnectedPlugins") }}
+            </p>
             <article
               v-for="source in workspaceStore.activeSources"
               :key="source.id"

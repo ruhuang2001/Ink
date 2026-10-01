@@ -53,97 +53,98 @@ async function handleSubmit() {
 
 <template>
   <div
-    class="flex min-h-[100dvh] flex-col bg-white px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] text-stone-900 sm:py-6"
+    class="relative flex min-h-[100dvh] bg-stone-50 px-5 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] text-stone-900 sm:px-8 sm:py-8"
   >
-    <div class="mx-auto w-full max-w-6xl">
-      <button
-        type="button"
-        class="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 shadow-sm transition-colors hover:border-stone-300 hover:text-stone-900"
-        @click="handleBack"
-      >
-        <span aria-hidden="true">←</span>
-        <span>{{ t("common.actions.back") }}</span>
-      </button>
-    </div>
+    <button
+      type="button"
+      class="absolute top-[calc(env(safe-area-inset-top)+1rem)] left-5 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-stone-500 transition-colors hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-amber-700 focus-visible:ring-offset-4 focus-visible:outline-none sm:top-8 sm:left-8"
+      @click="handleBack"
+    >
+      <span aria-hidden="true">←</span>
+      <span>{{ t("common.actions.back") }}</span>
+    </button>
 
-    <div class="flex flex-1 items-center py-6 sm:py-8 lg:py-10">
-      <div
-        class="mx-auto grid w-full max-w-6xl items-center gap-6 sm:gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:gap-12"
-      >
-        <section
-          class="mx-auto w-full max-w-2xl px-1 py-2 text-center sm:px-2 sm:py-4 lg:mx-0 lg:px-10 lg:py-10 lg:text-left"
-        >
-          <h1
-            class="text-[clamp(2.25rem,7vw,3.5rem)] leading-[1.05] font-semibold tracking-tight text-stone-900"
-          >
-            <span class="block">{{ t("login.hero.titleLine1") }}</span>
-            <span class="mt-2 block">{{ t("login.hero.titleLine2") }}</span>
+    <main class="mx-auto flex w-full max-w-sm flex-1 items-center py-20 sm:py-16">
+      <section class="w-full">
+        <header class="text-center">
+          <img
+            src="/icon.jpg"
+            alt=""
+            class="mx-auto h-12 w-12 rounded-lg border border-stone-200 object-contain"
+          />
+          <p class="mt-4 text-sm font-semibold tracking-[0.08em] text-stone-700">Ink</p>
+          <h1 class="mt-6 text-3xl font-semibold tracking-tight text-stone-950">
+            {{ t("login.form.title") }}
           </h1>
-        </section>
+        </header>
 
-        <section
-          class="mx-auto w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-8 lg:mx-0 lg:max-w-none lg:p-10"
-        >
-          <h2 class="text-xl font-semibold text-stone-900">{{ t("login.form.title") }}</h2>
-
+        <div class="mt-8 border-y border-stone-200 py-7 sm:mt-10 sm:py-8">
           <p
             v-if="noticeMessage"
-            class="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+            class="mb-5 border-l-2 border-emerald-600 py-1 pl-3 text-sm leading-6 text-emerald-700"
           >
             {{ noticeMessage }}
           </p>
 
-          <form class="mt-6 space-y-4 sm:mt-8 sm:space-y-5" @submit.prevent="handleSubmit">
+          <form class="space-y-6" @submit.prevent="handleSubmit">
             <div>
-              <label for="email" class="mb-2 block text-sm font-medium text-stone-900">
+              <label for="email" class="block text-sm font-medium text-stone-800">
                 {{ t("login.form.accountLabel") }}
               </label>
               <input
                 id="email"
                 v-model="email"
                 type="text"
+                autocomplete="username"
                 :placeholder="t('login.form.accountPlaceholder')"
-                class="w-full rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 transition-colors placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                class="mt-2 w-full border-0 border-b border-stone-300 bg-transparent px-0 py-3 text-base text-stone-950 transition-colors placeholder:text-stone-400 focus:border-amber-700 focus:ring-0 focus:outline-none"
               />
             </div>
             <div>
-              <label for="password" class="mb-2 block text-sm font-medium text-stone-900">
+              <label for="password" class="block text-sm font-medium text-stone-800">
                 {{ t("login.form.passwordLabel") }}
               </label>
-              <div class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3">
+              <div
+                class="mt-2 flex items-center gap-3 border-b border-stone-300 focus-within:border-amber-700"
+              >
                 <input
                   id="password"
                   v-model="password"
                   :type="passwordVisible ? 'text' : 'password'"
+                  autocomplete="current-password"
                   :placeholder="t('login.form.passwordPlaceholder')"
-                  class="min-w-0 flex-1 bg-transparent px-1 py-2.5 text-sm text-stone-900 transition-colors placeholder:text-stone-400 focus:outline-none"
+                  class="min-w-0 flex-1 border-0 bg-transparent px-0 py-3 text-base text-stone-950 placeholder:text-stone-400 focus:ring-0 focus:outline-none"
                 />
                 <button
                   type="button"
-                  class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
+                  class="min-h-10 shrink-0 px-1 text-sm font-medium text-stone-500 transition-colors hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-amber-700 focus-visible:outline-none"
                   @click="passwordVisible = !passwordVisible"
                 >
                   {{ passwordVisible ? t("common.actions.hide") : t("common.actions.show") }}
                 </button>
               </div>
             </div>
-            <p v-if="formError" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+
+            <p
+              v-if="formError"
+              class="border-l-2 border-rose-600 py-1 pl-3 text-sm leading-6 text-rose-700"
+              role="alert"
+            >
               {{ formError }}
             </p>
 
-            <div class="flex flex-col gap-3 sm:flex-row">
-              <button
-                class="ui-btn-primary w-full px-6 py-2.5 sm:w-auto"
-                :disabled="workspaceStore.authLoading"
-              >
-                {{
-                  workspaceStore.authLoading ? t("login.form.loggingIn") : t("common.actions.login")
-                }}
-              </button>
-            </div>
+            <button
+              type="submit"
+              class="ui-btn-primary min-h-12 w-full px-6 text-base"
+              :disabled="workspaceStore.authLoading"
+            >
+              {{
+                workspaceStore.authLoading ? t("login.form.loggingIn") : t("common.actions.login")
+              }}
+            </button>
           </form>
-        </section>
-      </div>
-    </div>
+        </div>
+      </section>
+    </main>
   </div>
 </template>

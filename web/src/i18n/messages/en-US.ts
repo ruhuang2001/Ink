@@ -309,10 +309,6 @@ const enUS = {
     },
   },
   login: {
-    hero: {
-      titleLine1: "Open Ink",
-      titleLine2: "Pick up your paper-note ideas",
-    },
     form: {
       title: "Sign in",
       accountLabel: "Account",
@@ -501,6 +497,11 @@ const enUS = {
     },
   },
   settings: {
+    navigation: {
+      preferences: "Preferences",
+      devices: "Devices",
+      guide: "Guide",
+    },
     account: {
       title: "Account",
       currentAccount: "Current account",
@@ -674,6 +675,7 @@ const enUS = {
     confirmDeleteSchedule: "Delete this scheduled task?",
     recentPrints: "Recent prints",
     connectedPlugins: "Connected plugins",
+    noConnectedPlugins: "No plugins are enabled yet. Add one in Settings.",
     moreSettings: "More settings",
     actions: {
       bindingTutorial: "Binding tutorial",

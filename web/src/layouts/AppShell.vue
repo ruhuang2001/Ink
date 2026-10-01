@@ -33,7 +33,7 @@ const postLoginTutorialSteps = computed(
 const pendingBadge = computed(() =>
   workspaceStore.pendingConfirmationCount > 0 ? workspaceStore.pendingConfirmationCount : "",
 );
-const anonymousDemoRouteNames = new Set(["status", "conversations", "prints"]);
+const anonymousDemoRouteNames = new Set(["conversations", "prints"]);
 const loginTarget = computed(() => ({
   path: "/login",
   query: route.fullPath === DEFAULT_LOGIN_REDIRECT ? undefined : { redirect: route.fullPath },
@@ -42,14 +42,16 @@ const showAnonymousDemoBanner = computed(
   () => !workspaceStore.isAuthenticated && anonymousDemoRouteNames.has(String(route.name ?? "")),
 );
 const visibleNavigationItems = computed(() =>
-  navigationItems
-    .filter((item) => item.name !== "tutorial" || workspaceStore.tutorialTabEnabled)
-    .map((item) => ({
-      ...item,
-      label: t(item.labelKey),
-      navHint: t(item.navHintKey),
-    })),
+  navigationItems.map((item) => ({
+    ...item,
+    label: t(item.labelKey),
+    navHint: t(item.navHintKey),
+  })),
 );
+
+function isNavigationItemActive(path: string) {
+  return path === "/settings" ? route.path.startsWith("/settings") : route.path === path;
+}
 
 function closePostLoginTutorial() {
   workspaceStore.closePostLoginTutorial();
@@ -67,7 +69,7 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="flex min-h-[100dvh] flex-col bg-white text-stone-900">
+  <div class="flex min-h-[100dvh] flex-col bg-stone-50 text-stone-900">
     <AppDialog
       :open="workspaceStore.postLoginTutorialOpen"
       :title="t('shell.postLoginTutorial.title')"
@@ -78,7 +80,7 @@ async function handleLogout() {
         <article
           v-for="(step, index) in postLoginTutorialSteps"
           :key="step.title"
-          class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3"
+          class="border-b border-stone-200 px-1 py-4 last:border-b-0"
         >
           <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
             {{ t("shell.postLoginTutorial.stepLabel", { index: index + 1 }) }}
@@ -98,7 +100,7 @@ async function handleLogout() {
           <button
             type="button"
             class="ui-btn-primary px-4 py-2 text-sm"
-            @click="handlePostLoginTutorialNavigate('/tutorial')"
+            @click="handlePostLoginTutorialNavigate('/settings/guide')"
           >
             {{ t("shell.postLoginTutorial.actions.viewTutorial") }}
           </button>
@@ -107,7 +109,7 @@ async function handleLogout() {
     </AppDialog>
 
     <header
-      class="sticky top-0 z-40 border-b border-stone-200 bg-white/90 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur sm:px-5 lg:bg-white lg:px-8 lg:py-3"
+      class="sticky top-0 z-40 border-b border-stone-200 bg-stone-50/95 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur sm:px-5 lg:px-8 lg:py-3"
     >
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 lg:hidden">
         <div class="flex items-center gap-3">
@@ -173,11 +175,11 @@ async function handleLogout() {
               v-for="item in visibleNavigationItems"
               :key="item.name"
               :to="item.path"
-              class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+              class="relative px-2 py-2 text-sm font-medium transition-colors after:absolute after:inset-x-2 after:-bottom-[0.8rem] after:h-0.5 after:origin-center after:scale-x-0 after:bg-amber-600 after:transition-transform"
               :class="
-                route.name === item.name
-                  ? 'bg-stone-100 text-stone-900'
-                  : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
+                isNavigationItemActive(item.path)
+                  ? 'text-stone-950 after:scale-x-100'
+                  : 'text-stone-500 hover:text-stone-900'
               "
             >
               <span>{{ item.label }}</span>
@@ -247,7 +249,7 @@ async function handleLogout() {
     </div>
 
     <main
-      class="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 lg:px-8 lg:py-8"
+      class="mx-auto w-full max-w-7xl flex-1 px-4 pt-5 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-7 lg:px-8 lg:py-10"
     >
       <RouterView v-slot="{ Component, route: currentRoute }">
         <Transition name="page-swap" mode="out-in">
@@ -257,7 +259,7 @@ async function handleLogout() {
     </main>
 
     <nav
-      class="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 px-3 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur lg:hidden"
+      class="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-stone-50/95 px-3 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] backdrop-blur lg:hidden"
     >
       <div
         class="mx-auto grid max-w-lg gap-1"
@@ -267,11 +269,11 @@ async function handleLogout() {
           v-for="item in visibleNavigationItems"
           :key="item.name"
           :to="item.path"
-          class="flex min-h-12 flex-col items-center justify-center rounded-xl px-2 py-2.5 text-center transition-colors"
+          class="relative flex min-h-12 flex-col items-center justify-center px-2 py-2.5 text-center transition-colors after:absolute after:top-0 after:left-1/2 after:h-0.5 after:w-8 after:-translate-x-1/2 after:scale-x-0 after:bg-amber-600 after:transition-transform"
           :class="
-            route.name === item.name
-              ? 'bg-stone-900 text-white shadow-sm'
-              : 'text-stone-500 hover:bg-stone-50 hover:text-stone-900'
+            isNavigationItemActive(item.path)
+              ? 'text-stone-950 after:scale-x-100'
+              : 'text-stone-500 hover:text-stone-900'
           "
         >
           <span class="block text-xs leading-tight font-medium">
