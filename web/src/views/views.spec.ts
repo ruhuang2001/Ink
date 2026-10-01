@@ -682,6 +682,10 @@ describe("workspace views", () => {
     expect(wrapper.text()).toContain("创建新账号");
     expect(wrapper.text()).toContain("管理员");
     expect(wrapper.text()).toContain("编辑 AI 配置");
+    expect(wrapper.text()).not.toContain("安全规则");
+    expect(wrapper.text()).not.toContain("提交结果");
+    expect(wrapper.text()).not.toContain("账号形式");
+    expect(wrapper.text()).not.toContain("初始权限");
 
     await wrapper
       .findAll("button")
@@ -689,7 +693,6 @@ describe("workspace views", () => {
       ?.trigger("click");
     await flushPromises();
 
-    expect(wrapper.text()).toContain("为成员创建独立登录账号");
     expect(wrapper.find("input[placeholder='例如：alice']").exists()).toBe(true);
   });
 });

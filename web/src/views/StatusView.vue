@@ -81,14 +81,6 @@ async function submitAddDevice() {
     <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div class="space-y-8">
         <section>
-          <div
-            v-if="workspaceStore.printerSyncError"
-            class="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4"
-          >
-            <p class="text-sm font-medium text-amber-900">{{ t("status.syncErrorTitle") }}</p>
-            <p class="mt-1 text-sm text-amber-700">{{ workspaceStore.printerSyncError }}</p>
-          </div>
-
           <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 class="text-base leading-6 font-semibold text-stone-900">
@@ -272,11 +264,6 @@ async function submitAddDevice() {
     <AppDialog
       :open="addDeviceOpen"
       :title="t('status.dialog.title')"
-      :description="
-        workspaceStore.isAuthenticated
-          ? t('status.dialog.description.authenticated')
-          : t('status.dialog.description.anonymous')
-      "
       @close="closeAddDeviceDialog"
     >
       <form class="space-y-4" @submit.prevent="submitAddDevice">
