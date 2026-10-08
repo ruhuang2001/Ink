@@ -3,5 +3,7 @@ overrides:
   js-cookie: 3.0.7
   nanoid: 3.3.18
   picomatch: 4.0.4
+  source-map-js: 1.2.2
+  tinypool: 2.1.2
   undici: 7.29.1
   yaml: 2.8.3

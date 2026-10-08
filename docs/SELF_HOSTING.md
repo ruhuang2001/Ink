@@ -195,3 +195,8 @@ make check-local-ci
 ```
 
 The smoke test uses an isolated PostgreSQL container and does not contact the physical printer provider.
+
+On macOS, local CI exposes the act cache on port `18333` through
+`host.docker.internal` so Docker can reach it even when a VPN changes the
+automatically selected host address. Keep that port free and run local CI jobs
+one at a time. Linux uses act's default cache configuration.

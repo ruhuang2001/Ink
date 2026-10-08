@@ -59,6 +59,16 @@ ensure_action_cache actions/setup-go v7
 ensure_action_cache golangci/golangci-lint-action v9
 
 run_act() {
+  # macOS VPNs can make act select an address that Docker cannot reach.
+  # Advertise Docker's host gateway instead of the auto-detected interface.
+  if [ "$(uname -s)" = "Darwin" ]; then
+    set -- \
+      --cache-server-addr 0.0.0.0 \
+      --cache-server-port 18333 \
+      --cache-server-external-url http://host.docker.internal:18333 \
+      "$@"
+  fi
+
   act \
     --action-offline-mode \
     --container-architecture linux/amd64 \
