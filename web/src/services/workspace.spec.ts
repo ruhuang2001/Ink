@@ -23,6 +23,7 @@ describe("workspace service", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            revision: 7,
             devices: [],
             conversations: [],
             activeConversationId: "",
@@ -49,6 +50,7 @@ describe("workspace service", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            revision: 8,
             devices: [],
             conversations: [],
             activeConversationId: "",
@@ -74,6 +76,7 @@ describe("workspace service", () => {
       );
 
     await expect(fetchWorkspaceStateWithApi("access-token")).resolves.toMatchObject({
+      revision: 7,
       preferences: {
         theme: "light",
       },
@@ -81,6 +84,7 @@ describe("workspace service", () => {
 
     await expect(
       saveWorkspaceStateWithApi("access-token", {
+        revision: 7,
         devices: [],
         conversations: [],
         activeConversationId: "",
@@ -102,10 +106,12 @@ describe("workspace service", () => {
         },
       }),
     ).resolves.toMatchObject({
+      revision: 8,
       serviceBinding: {
         modelName: "Ink AI",
       },
     });
+    expect(JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string).revision).toBe(7);
   });
 
   it("creates users through the admin endpoint", async () => {

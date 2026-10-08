@@ -11,16 +11,18 @@ import (
 	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/workspace"
 	memobirdapi "github.com/ruhuang2001/memobird-go/memobird"
-	memobirdtextrender "github.com/ruhuang2001/memobird-go/textrender"
 )
 
 var (
-	ErrForbidden     = errors.New("forbidden")
-	ErrNotConfigured = errors.New("printer service not configured")
-	ErrNotFound      = errors.New("printer resource not found")
-	ErrInvalidInput  = errors.New("invalid printer input")
-	ErrUnavailable   = errors.New("printer provider unavailable")
+	ErrForbidden       = errors.New("forbidden")
+	ErrNotConfigured   = errors.New("printer service not configured")
+	ErrNotFound        = errors.New("printer resource not found")
+	ErrInvalidInput    = errors.New("invalid printer input")
+	ErrUnavailable     = errors.New("printer provider unavailable")
+	ErrContentTooLarge = errors.New("print content exceeds rendering limits")
 )
+
+const submitPersistenceTimeout = 5 * time.Second
 
 type Binding struct {
 	ID               string
@@ -289,9 +291,7 @@ func (s *Service) RenderPreview(_ context.Context, title string, content string)
 	if title == "" || content == "" {
 		return "", ErrInvalidInput
 	}
-	return memobirdtextrender.RenderBase64PNG(renderPrintableText(title, content), memobirdtextrender.Options{
-		Width: 384, Padding: 18, FontSize: 22, LineHeight: 1.55, FontData: printerFontData,
-	})
+	return renderPrintImage(title, content)
 }
 
 func (s *Service) RenderBlocksPreview(ctx context.Context, title string, blocks []plugins.ContentBlock) (string, error) {
@@ -315,12 +315,18 @@ func (s *Service) createPrintJobForUser(ctx context.Context, userID string, inpu
 		}
 		if existing != nil {
 			if input.SubmitImmediately && existing.Status == workspace.PrintStatusFailed {
+				if _, err := printableTextForRender(existing.Title, existing.Content); err != nil {
+					return workspace.PrintJob{}, err
+				}
 				binding, err := s.repo.FindBindingByID(ctx, userID, existing.PrinterBindingID)
 				if err != nil {
 					return workspace.PrintJob{}, err
 				}
 				if binding == nil {
 					return workspace.PrintJob{}, ErrNotFound
+				}
+				if binding.Status != workspace.DeviceStatusConnected {
+					return workspace.PrintJob{}, ErrInvalidInput
 				}
 				submitted, err := s.submitJob(ctx, *binding, *existing)
 				if err != nil {
@@ -337,6 +343,9 @@ func (s *Service) createPrintJobForUser(ctx context.Context, userID string, inpu
 	bindingID := strings.TrimSpace(input.PrinterBindingID)
 	if title == "" || content == "" || bindingID == "" {
 		return workspace.PrintJob{}, ErrInvalidInput
+	}
+	if _, err := printableTextForRender(title, content); err != nil {
+		return workspace.PrintJob{}, err
 	}
 
 	binding, err := s.repo.FindBindingByID(ctx, userID, bindingID)
@@ -417,6 +426,13 @@ func (s *Service) SubmitPrintJob(ctx context.Context, accessToken string, jobID 
 	}
 	if binding.Status != workspace.DeviceStatusConnected {
 		return workspace.PrintJob{}, ErrInvalidInput
+	}
+
+	if s.accessKey == "" {
+		return workspace.PrintJob{}, ErrNotConfigured
+	}
+	if _, err := printableTextForRender(job.Title, job.Content); err != nil {
+		return workspace.PrintJob{}, err
 	}
 
 	expectedUpdatedAt := job.UpdatedAt
@@ -530,16 +546,22 @@ func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (Job,
 		job.Status = workspace.PrintStatusFailed
 		job.ErrorMessage = new(err.Error())
 		job.UpdatedAt = s.clock.Now()
-		_ = s.repo.SaveJob(ctx, job)
-		return Job{}, fmt.Errorf("%w: %s", ErrInvalidInput, err.Error())
+		resultErr := fmt.Errorf("%w: %s", ErrInvalidInput, err.Error())
+		if saveErr := s.persistSubmittedJob(ctx, job); saveErr != nil {
+			return Job{}, errors.Join(resultErr, fmt.Errorf("persist print job failure: %w", saveErr))
+		}
+		return Job{}, resultErr
 	}
 	resp, err := s.imagePrinter.PrintJob(ctx, client, job)
 	if err != nil {
 		job.Status = workspace.PrintStatusFailed
 		job.ErrorMessage = new(err.Error())
 		job.UpdatedAt = s.clock.Now()
-		_ = s.repo.SaveJob(ctx, job)
-		return Job{}, fmt.Errorf("%w: %s", ErrUnavailable, err.Error())
+		resultErr := fmt.Errorf("%w: %s", ErrUnavailable, err.Error())
+		if saveErr := s.persistSubmittedJob(ctx, job); saveErr != nil {
+			return Job{}, errors.Join(resultErr, fmt.Errorf("persist print job failure: %w", saveErr))
+		}
+		return Job{}, resultErr
 	}
 
 	job.Status = workspace.PrintStatusQueued
@@ -555,10 +577,16 @@ func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (Job,
 	job.NextStatusCheckAt = new(s.clock.Now())
 	job.StatusCheckAttempts = 0
 
-	if err := s.repo.SaveJob(ctx, job); err != nil {
+	if err := s.persistSubmittedJob(ctx, job); err != nil {
 		return Job{}, err
 	}
 	return job, nil
+}
+
+func (s *Service) persistSubmittedJob(ctx context.Context, job Job) error {
+	persistContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), submitPersistenceTimeout)
+	defer cancel()
+	return s.repo.SaveJob(persistContext, job)
 }
 
 func (s *Service) newClient(binding Binding) (*memobirdapi.Client, error) {

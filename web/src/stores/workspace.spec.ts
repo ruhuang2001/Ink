@@ -1,7 +1,10 @@
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, vi } from "vitest";
+import { nextTick } from "vue";
 
+import { translate } from "@/i18n";
 import type { fetchAIConfigSummary, generateAIReply, saveAIConfig } from "@/services/ai";
+import * as aiService from "@/services/ai";
 import type {
   changePasswordWithApi,
   fetchCurrentUser,
@@ -11,7 +14,8 @@ import type {
 } from "@/services/auth";
 import * as authService from "@/services/auth";
 import type { submitFeedbackToAdmin } from "@/services/feedback";
-import { request } from "@/services/http";
+import { AuthApiError, request } from "@/services/http";
+import * as pluginService from "@/services/plugins";
 import type {
   bindPrinter,
   cancelPrintJob,
@@ -23,12 +27,17 @@ import type {
 } from "@/services/printers";
 import { fetchPrintJob, fetchPrintJobs, fetchPrintJobStatuses } from "@/services/printers";
 import * as printerService from "@/services/printers";
-import type { createUserWithApi, fetchWorkspaceStateWithApi } from "@/services/workspace";
-import { saveWorkspaceStateWithApi } from "@/services/workspace";
+import type { createUserWithApi } from "@/services/workspace";
+import { fetchWorkspaceStateWithApi, saveWorkspaceStateWithApi } from "@/services/workspace";
 import { useWorkspaceStore } from "@/stores/workspace";
-import type { PrintJob, PrintJobCounts, PrintJobSummary } from "@/types/workspace";
+import type {
+  PersistedWorkspaceState,
+  PrintJob,
+  PrintJobCounts,
+  PrintJobSummary,
+} from "@/types/workspace";
 
-vi.mock("@/services/auth", () => ({
+vi.mock("@/services/auth", async (importOriginal) => ({
   changePasswordWithApi: vi.fn<typeof changePasswordWithApi>(async () => undefined),
   fetchCurrentUser: vi.fn<typeof fetchCurrentUser>(),
   loginWithApi: vi.fn<typeof loginWithApi>(async ({ email }: { email: string }) => ({
@@ -46,7 +55,7 @@ vi.mock("@/services/auth", () => ({
   })),
   logoutWithApi: vi.fn<typeof logoutWithApi>(async () => undefined),
   refreshAuthSession: vi.fn<typeof refreshAuthSession>(),
-  AuthApiError: class AuthApiError extends Error {},
+  AuthApiError: (await importOriginal<typeof import("@/services/auth")>()).AuthApiError,
 }));
 
 vi.mock("@/services/workspace", () => ({
@@ -57,6 +66,7 @@ vi.mock("@/services/workspace", () => ({
     role: "member",
   })),
   fetchWorkspaceStateWithApi: vi.fn<typeof fetchWorkspaceStateWithApi>(async () => ({
+    revision: 1,
     devices: [],
     conversations: [],
     activeConversationId: "",
@@ -236,10 +246,12 @@ function printCounts(overrides: Partial<PrintJobCounts> = {}): PrintJobCounts {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((fulfill) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((fulfill, fail) => {
     resolve = fulfill;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function trackWorkspaceTimers() {
@@ -508,6 +520,220 @@ describe("workspace store", () => {
     expect(store.postLoginTutorialOpen).toBe(true);
   });
 
+  it.each(["ai", "plugins", "schedules", "adminPlugins"] as const)(
+    "retains core printer and print data when loading %s fails",
+    async (integration) => {
+      const error = new Error(`${integration} unavailable`);
+      const printer = {
+        id: "device-api-1",
+        name: "My printer",
+        status: "connected" as const,
+        note: "",
+      };
+      const job = printSummary("existing-print", "completed");
+      vi.mocked(printerService.fetchPrinters).mockResolvedValueOnce({ devices: [printer] });
+      vi.mocked(fetchPrintJobs)
+        .mockResolvedValueOnce({ printJobs: [], nextCursor: null })
+        .mockResolvedValueOnce({ printJobs: [job], nextCursor: null });
+      if (integration === "ai") {
+        vi.mocked(aiService.fetchAIConfigSummary).mockRejectedValueOnce(error);
+      } else if (integration === "plugins") {
+        vi.mocked(pluginService.fetchPlugins).mockRejectedValueOnce(error);
+      } else if (integration === "schedules") {
+        vi.mocked(pluginService.fetchPrintSchedules).mockRejectedValueOnce(error);
+      } else {
+        vi.mocked(authService.loginWithApi).mockResolvedValueOnce({
+          user: { id: "admin", email: "admin", name: "Administrator", role: "admin" },
+          session: {
+            accessToken: "access-token",
+            refreshToken: "refresh-token",
+            accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+          },
+        });
+        vi.mocked(pluginService.fetchAdminPlugins).mockRejectedValueOnce(error);
+      }
+      const store = useWorkspaceStore();
+
+      await expect(store.login("name@example.com", "secret")).resolves.toBe(true);
+
+      expect(store.devices).toEqual([printer]);
+      expect(store.remotePrintJobs).toEqual([job]);
+      expect(store.printerSyncError).toBe("");
+      expect(store.aiConfigError).toBe(integration === "ai" ? error.message : "");
+      expect(store.pluginError).toBe(integration === "ai" ? "" : error.message);
+      expect(store.aiConfigSummary.model).toBe(integration === "ai" ? "Ink AI" : "gpt-4.1-mini");
+    },
+  );
+
+  it("discards a device binding response after signing in to another account", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = useWorkspaceStore();
+      await store.login("a@example.com", "secret");
+      const binding = deferred<Awaited<ReturnType<typeof printerService.bindPrinter>>>();
+      vi.mocked(printerService.bindPrinter).mockReturnValueOnce(binding.promise);
+      const adding = store.addDevice({
+        name: "A printer",
+        deviceId: "a-device",
+        setAsDefault: true,
+      });
+
+      await store.logout();
+      vi.mocked(authService.loginWithApi).mockResolvedValueOnce({
+        user: { id: "user-b", email: "b@example.com", name: "B", role: "member" },
+        session: {
+          accessToken: "b-token",
+          refreshToken: "b-refresh",
+          accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+        },
+      });
+      await store.login("b@example.com", "secret");
+      vi.mocked(saveWorkspaceStateWithApi).mockClear();
+      const flash = store.flashMessage;
+      binding.resolve({ id: "a-binding", name: "A printer", status: "connected", note: "" });
+
+      await expect(adding).resolves.toBeNull();
+      await vi.advanceTimersByTimeAsync(750);
+      expect(store.authUser?.id).toBe("user-b");
+      expect(store.devices).toEqual([]);
+      expect(store.defaultDeviceId).toBe("");
+      expect(store.flashMessage).toBe(flash);
+      expect(saveWorkspaceStateWithApi).not.toHaveBeenCalled();
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("preserves a new login when an older unauthorized request fails to refresh", async () => {
+    const store = authenticateStore();
+    const refreshed = deferred<Awaited<ReturnType<typeof authService.refreshAuthSession>>>();
+    const refreshStarted = deferred<void>();
+    vi.mocked(authService.refreshAuthSession).mockImplementationOnce(() => {
+      refreshStarted.resolve();
+      return refreshed.promise;
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "expired" }), { status: 401 }));
+    const response = request("/api/v1/account-check", {
+      headers: { Authorization: "Bearer access-token" },
+    }).catch((error: unknown) => error);
+    await refreshStarted.promise;
+
+    await store.logout();
+    vi.mocked(authService.loginWithApi).mockResolvedValueOnce({
+      user: { id: "user-b", email: "b@example.com", name: "B", role: "member" },
+      session: {
+        accessToken: "b-token",
+        refreshToken: "b-refresh",
+        accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+      },
+    });
+    await store.login("b@example.com", "secret");
+    refreshed.reject(new Error("Old refresh token revoked"));
+
+    await expect(response).resolves.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(store.isAuthenticated).toBe(true);
+    expect(store.authUser?.id).toBe("user-b");
+    expect(store.authSession?.accessToken).toBe("b-token");
+  });
+
+  it.each(["unauthorized", "expired", "invalidExpiry"] as const)(
+    "restores guest data without persisting account content when the session is %s",
+    async (failure) => {
+      const store = useWorkspaceStore();
+      store.updateCurrentDraft("guest draft to retain");
+      await nextTick();
+      const guest = JSON.parse(
+        window.localStorage.getItem("ink.workspace.v1")!,
+      ) as PersistedWorkspaceState;
+      await store.login("name@example.com", "secret");
+      store.updateCurrentDraft("account content that must stay private");
+      await nextTick();
+      const storage = window.localStorage;
+      // jsdom Storage owns its methods on the prototype; the test setup's
+      // fallback storage exposes them directly on the instance.
+      const storageMethods: Storage = Object.hasOwn(storage, "setItem")
+        ? storage
+        : Object.getPrototypeOf(storage);
+      const writes = vi.spyOn(storageMethods, "setItem");
+
+      if (failure === "unauthorized") {
+        vi.mocked(authService.refreshAuthSession).mockRejectedValueOnce(
+          new Error("Session expired"),
+        );
+        vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+          new Response(JSON.stringify({ message: "expired" }), { status: 401 }),
+        );
+        await request("/api/v1/expiry-check", {
+          headers: { Authorization: "Bearer access-token" },
+        }).catch(() => undefined);
+      } else {
+        store.authSession!.accessTokenExpiresAt =
+          failure === "expired" ? new Date(Date.now() - 1000).toISOString() : "invalid";
+        if (failure === "expired") {
+          vi.mocked(authService.refreshAuthSession).mockRejectedValueOnce(
+            new Error("Session expired"),
+          );
+        }
+        await store.refreshSessionIfNeeded();
+      }
+      await nextTick();
+
+      expect(store.isAuthenticated).toBe(false);
+      expect(store.conversations).toEqual(guest.conversations);
+      expect(store.devices).toEqual(guest.devices);
+      const saved = window.localStorage.getItem("ink.workspace.v1")!;
+      expect(saved).toContain("guest draft to retain");
+      expect(saved).not.toContain("account content that must stay private");
+      expect(writes).toHaveBeenCalled();
+      expect(
+        writes.mock.calls.every(
+          ([, value]) => !value.includes("account content that must stay private"),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each(["resolved", "rejected"] as const)(
+    "preserves a new login after an older expiry refresh is %s",
+    async (outcome) => {
+      const store = authenticateStore();
+      store.authSession!.accessTokenExpiresAt = new Date(Date.now() - 1000).toISOString();
+      const oldUser = store.authUser!;
+      const oldSession = { ...store.authSession! };
+      const refreshed = deferred<Awaited<ReturnType<typeof authService.refreshAuthSession>>>();
+      vi.mocked(authService.refreshAuthSession).mockReturnValueOnce(refreshed.promise);
+      const refreshing = store.refreshSessionIfNeeded();
+
+      await store.logout();
+      vi.mocked(authService.loginWithApi).mockResolvedValueOnce({
+        user: { id: "user-b", email: "b@example.com", name: "B", role: "member" },
+        session: {
+          accessToken: "b-token",
+          refreshToken: "b-refresh",
+          accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+        },
+      });
+      await store.login("b@example.com", "secret");
+      if (outcome === "resolved") {
+        refreshed.resolve({
+          user: oldUser,
+          session: { ...oldSession, accessToken: "a-refreshed" },
+        });
+      } else {
+        refreshed.reject(new Error("Old refresh token revoked"));
+      }
+
+      await expect(refreshing).resolves.toBe(false);
+      expect(store.isAuthenticated).toBe(true);
+      expect(store.authUser?.id).toBe("user-b");
+      expect(store.authSession?.accessToken).toBe("b-token");
+    },
+  );
+
   it("persists changes made while a remote workspace save is in flight", async () => {
     vi.useFakeTimers();
     let finishFirstSave!: () => void;
@@ -540,6 +766,280 @@ describe("workspace store", () => {
         "light",
       );
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends each saved revision with the next workspace change", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(saveWorkspaceStateWithApi).mockImplementationOnce(async (_token, state) => ({
+        ...state,
+        revision: 2,
+      }));
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      store.updateCurrentDraft("first change");
+      await vi.advanceTimersByTimeAsync(750);
+      store.updateCurrentDraft("second change");
+      await vi.advanceTimersByTimeAsync(750);
+
+      expect(
+        vi.mocked(saveWorkspaceStateWithApi).mock.calls.map(([, state]) => state.revision),
+      ).toEqual([1, 2]);
+      expect(store.activeConversation?.draft).toBe("second change");
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(saveWorkspaceStateWithApi).toHaveBeenCalledTimes(2);
+      expect(fetchPrintJobStatuses).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    [409, "workspace_conflict"],
+    [428, "workspace_revision_required"],
+  ] as const)(
+    "preserves local edits after a %s save conflict until an explicit reload",
+    async (status, code) => {
+      vi.useFakeTimers();
+      try {
+        const store = useWorkspaceStore();
+        await store.login("name@example.com", "secret");
+        vi.mocked(saveWorkspaceStateWithApi).mockRejectedValueOnce(
+          new AuthApiError(status, code, "Workspace changed elsewhere"),
+        );
+        store.updateCurrentDraft("local draft to retain");
+        await vi.advanceTimersByTimeAsync(750);
+
+        expect(store.workspaceConflict).toBe(true);
+        expect(store.workspaceSyncError).toBe(translate(`errors.api.${code}`));
+        expect(store.activeConversation?.draft).toBe("local draft to retain");
+        store.updateCurrentDraft("further local edit");
+        await vi.advanceTimersByTimeAsync(750);
+        await expect(store.retrySynchronization()).resolves.toBe(false);
+        expect(saveWorkspaceStateWithApi).toHaveBeenCalledTimes(1);
+        expect(store.activeConversation?.draft).toBe("further local edit");
+
+        const latest = await fetchWorkspaceStateWithApi("access-token");
+        vi.mocked(fetchWorkspaceStateWithApi).mockResolvedValueOnce({ ...latest, revision: 3 });
+        await expect(store.reloadConflictedWorkspace()).resolves.toBe(true);
+        expect(store.workspaceConflict).toBe(false);
+        expect(store.workspaceSyncError).toBe("");
+        store.updateCurrentDraft("after reload");
+        await vi.advanceTimersByTimeAsync(750);
+        expect(vi.mocked(saveWorkspaceStateWithApi).mock.calls.at(-1)?.[1].revision).toBe(3);
+      } finally {
+        vi.clearAllTimers();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("retries a failed save without replacing its current draft", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      vi.mocked(saveWorkspaceStateWithApi).mockRejectedValueOnce(new Error("Connection lost"));
+      store.updateCurrentDraft("draft remains local");
+      await vi.advanceTimersByTimeAsync(750);
+      expect(store.workspaceSyncError).toBe("Connection lost");
+      expect(store.workspaceConflict).toBe(false);
+
+      await expect(store.retrySynchronization()).resolves.toBe(true);
+      expect(store.workspaceSyncError).toBe("");
+      expect(store.activeConversation?.draft).toBe("draft remains local");
+      expect(saveWorkspaceStateWithApi).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("saves a new account edit while an old account save remains in flight", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = useWorkspaceStore();
+      await store.login("a@example.com", "secret");
+      const oldSave = deferred<Awaited<ReturnType<typeof saveWorkspaceStateWithApi>>>();
+      vi.mocked(saveWorkspaceStateWithApi).mockReturnValueOnce(oldSave.promise);
+      store.updateCurrentDraft("A private draft");
+      await vi.advanceTimersByTimeAsync(750);
+      const oldSnapshot = vi.mocked(saveWorkspaceStateWithApi).mock.calls[0]![1];
+      store.authSession = null;
+      store.authUser = null;
+      vi.mocked(authService.loginWithApi).mockResolvedValueOnce({
+        user: { id: "user-b", email: "b@example.com", name: "B", role: "member" },
+        session: {
+          accessToken: "b-token",
+          refreshToken: "b-refresh",
+          accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+        },
+      });
+      await store.login("b@example.com", "secret");
+      store.updateCurrentDraft("B single edit");
+      await vi.advanceTimersByTimeAsync(750);
+      expect(saveWorkspaceStateWithApi).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(saveWorkspaceStateWithApi).mock.calls[1]?.[0]).toBe("b-token");
+      expect(vi.mocked(saveWorkspaceStateWithApi).mock.calls[1]?.[1].conversations[0]?.draft).toBe(
+        "B single edit",
+      );
+      oldSave.resolve({ ...oldSnapshot, revision: 99 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.activeConversation?.draft).toBe("B single edit");
+      expect(store.workspaceSyncError).toBe("");
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("blocks conversation edits while a confirmed reload is in flight", async () => {
+    const store = useWorkspaceStore();
+    await store.login("name@example.com", "secret");
+    store.updateCurrentDraft("before reload");
+    const latest = await fetchWorkspaceStateWithApi("access-token");
+    const loading = deferred<Awaited<ReturnType<typeof fetchWorkspaceStateWithApi>>>();
+    vi.mocked(fetchWorkspaceStateWithApi).mockReturnValueOnce(loading.promise);
+    const reload = store.reloadConflictedWorkspace();
+    const conversation = store.activeConversation!;
+    store.updateCurrentDraft("must not disappear");
+    store.createConversation();
+    expect(store.deleteConversation(conversation.id)).toBe(false);
+    await expect(store.sendCurrentDraft()).resolves.toBe(false);
+    expect(store.activeConversation?.draft).toBe("before reload");
+    expect(store.conversations).toHaveLength(1);
+    loading.resolve({ ...latest, revision: 3 });
+    await expect(reload).resolves.toBe(true);
+    store.updateCurrentDraft("after reload");
+    expect(store.activeConversation?.draft).toBe("after reload");
+  });
+
+  it("unlocks guest controls when signing out during a workspace reload", async () => {
+    const store = useWorkspaceStore();
+    await store.login("name@example.com", "secret");
+    const latest = await fetchWorkspaceStateWithApi("access-token");
+    const loading = deferred<Awaited<ReturnType<typeof fetchWorkspaceStateWithApi>>>();
+    vi.mocked(fetchWorkspaceStateWithApi).mockReturnValueOnce(loading.promise);
+    const reload = store.reloadConflictedWorkspace();
+    expect(store.workspaceLoading).toBe(true);
+    await store.logout();
+    expect(store.workspaceLoading).toBe(false);
+    store.updateCurrentDraft("guest can edit after logout");
+    expect(store.activeConversation?.draft).toBe("guest can edit after logout");
+    loading.resolve(latest);
+    await expect(reload).resolves.toBe(false);
+    expect(store.workspaceLoading).toBe(false);
+    expect(store.activeConversation?.draft).toBe("guest can edit after logout");
+  });
+
+  it("does not clear a new account when an older login workspace load finishes", async () => {
+    const store = useWorkspaceStore();
+    const latest = await fetchWorkspaceStateWithApi("access-token");
+    const loading = deferred<Awaited<ReturnType<typeof fetchWorkspaceStateWithApi>>>();
+    const started = deferred<void>();
+    vi.mocked(fetchWorkspaceStateWithApi).mockImplementationOnce(() => {
+      started.resolve();
+      return loading.promise;
+    });
+    const loggingInA = store.login("a@example.com", "secret");
+    await started.promise;
+    await store.logout();
+    vi.mocked(authService.loginWithApi).mockResolvedValueOnce({
+      user: { id: "user-b", email: "b@example.com", name: "B", role: "member" },
+      session: {
+        accessToken: "b-token",
+        refreshToken: "b-refresh",
+        accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+      },
+    });
+    await store.login("b@example.com", "secret");
+    store.updateCurrentDraft("B draft stays private");
+    loading.resolve(latest);
+    await expect(loggingInA).resolves.toBe(false);
+    expect(store.authUser?.id).toBe("user-b");
+    expect(store.authSession?.accessToken).toBe("b-token");
+    expect(store.activeConversation?.draft).toBe("B draft stays private");
+  });
+
+  it("bootstraps an expired persisted session after its own successful refresh", async () => {
+    window.localStorage.setItem(
+      "ink.auth.session.v1",
+      JSON.stringify({
+        accessToken: "expired-token",
+        refreshToken: "refresh-token",
+        accessTokenExpiresAt: new Date(Date.now() - 1000).toISOString(),
+      }),
+    );
+    vi.mocked(authService.refreshAuthSession).mockResolvedValueOnce({
+      user: { id: "user-1", email: "name@example.com", name: "Ink User", role: "member" },
+      session: {
+        accessToken: "refreshed-token",
+        refreshToken: "next-refresh",
+        accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+      },
+    });
+    const store = useWorkspaceStore();
+    await expect(store.initializeAuth()).resolves.toBe(true);
+    expect(store.authSession?.accessToken).toBe("refreshed-token");
+    expect(store.authBootstrapping).toBe(false);
+    expect(store.conversations).toHaveLength(1);
+  });
+
+  it("downloads the local draft without credentials or a network save", async () => {
+    const store = useWorkspaceStore();
+    await store.login("name@example.com", "secret");
+    store.updateCurrentDraft("keep this local draft");
+    const createObjectURL = vi.fn<(blob: Blob) => string>(() => "blob:draft");
+    const revokeObjectURL = vi.fn<(url: string) => void>();
+    const nativeURL = globalThis.URL;
+    vi.stubGlobal(
+      "URL",
+      Object.assign(class extends nativeURL {}, { createObjectURL, revokeObjectURL }),
+    );
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    try {
+      store.downloadWorkspaceDraft();
+      const blob = createObjectURL.mock.calls[0]![0];
+      const exported = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.addEventListener("load", () => resolve(String(reader.result)), { once: true });
+        reader.addEventListener("error", () => reject(reader.error), { once: true });
+        reader.readAsText(blob);
+      });
+      expect(JSON.parse(exported).conversations[0].draft).toBe("keep this local draft");
+      expect(exported).not.toContain("access-token");
+      expect(exported).not.toContain("refresh-token");
+      expect(click).toHaveBeenCalledOnce();
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:draft");
+      expect(saveWorkspaceStateWithApi).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      click.mockRestore();
+    }
+  });
+
+  it("retains a device loading failure across successful print polls and allows retry", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(printerService.fetchPrinters).mockRejectedValueOnce(
+        new Error("Printer list unavailable"),
+      );
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      expect(store.printerSyncError).toBe("Printer list unavailable");
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(store.printerSyncError).toBe("Printer list unavailable");
+
+      await expect(store.retrySynchronization()).resolves.toBe(true);
+      expect(store.printerSyncError).toBe("");
+      expect(printerService.fetchPrinters).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });

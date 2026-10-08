@@ -206,7 +206,7 @@ const enUS = {
     },
     errors: {
       syncPrintStatus: "Unable to load print status. Please try again later.",
-      syncWorkspace: "Unable to load data. Please try again later.",
+      syncWorkspace: "Unable to save data. Please try again later.",
       loadAccountData: "Unable to load account data. Please try again later.",
       loadIntegrations:
         "Unable to load plugins, devices, and AI configuration. Please try again later.",
@@ -256,6 +256,7 @@ const enUS = {
       scheduleManualSource: "Created manually",
       scheduleTimeFallback: "Every day 19:30",
       deviceName: "Memobird {count}",
+      removedDevice: "Removed device",
       devicePendingNote: "Waiting to bind",
       pluginGitRepo: "Git repository: {url}",
       pluginDefaultNote: "Can be used as a scheduled print content source",
@@ -276,6 +277,18 @@ const enUS = {
       "Absolutely. You could print it like this: {prompt}{summary} Leave one blank line so it fits the paper note better.",
   },
   shell: {
+    syncErrors: {
+      title: "Some data could not be synchronized",
+      workspace: "Workspace: {message}",
+      printers: "Devices and printing: {message}",
+      ai: "AI service: {message}",
+      extensions: "Extensions: {message}",
+      retry: "Retry",
+      reload: "Reload workspace",
+      download: "Download local draft JSON",
+      confirmReload:
+        "The workspace changed elsewhere. Reloading will discard unsaved changes. Reload now?",
+    },
     postLoginTutorial: {
       title: "Bind a device before you start",
       description:
@@ -867,6 +880,12 @@ const enUS = {
       printer_resource_not_found: "The device or print job could not be found.",
       invalid_printer_input: "Enter valid device or print information.",
       printer_unavailable: "The Memobird service is temporarily unavailable.",
+      print_content_too_large:
+        "Content exceeds the print limits. Split it before previewing or printing: title 512 bytes, body 64 KiB, 8,000 characters total, and image height 8,192 pixels. Avoid excessive consecutive zero-width characters.",
+      workspace_conflict:
+        "This workspace was updated elsewhere. Your local draft is retained. Download it or reload before saving again.",
+      workspace_revision_required:
+        "Download any local draft you want to keep, then reload the workspace before saving.",
       invalid_feedback_input: "Enter feedback content.",
       feedback_recipient_missing: "No admin account is available to receive feedback.",
       feedback_printer_missing: "The admin account does not have a default Memobird yet.",

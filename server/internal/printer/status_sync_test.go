@@ -139,7 +139,7 @@ func (p *countingImagePipeline) PrintJob(context.Context, *memobirdapi.Client, J
 func TestSubmitDoesNotPrintAfterPendingVersionChanges(t *testing.T) {
 	now := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	repo := statusFixture(now, 0)
-	repo.jobs["job-1"] = Job{ID: "job-1", UserID: "user-1", PrinterBindingID: "device-1", Status: workspace.PrintStatusPending, CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Second)}
+	repo.jobs["job-1"] = Job{ID: "job-1", UserID: "user-1", PrinterBindingID: "device-1", Title: "Receipt", Content: "Test receipt content", Status: workspace.PrintStatusPending, CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Second)}
 	repo.forcePendingSaveMiss = true
 	pipeline := &countingImagePipeline{}
 	service := NewService(repo, fakeAuthenticator{}, nil, fakeClock{now: now}, "key", "", time.Second)
@@ -166,7 +166,7 @@ func TestSubmitOnlySendsPrintAndSchedulesBackgroundCheck(t *testing.T) {
 	defer provider.Close()
 	now := time.Date(2026, 10, 1, 0, 0, 0, 234567000, time.UTC)
 	repo := statusFixture(now, 0)
-	repo.jobs["job-1"] = Job{ID: "job-1", UserID: "user-1", PrinterBindingID: "device-1", Status: workspace.PrintStatusPending, CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Second)}
+	repo.jobs["job-1"] = Job{ID: "job-1", UserID: "user-1", PrinterBindingID: "device-1", Title: "Receipt", Content: "Test receipt content", Status: workspace.PrintStatusPending, CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Second)}
 	service := NewService(repo, fakeAuthenticator{}, nil, fakeClock{now: now}, "key", provider.URL, time.Second)
 	service.imagePrinter = successfulImagePipeline{}
 	job, err := service.SubmitPrintJob(t.Context(), "token", "job-1")

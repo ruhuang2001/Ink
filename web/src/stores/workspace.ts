@@ -410,6 +410,7 @@ function normalizeWorkspaceState(state: Partial<WorkspaceState>): WorkspaceState
       : normalizeConversations(state.conversations);
 
   return {
+    revision: state.revision,
     devices: state.devices ?? seed.devices,
     conversations,
     activeConversationId: resolveActiveConversationId(state.activeConversationId, conversations),
@@ -585,12 +586,16 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const workspaceLoading = ref(false);
   const workspaceSyncing = ref(false);
   const workspaceSyncError = ref("");
+  const workspaceConflict = ref(false);
+  const workspaceRevision = ref(0);
   const accountCreationLoading = ref(false);
   const accountCreationError = ref("");
   const aiConfigLoading = ref(false);
   const aiConfigSaving = ref(false);
   const aiConfigError = ref("");
-  const printerSyncError = ref("");
+  const deviceSyncError = ref("");
+  const printSyncError = ref("");
+  const printerSyncError = computed(() => deviceSyncError.value || printSyncError.value);
   const pluginLoading = ref(false);
   const pluginSaving = ref(false);
   const pluginUploadLoading = ref(false);
@@ -678,7 +683,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       setAuthState(refreshed.user, refreshed.session);
       return refreshed.session.accessToken;
     } catch {
-      if (!disposed) clearAuthState();
+      if (!disposed && authSession.value?.accessToken === accessToken) {
+        clearAuthState();
+        restoreAnonymousWorkspace();
+      }
       return null;
     }
   });
@@ -785,6 +793,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   });
 
   const workspaceState = computed<WorkspaceState>(() => ({
+    revision: workspaceRevision.value || undefined,
     devices: devices.value,
     conversations: conversations.value,
     activeConversationId: activeConversationId.value,
@@ -842,6 +851,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       !authSession.value ||
       !authUser.value ||
       workspaceOwnerId.value !== authUser.value.id ||
+      workspaceConflict.value ||
       workspaceHydrating.value
     ) {
       return;
@@ -857,6 +867,12 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     [() => authUser.value?.id, () => !!authSession.value],
     () => {
       remotePrintAccountVersion++;
+      remoteSavePromise = null;
+      remoteSavePending = false;
+      workspaceSyncing.value = false;
+      workspaceConflict.value = false;
+      workspaceLoading.value = false;
+      workspaceHydrating.value = false;
       remotePrintPageVersion++;
       remotePrintMutationVersion++;
       clearRemotePrintStatusSync();
@@ -925,6 +941,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   function applyWorkspaceState(nextState: WorkspaceState) {
     const normalized = normalizeWorkspaceState(nextState);
+    workspaceRevision.value = normalized.revision ?? 0;
     devices.value = normalized.devices;
     conversations.value = normalized.conversations;
     activeConversationId.value = normalized.activeConversationId;
@@ -1009,10 +1026,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           latestRemotePrintJobId = metadata.latestJobId;
         }
         remotePrintJobsReady.value = true;
-        printerSyncError.value = "";
+        printSyncError.value = "";
       } catch (error) {
         if (accountVersion === remotePrintAccountVersion) {
-          printerSyncError.value = getErrorMessage(error, "store.errors.loadIntegrations");
+          printSyncError.value = getErrorMessage(error, "store.errors.loadIntegrations");
         }
         throw error;
       } finally {
@@ -1054,10 +1071,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         if (accountVersion !== remotePrintAccountVersion) return;
         mergeRemotePrintJobs(page.printJobs, mutationVersion !== remotePrintMutationVersion);
         if (pageVersion === remotePrintPageVersion) cursor.value = page.nextCursor;
-        printerSyncError.value = "";
+        printSyncError.value = "";
       } catch (error) {
         if (accountVersion === remotePrintAccountVersion) {
-          printerSyncError.value = getErrorMessage(error, "store.errors.loadIntegrations");
+          printSyncError.value = getErrorMessage(error, "store.errors.loadIntegrations");
         }
       } finally {
         if (printPagePromises.get(status) === promise) {
@@ -1196,14 +1213,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
             latestRemotePrintJobId = metadata.latestJobId;
           }
         }
-        printerSyncError.value = "";
+        printSyncError.value = "";
         remotePrintStatusBackoffMs =
           (remotePrintCounts.value?.queued ?? 0) > 0
             ? REMOTE_PRINT_STATUS_POLL_MS
             : REMOTE_PRINT_STATUS_IDLE_POLL_MS;
       } catch (error) {
         if (accountVersion !== remotePrintAccountVersion) return;
-        printerSyncError.value = getErrorMessage(error, "store.errors.syncPrintStatus");
+        printSyncError.value = getErrorMessage(error, "store.errors.syncPrintStatus");
         remotePrintStatusBackoffMs = Math.min(
           Math.max(remotePrintStatusBackoffMs * 2, REMOTE_PRINT_STATUS_POLL_MS),
           REMOTE_PRINT_STATUS_MAX_BACKOFF_MS,
@@ -1239,11 +1256,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     });
     workspaceHydrating.value = false;
     workspaceSyncError.value = "";
-    printerSyncError.value = "";
+    workspaceConflict.value = false;
+    deviceSyncError.value = "";
+    printSyncError.value = "";
   }
 
   async function persistRemoteWorkspace() {
     if (disposed) return true;
+    if (workspaceConflict.value) return false;
     if (remoteSavePromise) {
       remoteSavePending = true;
       return remoteSavePromise;
@@ -1251,6 +1271,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     const currentSession = authSession.value;
     const currentUser = authUser.value;
+    const accountVersion = remotePrintAccountVersion;
 
     if (!currentSession || !currentUser || workspaceOwnerId.value !== currentUser.id) {
       return true;
@@ -1258,13 +1279,15 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     workspaceSyncing.value = true;
     workspaceSyncError.value = "";
-    remoteSavePromise = (async () => {
+    let promise!: Promise<boolean>;
+    promise = (async () => {
       try {
         do {
           remoteSavePending = false;
           const saveSession = authSession.value;
           if (
             disposed ||
+            accountVersion !== remotePrintAccountVersion ||
             !saveSession ||
             authUser.value?.id !== currentUser.id ||
             workspaceOwnerId.value !== currentUser.id
@@ -1272,7 +1295,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
             return true;
           }
           const snapshot = JSON.parse(JSON.stringify(workspaceState.value)) as WorkspaceState;
-          await saveWorkspaceStateWithApi(saveSession.accessToken, snapshot);
+          const saved = await saveWorkspaceStateWithApi(saveSession.accessToken, snapshot);
+          if (accountVersion !== remotePrintAccountVersion) return false;
+          workspaceRevision.value = saved.revision ?? workspaceRevision.value;
         } while (
           remoteSavePending &&
           authUser.value?.id === currentUser.id &&
@@ -1280,15 +1305,23 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         );
         return true;
       } catch (error) {
+        if (accountVersion !== remotePrintAccountVersion) return false;
+        workspaceConflict.value =
+          error instanceof AuthApiError &&
+          (error.code === "workspace_conflict" || error.code === "workspace_revision_required");
+        remoteSavePending = false;
         workspaceSyncError.value = getErrorMessage(error, "store.errors.syncWorkspace");
         return false;
       } finally {
-        workspaceSyncing.value = false;
-        remoteSavePromise = null;
+        if (remoteSavePromise === promise) {
+          workspaceSyncing.value = false;
+          remoteSavePromise = null;
+        }
       }
     })();
+    remoteSavePromise = promise;
 
-    return remoteSavePromise;
+    return promise;
   }
 
   async function flushRemoteWorkspaceSave() {
@@ -1322,6 +1355,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       await loadLiveIntegrations(currentSession.accessToken);
       if (accountVersion !== remotePrintAccountVersion) return false;
       workspaceOwnerId.value = currentUser.id;
+      workspaceConflict.value = false;
       return true;
     } catch (error) {
       if (accountVersion !== remotePrintAccountVersion) return false;
@@ -1338,45 +1372,108 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   async function loadLiveIntegrations(accessToken: string) {
     if (disposed) return;
     aiConfigLoading.value = true;
+    aiConfigError.value = "";
     pluginLoading.value = true;
-    printerSyncError.value = "";
     pluginError.value = "";
     const accountVersion = remotePrintAccountVersion;
 
     try {
-      const [aiSummary, printerResponse, , pluginResponse, scheduleResponse] = await Promise.all([
+      const [
+        aiSummary,
+        printerResponse,
+        printsResponse,
+        pluginResponse,
+        scheduleResponse,
+        adminResponse,
+      ] = await Promise.allSettled([
         fetchAIConfigSummary(accessToken),
         fetchPrinters(accessToken),
         refreshRemotePrintJobs(),
         fetchPlugins(accessToken),
         fetchPrintSchedules(accessToken),
+        authUser.value?.role === "admin"
+          ? fetchAdminPlugins(accessToken)
+          : Promise.resolve({ plugins: [] }),
       ]);
 
       if (accountVersion !== remotePrintAccountVersion) return;
-      applyAIConfig(aiSummary);
-      devices.value = printerResponse.devices.filter((device) => device.status !== "offline");
-      availablePlugins.value = pluginResponse.plugins;
-      remoteSchedules.value = scheduleResponse.schedules;
-
-      if (authUser.value?.role === "admin") {
-        const adminResponse = await fetchAdminPlugins(accessToken);
-        if (accountVersion !== remotePrintAccountVersion) return;
-        adminPlugins.value = adminResponse.plugins;
+      if (aiSummary.status === "fulfilled") {
+        applyAIConfig(aiSummary.value);
       } else {
-        adminPlugins.value = [];
+        aiConfigError.value = getErrorMessage(aiSummary.reason, "store.errors.loadIntegrations");
       }
-    } catch (error) {
-      if (accountVersion !== remotePrintAccountVersion) return;
-      const message = getErrorMessage(error, "store.errors.loadIntegrations");
-      aiConfigError.value = message;
-      printerSyncError.value = message;
-      pluginError.value = message;
+      if (printerResponse.status === "fulfilled") {
+        deviceSyncError.value = "";
+        devices.value = printerResponse.value.devices.filter(
+          (device) => device.status !== "offline",
+        );
+      } else {
+        deviceSyncError.value = getErrorMessage(
+          printerResponse.reason,
+          "store.errors.loadIntegrations",
+        );
+      }
+      if (printsResponse.status === "rejected") {
+        printSyncError.value = getErrorMessage(
+          printsResponse.reason,
+          "store.errors.loadIntegrations",
+        );
+      }
+      if (pluginResponse.status === "fulfilled") {
+        availablePlugins.value = pluginResponse.value.plugins;
+      }
+      if (scheduleResponse.status === "fulfilled") {
+        remoteSchedules.value = scheduleResponse.value.schedules;
+      }
+      if (adminResponse.status === "fulfilled") {
+        adminPlugins.value = adminResponse.value.plugins;
+      }
+      for (const response of [pluginResponse, scheduleResponse, adminResponse]) {
+        if (response.status === "rejected") {
+          pluginError.value = getErrorMessage(response.reason, "store.errors.loadIntegrations");
+          break;
+        }
+      }
     } finally {
       if (accountVersion === remotePrintAccountVersion) {
         aiConfigLoading.value = false;
         pluginLoading.value = false;
       }
     }
+  }
+
+  async function retrySynchronization() {
+    if (!isAuthenticated.value || workspaceLoading.value || workspaceSyncing.value) return false;
+    if (workspaceSyncError.value && !workspaceConflict.value) await persistRemoteWorkspace();
+    const session = authSession.value;
+    if (session && (printerSyncError.value || aiConfigError.value || pluginError.value)) {
+      await loadLiveIntegrations(session.accessToken);
+    }
+    return (
+      !workspaceSyncError.value &&
+      !printerSyncError.value &&
+      !aiConfigError.value &&
+      !pluginError.value
+    );
+  }
+
+  async function reloadConflictedWorkspace() {
+    if (workspaceLoading.value || isGenerating.value || isCreatingPrint.value) return false;
+    if (remoteSaveTimer) {
+      window.clearTimeout(remoteSaveTimer);
+      remoteSaveTimer = 0;
+    }
+    return loadRemoteWorkspace();
+  }
+
+  function downloadWorkspaceDraft() {
+    const json = JSON.stringify(workspaceState.value, null, 2);
+    const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "ink-workspace-draft.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   function showFlash(message: string, tone: "success" | "error" | "info" = "info") {
@@ -1430,6 +1527,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function selectConversation(conversationId: string) {
+    if (workspaceLoading.value) return;
     activeConversationId.value = conversationId;
     generationError.value = "";
     selectedConversationMessageIds.value = [];
@@ -1454,6 +1552,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function createConversation() {
+    if (workspaceLoading.value) return;
     const conversation = createEmptyConversation();
 
     conversations.value = [conversation, ...conversations.value];
@@ -1462,6 +1561,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function deleteConversation(conversationId: string) {
+    if (workspaceLoading.value) return false;
     const remaining = conversations.value.filter(
       (conversation) => conversation.id !== conversationId,
     );
@@ -1494,6 +1594,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function updateCurrentDraft(value: string) {
+    if (workspaceLoading.value) return;
     const currentConversation = ensureActiveConversation();
 
     updateConversation(currentConversation.id, (conversation) => ({
@@ -1510,6 +1611,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function sendCurrentDraft() {
+    if (workspaceLoading.value) return false;
     const conversation = ensureActiveConversation();
 
     if (isGenerating.value) {
@@ -1582,6 +1684,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function regenerateLatestReply() {
+    if (workspaceLoading.value) return false;
     const conversation = activeConversation.value;
     let latestUserMessage: ConversationMessage | undefined;
 
@@ -1904,6 +2007,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     setAsDefault?: boolean;
   }) {
     if (isAuthenticated.value && authSession.value) {
+      const accountVersion = remotePrintAccountVersion;
       try {
         const deviceIdentifier = options?.deviceId?.trim() ?? "";
         if (!deviceIdentifier) {
@@ -1918,6 +2022,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           note: options?.note?.trim() || "",
           deviceId: deviceIdentifier,
         });
+        if (accountVersion !== remotePrintAccountVersion) return null;
         upsertDevice(device);
         if (options?.setAsDefault || !defaultDeviceId.value) {
           defaultDeviceId.value = device.id;
@@ -1926,6 +2031,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         showFlashKey("store.flash.deviceBound", "success");
         return device;
       } catch (error) {
+        if (accountVersion !== remotePrintAccountVersion) return null;
         showFlash(getErrorMessage(error, "store.errors.bindDevice"), "error");
         return null;
       }
@@ -1974,13 +2080,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
       devices.value = remainingDevices;
       remotePrintMutationVersion++;
-      for (const job of remotePrintJobs.value) {
-        if (job.deviceId === deviceId) removedRemotePrintJobIds.add(job.id);
-      }
-      remotePrintJobs.value = remotePrintJobs.value.filter((job) => job.deviceId !== deviceId);
       scheduleRemotePrintStatusSync(true);
-      remoteSchedules.value = remoteSchedules.value.filter(
-        (schedule) => schedule.deviceId !== deviceId,
+      remoteSchedules.value = remoteSchedules.value.map((schedule) =>
+        schedule.deviceId === deviceId ? { ...schedule, enabled: false } : schedule,
       );
       defaultDeviceId.value = fallbackDeviceId;
       scheduleRemoteWorkspaceSave();
@@ -2496,6 +2598,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     authUser.value = null;
     authSession.value = null;
+    authLoading.value = false;
+    authBootstrapping.value = false;
     authError.value = "";
     feedbackError.value = "";
     accountCreationError.value = "";
@@ -2508,7 +2612,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   async function refreshSessionIfNeeded() {
     const current = authSession.value;
 
-    if (!current) {
+    if (disposed || !current) {
       return false;
     }
 
@@ -2516,6 +2620,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     if (Number.isNaN(expiresAt)) {
       clearAuthState();
+      restoreAnonymousWorkspace();
       return false;
     }
 
@@ -2525,10 +2630,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     try {
       const refreshed = await refreshAuthSession(current.refreshToken);
+      if (disposed || authSession.value?.accessToken !== current.accessToken) return false;
       setAuthState(refreshed.user, refreshed.session);
       return true;
     } catch (error) {
+      if (disposed || authSession.value?.accessToken !== current.accessToken) return false;
       clearAuthState();
+      restoreAnonymousWorkspace();
 
       if (error instanceof AuthApiError) {
         authError.value = error.message;
@@ -2545,6 +2653,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
 
     authBootstrapping.value = true;
+    let accountVersion = remotePrintAccountVersion;
 
     try {
       const sessionReady = await refreshSessionIfNeeded();
@@ -2552,13 +2661,20 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       if (!sessionReady || !authSession.value) {
         return false;
       }
+      if (disposed) return false;
+      // A successful refresh may populate authUser for a restored session.
+      // refreshSessionIfNeeded already rejects responses from an older session.
+      accountVersion = remotePrintAccountVersion;
 
       if (!authUser.value) {
         const user = await fetchCurrentUser(authSession.value.accessToken);
+        if (disposed || accountVersion !== remotePrintAccountVersion) return false;
         authUser.value = user;
+        accountVersion = remotePrintAccountVersion;
       }
 
       const loaded = await loadRemoteWorkspace();
+      if (disposed || accountVersion !== remotePrintAccountVersion) return false;
       if (!loaded) {
         clearAuthState();
         authError.value =
@@ -2570,23 +2686,28 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       authError.value = "";
       return true;
     } catch (error) {
+      if (disposed || accountVersion !== remotePrintAccountVersion) return false;
       clearAuthState();
       restoreAnonymousWorkspace();
       authError.value = getErrorMessage(error, "store.errors.authRequired");
       return false;
     } finally {
-      authBootstrapping.value = false;
+      if (accountVersion === remotePrintAccountVersion) authBootstrapping.value = false;
     }
   }
 
   async function login(email: string, password: string) {
     authLoading.value = true;
     authError.value = "";
+    let accountVersion = remotePrintAccountVersion;
 
     try {
       const result = await loginWithApi({ email, password });
+      if (disposed || accountVersion !== remotePrintAccountVersion) return false;
       setAuthState(result.user, result.session);
+      accountVersion = remotePrintAccountVersion;
       const loaded = await loadRemoteWorkspace();
+      if (disposed || accountVersion !== remotePrintAccountVersion) return false;
 
       if (!loaded) {
         const workspaceError =
@@ -2602,12 +2723,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       postLoginTutorialOpen.value = devices.value.length === 0;
       return true;
     } catch (error) {
+      if (disposed || accountVersion !== remotePrintAccountVersion) return false;
       authError.value = getErrorMessage(error, "store.errors.login");
       postLoginTutorialOpen.value = false;
       showFlash(authError.value, "error");
       return false;
     } finally {
-      authLoading.value = false;
+      if (accountVersion === remotePrintAccountVersion) authLoading.value = false;
     }
   }
 
@@ -2733,7 +2855,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   function getDeviceName(deviceId: string) {
     void effectiveLocale.value;
-    return deviceMap.value[deviceId]?.name ?? translate("common.labels.notSet");
+    return (
+      deviceMap.value[deviceId]?.name ??
+      translate(deviceId ? "store.labels.removedDevice" : "common.labels.notSet")
+    );
   }
 
   function toggleConversationMessageSelection(messageId: string) {
@@ -2754,6 +2879,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     workspaceLoading,
     workspaceSyncing,
     workspaceSyncError,
+    workspaceConflict,
     accountCreationLoading,
     accountCreationError,
     aiConfigSummary,
@@ -2761,6 +2887,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     aiConfigSaving,
     aiConfigError,
     printerSyncError,
+    deviceSyncError,
+    printSyncError,
     printJobsLoading,
     activePrintJobsLoading,
     historyPrintJobsLoading,
@@ -2857,6 +2985,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     setLoginProtection,
     saveAIServiceConfig,
     initializeAuth,
+    retrySynchronization,
+    reloadConflictedWorkspace,
+    downloadWorkspaceDraft,
     refreshSessionIfNeeded,
     changePassword,
     submitFeedback,

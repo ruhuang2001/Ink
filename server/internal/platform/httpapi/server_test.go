@@ -458,6 +458,29 @@ func TestSaveWorkspaceAcceptsTutorialPreference(t *testing.T) {
 	}
 }
 
+func TestSaveWorkspaceReturnsRevisionErrors(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{"missing revision", workspace.ErrRevisionRequired, http.StatusPreconditionRequired, "workspace_revision_required"},
+		{"stale revision", workspace.ErrConflict, http.StatusConflict, "workspace_conflict"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := newTestServer(fakeAuthService{}, fakeWorkspaceService{err: test.err}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+			request := httptest.NewRequest(http.MethodPut, "/api/v1/workspace", strings.NewReader(`{"revision":1}`))
+			request.Header.Set("Authorization", "Bearer token")
+			response := httptest.NewRecorder()
+			server.Handler().ServeHTTP(response, request)
+			if response.Code != test.status || !strings.Contains(response.Body.String(), test.code) {
+				t.Fatalf("expected %d %s, got %d: %s", test.status, test.code, response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
 func TestAIConfigRequiresAuthorization(t *testing.T) {
 	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/ai/config", nil)
@@ -496,10 +519,51 @@ func TestListPrintersReturnsDevices(t *testing.T) {
 	}
 }
 
+func TestPrintPreviewValidatesSessionBeforeRendering(t *testing.T) {
+	for _, payload := range []struct {
+		name string
+		body string
+	}{
+		{"text", `{"title":"Preview","content":"Text"}`},
+		{"blocks", `{"title":"Preview","blocks":[{"type":"text","text":"Text"}]}`},
+	} {
+		for _, test := range []struct {
+			name        string
+			token       string
+			authErr     error
+			status      int
+			renderCalls int
+		}{
+			{"missing session", "", nil, http.StatusUnauthorized, 0},
+			{"invalid session", "invalid-token", auth.ErrInvalidAccessToken, http.StatusUnauthorized, 0},
+			{"valid session", "access-token", nil, http.StatusOK, 1},
+		} {
+			t.Run(payload.name+"/"+test.name, func(t *testing.T) {
+				var calls int
+				server := newTestServer(fakeAuthService{currentUserErr: test.authErr}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{previewCalls: &calls}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+				request := httptest.NewRequest(http.MethodPost, "/api/v1/print-preview", strings.NewReader(payload.body))
+				if test.token != "" {
+					request.Header.Set("Authorization", "Bearer "+test.token)
+				}
+				response := httptest.NewRecorder()
+				server.Handler().ServeHTTP(response, request)
+
+				if response.Code != test.status {
+					t.Fatalf("expected status %d, got %d: %s", test.status, response.Code, response.Body.String())
+				}
+				if calls != test.renderCalls {
+					t.Fatalf("expected %d preview calls, got %d", test.renderCalls, calls)
+				}
+			})
+		}
+	}
+}
+
 type fakeAuthService struct {
 	loginResult       auth.AuthResult
 	loginErr          error
 	loginCalls        *int
+	currentUserErr    error
 	changePasswordErr error
 	createUserResult  auth.UserDTO
 	createUserErr     error
@@ -521,6 +585,9 @@ func (f fakeAuthService) Logout(_ context.Context, _ string, _ string) error {
 }
 
 func (f fakeAuthService) GetCurrentUser(_ context.Context, _ string) (auth.UserDTO, error) {
+	if f.currentUserErr != nil {
+		return auth.UserDTO{}, f.currentUserErr
+	}
 	return auth.UserDTO{
 		ID:    "user-1",
 		Email: "name@example.com",
@@ -589,19 +656,26 @@ func (f fakeAIService) GenerateReply(_ context.Context, _ string, _ ai.ReplyInpu
 }
 
 type fakePrinterService struct {
-	devices     []workspace.Device
-	printJobs   []workspace.PrintJob
-	listInput   *printer.ListJobsInput
-	statusInput *printer.JobStatusesInput
-	latestJobID *string
-	err         error
+	devices      []workspace.Device
+	printJobs    []workspace.PrintJob
+	listInput    *printer.ListJobsInput
+	statusInput  *printer.JobStatusesInput
+	latestJobID  *string
+	previewCalls *int
+	err          error
 }
 
 func (f fakePrinterService) RenderPreview(_ context.Context, _ string, _ string) (string, error) {
+	if f.previewCalls != nil {
+		*f.previewCalls++
+	}
 	return "iVBORw0KGgo=", f.err
 }
 
 func (f fakePrinterService) RenderBlocksPreview(_ context.Context, _ string, _ []plugins.ContentBlock) (string, error) {
+	if f.previewCalls != nil {
+		*f.previewCalls++
+	}
 	return "iVBORw0KGgo=", f.err
 }
 

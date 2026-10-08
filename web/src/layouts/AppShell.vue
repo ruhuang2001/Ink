@@ -33,6 +33,14 @@ const postLoginTutorialSteps = computed(
 const pendingBadge = computed(() =>
   workspaceStore.pendingConfirmationCount > 0 ? workspaceStore.pendingConfirmationCount : "",
 );
+const syncErrors = computed(() =>
+  [
+    { key: "workspace", message: workspaceStore.workspaceSyncError },
+    { key: "printers", message: workspaceStore.printerSyncError },
+    { key: "ai", message: workspaceStore.aiConfigError },
+    { key: "extensions", message: workspaceStore.pluginError },
+  ].filter((error) => error.message),
+);
 const anonymousDemoRouteNames = new Set(["conversations", "prints"]);
 const loginTarget = computed(() => ({
   path: "/login",
@@ -65,6 +73,15 @@ async function handlePostLoginTutorialNavigate(path: string) {
 async function handleLogout() {
   await workspaceStore.logout();
   await router.replace(DEFAULT_LOGIN_REDIRECT);
+}
+
+async function recoverSynchronization() {
+  if (workspaceStore.workspaceConflict) {
+    if (!window.confirm(t("shell.syncErrors.confirmReload"))) return;
+    await workspaceStore.reloadConflictedWorkspace();
+    return;
+  }
+  await workspaceStore.retrySynchronization();
 }
 </script>
 
@@ -232,6 +249,49 @@ async function handleLogout() {
     </div>
 
     <div
+      v-if="workspaceStore.isAuthenticated && syncErrors.length"
+      role="alert"
+      class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 lg:px-8"
+    >
+      <div class="mx-auto max-w-7xl space-y-1">
+        <p class="font-medium">{{ t("shell.syncErrors.title") }}</p>
+        <ul class="space-y-1">
+          <li v-for="error in syncErrors" :key="error.key">
+            {{ t(`shell.syncErrors.${error.key}`, { message: error.message }) }}
+          </li>
+        </ul>
+        <button
+          type="button"
+          class="ui-btn-secondary mt-2 px-3 py-1.5 text-sm"
+          :disabled="
+            workspaceStore.workspaceLoading ||
+            workspaceStore.workspaceSyncing ||
+            workspaceStore.isGenerating ||
+            workspaceStore.isCreatingPrint
+          "
+          @click="recoverSynchronization"
+        >
+          {{
+            t(
+              workspaceStore.workspaceConflict
+                ? "shell.syncErrors.reload"
+                : "shell.syncErrors.retry",
+            )
+          }}
+        </button>
+        <button
+          v-if="workspaceStore.workspaceConflict"
+          type="button"
+          class="ui-btn-secondary mt-2 ml-2 px-3 py-1.5 text-sm"
+          :disabled="workspaceStore.workspaceLoading"
+          @click="workspaceStore.downloadWorkspaceDraft"
+        >
+          {{ t("shell.syncErrors.download") }}
+        </button>
+      </div>
+    </div>
+
+    <div
       v-if="showAnonymousDemoBanner"
       class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 lg:px-8"
     >
@@ -251,11 +311,17 @@ async function handleLogout() {
     <main
       class="mx-auto w-full max-w-7xl flex-1 px-4 pt-5 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-7 lg:px-8 lg:py-10"
     >
-      <RouterView v-slot="{ Component, route: currentRoute }">
-        <Transition name="page-swap" mode="out-in">
-          <component :is="Component" :key="currentRoute.fullPath" />
-        </Transition>
-      </RouterView>
+      <fieldset
+        class="m-0 min-w-0 border-0 p-0"
+        :disabled="workspaceStore.workspaceLoading"
+        :inert="workspaceStore.workspaceLoading"
+      >
+        <RouterView v-slot="{ Component, route: currentRoute }">
+          <Transition name="page-swap" mode="out-in">
+            <component :is="Component" :key="currentRoute.fullPath" />
+          </Transition>
+        </RouterView>
+      </fieldset>
     </main>
 
     <nav

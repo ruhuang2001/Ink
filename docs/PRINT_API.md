@@ -90,5 +90,19 @@ worker intervals and timeouts.
 
 `GET` and `PUT /api/v1/workspace` return `printJobs: []`; workspace saves ignore
 that deprecated duplicate field. Print history and content remain in the
-printer repository and are accessed through the endpoints above. Other
-workspace fields keep their current persistence behavior.
+printer repository and are accessed through the endpoints above. Workspace
+saves require the current revision; see [Workspace synchronization](WORKSPACE_API.md).
+
+## Content limits
+
+Preview and physical printing share the same validation and PNG renderer.
+Titles allow at most 512 UTF-8 bytes; bodies allow at most 64 KiB; title and
+body together allow at most 8,000 Unicode code points. Wrapped output is
+limited to 384 × 8,192 pixels. Excessive runs of zero-width characters are
+also rejected to bound layout computation. These checks happen before image
+allocation, and content is never silently truncated.
+
+Oversized input returns HTTP 413, `print_content_too_large`. This applies to
+plain text, flattened plugin blocks, new jobs and previously stored pending
+jobs when submitted. Existing jobs rejected before submission remain pending,
+so they can still be cancelled or assigned to another device.

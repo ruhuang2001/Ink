@@ -102,6 +102,7 @@ type ServiceBinding struct {
 }
 
 type State struct {
+	Revision             int64              `json:"revision,omitzero"`
 	Devices              []Device           `json:"devices"`
 	Conversations        []Conversation     `json:"conversations"`
 	ActiveConversationID string             `json:"activeConversationId"`

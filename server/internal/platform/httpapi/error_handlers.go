@@ -61,6 +61,8 @@ func (s *Server) writePrinterError(w http.ResponseWriter, requestID string, err 
 		writeError(w, requestID, http.StatusForbidden, "forbidden", "当前账号没有该操作权限。")
 	case errors.Is(err, printer.ErrNotConfigured):
 		writeError(w, requestID, http.StatusPreconditionFailed, "printer_not_configured", "当前还没有配置 Memobird 服务。")
+	case errors.Is(err, printer.ErrContentTooLarge):
+		writeError(w, requestID, http.StatusRequestEntityTooLarge, "print_content_too_large", "内容超过打印限制，请拆分后再预览或打印（标题最多 512 字节、正文最多 64 KiB、合计最多 8000 个字符、图片高度最多 8192 像素）；请避免过多连续零宽字符。")
 	case errors.Is(err, printer.ErrNotFound):
 		writeError(w, requestID, http.StatusNotFound, "printer_resource_not_found", "指定的设备或打印任务不存在。")
 	case errors.Is(err, printer.ErrInvalidInput):

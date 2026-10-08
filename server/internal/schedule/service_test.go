@@ -2,6 +2,7 @@ package schedule
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 type scheduleRepo struct {
 	schedules map[string]PrintSchedule
 	claimed   []PrintSchedule
+	onSave    func(*PrintSchedule)
 }
 
 func newScheduleRepo() *scheduleRepo {
@@ -43,6 +45,9 @@ func (r *scheduleRepo) FindByID(_ context.Context, userID string, scheduleID str
 }
 
 func (r *scheduleRepo) Save(_ context.Context, schedule PrintSchedule) error {
+	if r.onSave != nil {
+		r.onSave(&schedule)
+	}
 	r.schedules[schedule.ID] = schedule
 	return nil
 }
@@ -119,14 +124,24 @@ func (d *fakeDispatcher) RunSchedule(_ context.Context, input dispatch.ScheduleR
 	return d.result, d.err
 }
 
-type fakePrinterRepo struct{}
+type fakePrinterRepo struct {
+	status  workspace.DeviceStatus
+	missing bool
+}
 
-func (fakePrinterRepo) FindBindingByID(_ context.Context, userID string, bindingID string) (*printer.Binding, error) {
+func (r fakePrinterRepo) FindBindingByID(_ context.Context, userID string, bindingID string) (*printer.Binding, error) {
+	if r.missing {
+		return nil, nil
+	}
+	status := r.status
+	if status == "" {
+		status = workspace.DeviceStatusConnected
+	}
 	return &printer.Binding{
 		ID:        bindingID,
 		UserID:    userID,
 		Name:      "Desk Printer",
-		Status:    workspace.DeviceStatusConnected,
+		Status:    status,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}, nil
@@ -237,6 +252,47 @@ func TestCreateAndProcessDueScheduleUsesPrintPolicyBatchSize(t *testing.T) {
 	}
 	assertDispatchInput(t, dispatcher.calls[0].input, "schedule-1", "device-1", 1)
 	assertProcessedScheduleState(t, repo.schedules["schedule-1"], now)
+}
+
+func TestToggleRejectsEnablingRemovedPrinter(t *testing.T) {
+	for _, device := range []fakePrinterRepo{{status: workspace.DeviceStatusOffline}, {status: workspace.DeviceStatusPending}, {missing: true}} {
+		repo := newScheduleRepo()
+		repo.schedules["schedule-1"] = PrintSchedule{ID: "schedule-1", UserID: "member-user", DeviceID: "device-1", Enabled: false}
+		service := newScheduleService(time.Now(), repo, &fakeDispatcher{})
+		service.printerRepo = device
+		if _, err := service.Toggle(t.Context(), "member-token", "schedule-1"); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("expected removed printer enable to be rejected, got %v", err)
+		}
+		if repo.schedules["schedule-1"].Enabled {
+			t.Fatal("rejected toggle enabled the schedule")
+		}
+	}
+}
+
+func TestScheduleMutationsReturnPersistedDisabledState(t *testing.T) {
+	for _, operation := range []string{"create", "update", "toggle"} {
+		t.Run(operation, func(t *testing.T) {
+			repo := newScheduleRepo()
+			repo.schedules["schedule-1"] = PrintSchedule{ID: "schedule-1", UserID: "member-user", PluginInstallationID: "plugin-1", DeviceID: "device-1", FrequencyType: FrequencyTypeDaily, Timezone: "UTC", Enabled: false}
+			// Model device removal between service validation and repository save.
+			repo.onSave = func(current *PrintSchedule) { current.Enabled = false }
+			service := newScheduleService(time.Now(), repo, &fakeDispatcher{})
+			input := UpsertInput{Title: "Morning", PluginInstallationID: "plugin-1", DeviceID: "device-1", FrequencyType: FrequencyTypeDaily, Timezone: "UTC", Enabled: true}
+			var view ScheduleView
+			var err error
+			switch operation {
+			case "create":
+				view, err = service.Create(t.Context(), "member-token", input)
+			case "update":
+				view, err = service.Update(t.Context(), "member-token", "schedule-1", input)
+			case "toggle":
+				view, err = service.Toggle(t.Context(), "member-token", "schedule-1")
+			}
+			if err != nil || view.Enabled || repo.schedules["schedule-1"].Enabled {
+				t.Fatalf("response disagreed with persisted state: %+v, %v", view, err)
+			}
+		})
+	}
 }
 
 func TestRunNowDispatchesWithoutFetching(t *testing.T) {

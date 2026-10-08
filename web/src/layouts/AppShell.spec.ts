@@ -81,6 +81,74 @@ describe("AppShell", () => {
     expect(creditLink?.attributes("href")).toBe("https://github.com/ruhuang2001");
   });
 
+  it("keeps synchronization failures visible until the affected data recovers", async () => {
+    const { wrapper, store } = await mountShellAt("/settings/devices");
+
+    store.workspaceSyncError = "草稿保存失败";
+    store.printSyncError = "打印状态加载失败";
+    store.aiConfigError = "AI 配置加载失败";
+    store.pluginError = "插件加载失败";
+    await flushPromises();
+
+    const alert = wrapper.get('[role="alert"]');
+    expect(alert.text()).toContain("工作区：草稿保存失败");
+    expect(alert.text()).toContain("设备与打印：打印状态加载失败");
+    expect(alert.text()).toContain("AI 服务：AI 配置加载失败");
+    expect(alert.text()).toContain("扩展功能：插件加载失败");
+
+    store.printSyncError = "";
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).not.toContain("打印状态加载失败");
+    expect(wrapper.get('[role="alert"]').text()).toContain("草稿保存失败");
+
+    store.workspaceSyncError = "";
+    store.aiConfigError = "";
+    store.pluginError = "";
+    await flushPromises();
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+  });
+
+  it("does not expose account synchronization errors in the anonymous demo", async () => {
+    const { wrapper, store } = await mountShellAt("/conversations", false);
+
+    store.workspaceSyncError = "账号数据保存失败";
+    await flushPromises();
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("账号数据保存失败");
+  });
+
+  it("retries synchronization from the error message", async () => {
+    const { wrapper, store } = await mountShellAt("/settings/devices");
+    const retry = vi.spyOn(store, "retrySynchronization").mockResolvedValue(true);
+    store.workspaceSyncError = "保存失败";
+    await flushPromises();
+
+    await wrapper.get('[role="alert"] button').trigger("click");
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("requires an explicit choice before discarding conflicted local edits", async () => {
+    const { wrapper, store } = await mountShellAt("/settings/devices");
+    const reload = vi.spyOn(store, "reloadConflictedWorkspace").mockResolvedValue(true);
+    const confirm = vi
+      .spyOn(window, "confirm")
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    store.workspaceSyncError = "其他位置已更新";
+    store.workspaceConflict = true;
+    await flushPromises();
+
+    const action = wrapper.get('[role="alert"] button');
+    expect(action.text()).toBe("重新加载工作区");
+    await action.trigger("click");
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("丢弃当前未保存的改动"));
+    expect(reload).not.toHaveBeenCalled();
+    await action.trigger("click");
+    expect(reload).toHaveBeenCalledOnce();
+    confirm.mockRestore();
+  });
+
   it("hides account controls for anonymous visitors", async () => {
     const { wrapper } = await mountShellAt("/conversations", false);
 
@@ -88,6 +156,29 @@ describe("AppShell", () => {
     expect(wrapper.text()).toContain("当前设备、对话、打印页均为演示内容");
     expect(wrapper.text()).not.toContain("name@example.com");
     expect(wrapper.text()).not.toContain("退出");
+  });
+
+  it("disables page controls during reload and exposes a local draft download", async () => {
+    const { wrapper, store } = await mountShellAt("/conversations");
+    const download = vi.spyOn(store, "downloadWorkspaceDraft").mockImplementation(() => undefined);
+    store.workspaceSyncError = "工作区冲突";
+    store.workspaceConflict = true;
+    await flushPromises();
+    const action = wrapper
+      .findAll('[role="alert"] button')
+      .find((button) => button.text() === "下载本地草稿 JSON")!;
+    await action.trigger("click");
+    expect(download).toHaveBeenCalledOnce();
+    store.workspaceLoading = true;
+    await flushPromises();
+    expect(wrapper.get("main fieldset").attributes("disabled")).toBeDefined();
+    expect(wrapper.get("main fieldset").attributes("inert")).toBeDefined();
+    expect(action.attributes("disabled")).toBeDefined();
+    store.workspaceLoading = false;
+    store.workspaceConflict = false;
+    await flushPromises();
+    expect(wrapper.get("main fieldset").attributes("disabled")).toBeUndefined();
+    expect(wrapper.text()).not.toContain("下载本地草稿 JSON");
   });
 
   it("shows the demo banner on public workspace pages", async () => {

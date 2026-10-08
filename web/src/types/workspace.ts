@@ -98,6 +98,7 @@ export interface ServiceBinding {
 }
 
 export interface WorkspaceState {
+  revision?: number;
   devices: Device[];
   conversations: Conversation[];
   activeConversationId: string;
