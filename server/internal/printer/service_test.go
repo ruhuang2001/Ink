@@ -14,6 +14,7 @@ import (
 
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/workspace"
+	memobirdapi "github.com/ruhuang2001/memobird-go/memobird"
 )
 
 func TestRenderPreviewReturnsPNG(t *testing.T) {
@@ -133,7 +134,7 @@ func TestPendingJobMutationsRejectStaleVersions(t *testing.T) {
 	})
 }
 
-func TestDeleteDeviceRemovesBinding(t *testing.T) {
+func TestDeleteDevicePreservesOfflineBinding(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
 	repo := newFakePrinterRepo()
 	repo.bindings["device-1"] = Binding{
@@ -160,8 +161,12 @@ func TestDeleteDeviceRemovesBinding(t *testing.T) {
 		t.Fatalf("delete device failed: %v", err)
 	}
 
-	if _, exists := repo.bindings["device-1"]; exists {
-		t.Fatalf("expected device binding to be removed")
+	if binding := repo.bindings["device-1"]; binding.Status != workspace.DeviceStatusOffline {
+		t.Fatalf("expected preserved offline binding, got %+v", binding)
+	}
+	devices, err := service.ListDevices(t.Context(), "access-token")
+	if err != nil || len(devices) != 0 {
+		t.Fatalf("removed device remained visible: %+v, %v", devices, err)
 	}
 }
 
@@ -276,6 +281,114 @@ func TestCreatePrintJobSubmitImmediatelyRejectsUnconfiguredService(t *testing.T)
 	}
 }
 
+func TestSubmitPrintJobWithoutConfigurationPreservesPendingJob(t *testing.T) {
+	now := time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
+	repo := newFakePrinterRepo()
+	repo.jobs["job-1"] = Job{
+		ID: "job-1", UserID: "user-1", PrinterBindingID: "device-1",
+		Status: workspace.PrintStatusPending, CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Minute),
+	}
+	repo.bindings["device-1"] = Binding{
+		ID: "device-1", UserID: "user-1", Status: workspace.DeviceStatusConnected,
+	}
+	service := NewService(repo, fakeAuthenticator{}, fakeIDGenerator{}, fakeClock{now: now}, "", "", time.Second)
+
+	_, err := service.SubmitPrintJob(t.Context(), "access-token", "job-1")
+	if !errors.Is(err, ErrNotConfigured) {
+		t.Fatalf("expected missing configuration error, got %v", err)
+	}
+	job := repo.jobs["job-1"]
+	if job.Status != workspace.PrintStatusPending || !job.UpdatedAt.Equal(now.Add(-time.Minute)) {
+		t.Fatalf("rejected submission changed pending job: %+v", job)
+	}
+	if _, err := service.CancelPrintJob(t.Context(), "access-token", "job-1"); err != nil {
+		t.Fatalf("rejected submission must leave the job cancellable: %v", err)
+	}
+}
+
+func TestSubmitPrintJobPersistsResultAfterRequestCancellation(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		providerErr error
+		status      workspace.PrintStatus
+	}{
+		{"provider failure", context.Canceled, workspace.PrintStatusFailed},
+		{"accepted print", nil, workspace.PrintStatusQueued},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			now := time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
+			repo := &contextCheckingPrinterRepo{fakePrinterRepo: newFakePrinterRepo()}
+			repo.jobs["job-1"] = Job{
+				ID: "job-1", UserID: "user-1", PrinterBindingID: "device-1",
+				Title: "Receipt", Content: "Test receipt content",
+				Status: workspace.PrintStatusPending, CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Minute),
+			}
+			repo.bindings["device-1"] = Binding{
+				ID: "device-1", UserID: "user-1", DeviceIdentifier: "m1-1", Status: workspace.DeviceStatusConnected,
+			}
+			service := NewService(repo, fakeAuthenticator{}, fakeIDGenerator{}, fakeClock{now: now}, "key", "", time.Second)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			service.imagePrinter = imagePrintFunc(func(ctx context.Context, _ *memobirdapi.Client, _ Job) (*memobirdapi.PrintResponse, error) {
+				if ctx.Err() != nil || !repo.claimed || repo.jobs["job-1"].Status != workspace.PrintStatusQueued {
+					t.Fatal("submission must claim the pending job before the live provider call")
+				}
+				cancel()
+				return &memobirdapi.PrintResponse{PrintContentID: 123}, test.providerErr
+			})
+
+			_, err := service.SubmitPrintJob(ctx, "access-token", "job-1")
+			if test.providerErr == nil && err != nil || test.providerErr != nil && !errors.Is(err, ErrUnavailable) {
+				t.Fatalf("unexpected submission result: %v", err)
+			}
+			job := repo.jobs["job-1"]
+			if job.Status != test.status {
+				t.Fatalf("expected saved status %s after cancellation, got %+v", test.status, job)
+			}
+			if test.providerErr == nil {
+				if job.ProviderPrintContentID == nil || *job.ProviderPrintContentID != 123 || job.NextStatusCheckAt == nil {
+					t.Fatalf("accepted print must retain provider ID and background check: %+v", job)
+				}
+			} else if job.ErrorMessage == nil || *job.ErrorMessage != context.Canceled.Error() {
+				t.Fatalf("provider failure must retain the error: %+v", job)
+			}
+			if !repo.boundedSaveContext {
+				t.Fatal("submission result persistence must have a bounded deadline")
+			}
+		})
+	}
+}
+
+type imagePrintFunc func(context.Context, *memobirdapi.Client, Job) (*memobirdapi.PrintResponse, error)
+
+func (f imagePrintFunc) PrintJob(ctx context.Context, client *memobirdapi.Client, job Job) (*memobirdapi.PrintResponse, error) {
+	return f(ctx, client, job)
+}
+
+type contextCheckingPrinterRepo struct {
+	*fakePrinterRepo
+	claimed            bool
+	boundedSaveContext bool
+}
+
+func (f *contextCheckingPrinterRepo) SavePendingJob(ctx context.Context, job Job, expectedUpdatedAt time.Time) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	claimed, err := f.fakePrinterRepo.SavePendingJob(ctx, job, expectedUpdatedAt)
+	f.claimed = claimed
+	return claimed, err
+}
+
+func (f *contextCheckingPrinterRepo) SaveJob(ctx context.Context, job Job) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	deadline, bounded := ctx.Deadline()
+	f.boundedSaveContext = bounded && time.Until(deadline) > 0 && time.Until(deadline) <= 5*time.Second
+	return f.fakePrinterRepo.SaveJob(ctx, job)
+}
+
 func TestSubmitPrintJobRejectsNonPendingJobs(t *testing.T) {
 	now := time.Now().UTC()
 	repo := newFakePrinterRepo()
@@ -367,6 +480,36 @@ func TestCreatePrintJobForUserReusesInternalJobID(t *testing.T) {
 	}
 }
 
+func TestFailedInternalJobRetryRejectsRemovedDevice(t *testing.T) {
+	now := time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
+	repo := newFakePrinterRepo()
+	repo.bindings["device-1"] = Binding{
+		ID: "device-1", UserID: "user-1", DeviceIdentifier: "m1-1", Status: workspace.DeviceStatusOffline,
+	}
+	original := Job{
+		ID: "delivery-stable", UserID: "user-1", PrinterBindingID: "device-1",
+		Title: "Scheduled", Content: "Content", Status: workspace.PrintStatusFailed,
+		ErrorMessage: new("original provider error"), CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Second),
+	}
+	repo.jobs[original.ID] = original
+	pipeline := &countingImagePipeline{}
+	service := NewService(repo, fakeAuthenticator{}, fakeIDGenerator{}, fakeClock{now: now}, "key", "", time.Second)
+	service.imagePrinter = pipeline
+
+	_, err := service.CreatePrintJobForUser(t.Context(), "user-1", CreateJobInput{
+		JobID: original.ID, SubmitImmediately: true,
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected removed device rejection, got %v", err)
+	}
+	if pipeline.calls.Load() != 0 {
+		t.Fatalf("removed device reached printer %d times", pipeline.calls.Load())
+	}
+	if stored := repo.jobs[original.ID]; stored != original {
+		t.Fatalf("rejected retry changed the failed job: %+v", stored)
+	}
+}
+
 func newFakePrinterRepo() *fakePrinterRepo {
 	return &fakePrinterRepo{
 		bindings: map[string]Binding{},
@@ -402,7 +545,8 @@ func (f *fakePrinterRepo) SaveBinding(_ context.Context, binding Binding) error 
 func (f *fakePrinterRepo) DeleteBinding(_ context.Context, userID string, bindingID string) error {
 	binding, ok := f.bindings[bindingID]
 	if ok && binding.UserID == userID {
-		delete(f.bindings, bindingID)
+		binding.Status = workspace.DeviceStatusOffline
+		f.bindings[bindingID] = binding
 	}
 	return nil
 }

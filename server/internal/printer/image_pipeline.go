@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	memobirdapi "github.com/ruhuang2001/memobird-go/memobird"
-	memobirdtextrender "github.com/ruhuang2001/memobird-go/textrender"
 )
 
 type imagePrintPipeline interface {
@@ -22,13 +21,7 @@ var printerFontData []byte
 type textImagePrintPipeline struct{}
 
 func (p textImagePrintPipeline) PrintJob(ctx context.Context, client *memobirdapi.Client, job Job) (*memobirdapi.PrintResponse, error) {
-	imageBase64, err := memobirdtextrender.RenderBase64PNG(renderPrintableText(job.Title, job.Content), memobirdtextrender.Options{
-		Width:      384,
-		Padding:    18,
-		FontSize:   22,
-		LineHeight: 1.55,
-		FontData:   printerFontData,
-	})
+	imageBase64, err := renderPrintImage(job.Title, job.Content)
 	if err != nil {
 		return nil, err
 	}

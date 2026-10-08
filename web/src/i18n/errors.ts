@@ -23,8 +23,11 @@ const LOCALIZED_ERROR_CODES = new Set([
   "printer_not_configured",
   "printer_resource_not_found",
   "printer_unavailable",
+  "print_content_too_large",
   "request_failed",
   "schedule_not_found",
+  "workspace_conflict",
+  "workspace_revision_required",
 ]);
 
 export function getLocalizedErrorMessage(

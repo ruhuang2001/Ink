@@ -204,7 +204,7 @@ const zhCN = {
     },
     errors: {
       syncPrintStatus: "加载打印状态失败，请稍后重试。",
-      syncWorkspace: "加载数据失败，请稍后重试。",
+      syncWorkspace: "保存数据失败，请稍后重试。",
       loadAccountData: "加载账号数据失败，请稍后重试。",
       loadIntegrations: "加载插件、设备与 AI 配置失败，请稍后重试。",
       promptRequired: "请先输入要整理的内容。",
@@ -253,6 +253,7 @@ const zhCN = {
       scheduleManualSource: "手动创建",
       scheduleTimeFallback: "每天 19:30",
       deviceName: "咕咕机 {count}",
+      removedDevice: "已移除设备",
       devicePendingNote: "等待绑定",
       pluginGitRepo: "Git 仓库：{url}",
       pluginDefaultNote: "可作为定时打印内容来源",
@@ -272,6 +273,17 @@ const zhCN = {
     reply: "当然可以。你可以这样写：{prompt}{summary}留一行空白，会更适合打印在纸条上。",
   },
   shell: {
+    syncErrors: {
+      title: "部分数据未能同步",
+      workspace: "工作区：{message}",
+      printers: "设备与打印：{message}",
+      ai: "AI 服务：{message}",
+      extensions: "扩展功能：{message}",
+      retry: "重试",
+      reload: "重新加载工作区",
+      download: "下载本地草稿 JSON",
+      confirmReload: "工作区已在其他位置更新。重新加载会丢弃当前未保存的改动。继续重新加载？",
+    },
     postLoginTutorial: {
       title: "登录成功后先绑定设备",
       description:
@@ -848,6 +860,10 @@ const zhCN = {
       printer_resource_not_found: "指定的设备或打印任务不存在。",
       invalid_printer_input: "请输入有效的设备或打印信息。",
       printer_unavailable: "咕咕机服务暂时不可用，请稍后重试。",
+      print_content_too_large:
+        "内容超过打印限制，请拆分后再预览或打印（标题最多 512 字节、正文最多 64 KiB、合计最多 8000 个字符、图片高度最多 8192 像素）；请避免过多连续零宽字符。",
+      workspace_conflict: "工作区已在其他位置更新，本地草稿已保留。请下载草稿或重新加载后再保存。",
+      workspace_revision_required: "请下载需要保留的本地草稿，再重新加载工作区后保存。",
       invalid_feedback_input: "请输入反馈内容。",
       feedback_recipient_missing: "当前还没有可接收反馈的管理员账号。",
       feedback_printer_missing: "管理员当前还没有可接收反馈的默认咕咕机。",

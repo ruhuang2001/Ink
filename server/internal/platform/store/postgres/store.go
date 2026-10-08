@@ -270,13 +270,14 @@ func (s *Store) Log(ctx context.Context, event auth.AuditEvent) error {
 // FindByUserID loads a persisted workspace snapshot for a user.
 func (s *Store) FindByUserID(ctx context.Context, userID string) (*workspace.State, error) {
 	row := s.db.QueryRow(ctx, `
-		select state - 'printJobs'
+		select state - 'printJobs', revision
 		from workspace_snapshots
 		where user_id = $1
 	`, userID)
 
 	var payload []byte
-	if err := row.Scan(&payload); err != nil {
+	var revision int64
+	if err := row.Scan(&payload, &revision); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
@@ -287,30 +288,56 @@ func (s *Store) FindByUserID(ctx context.Context, userID string) (*workspace.Sta
 	if err := json.Unmarshal(payload, &current); err != nil {
 		return nil, err
 	}
+	current.Revision = revision
 
 	return &current, nil
 }
 
-// SaveByUserID upserts the current workspace snapshot for a user.
+// InitializeByUserID creates an empty snapshot without replacing a concurrent save.
+func (s *Store) InitializeByUserID(ctx context.Context, userID string, state workspace.State, createdAt time.Time) error {
+	state.PrintJobs = []workspace.PrintJob{}
+	state.Revision = 0
+	payload, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(ctx, `
+		insert into workspace_snapshots (user_id, state, created_at, updated_at)
+		values ($1, $2, $3, $3)
+		on conflict (user_id) do nothing
+	`, userID, payload, createdAt)
+	return err
+}
+
+// SaveByUserID replaces a snapshot only while its submitted revision is current.
 func (s *Store) SaveByUserID(
 	ctx context.Context,
 	userID string,
 	state workspace.State,
 	updatedAt time.Time,
-) error {
+) (int64, error) {
+	expectedRevision := state.Revision
+	if expectedRevision < 1 {
+		return 0, workspace.ErrRevisionRequired
+	}
 	state.PrintJobs = []workspace.PrintJob{}
+	state.Revision = 0
 	payload, err := json.Marshal(state)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	_, err = s.db.Exec(ctx, `
-		insert into workspace_snapshots (user_id, state, created_at, updated_at)
-		values ($1, $2, $3, $3)
-		on conflict (user_id)
-		do update set state = excluded.state, updated_at = excluded.updated_at
-	`, userID, payload, updatedAt)
-	return err
+	var revision int64
+	err = s.db.QueryRow(ctx, `
+		update workspace_snapshots
+		set state = $2, updated_at = $3, revision = revision + 1
+		where user_id = $1 and revision = $4
+		returning revision
+	`, userID, payload, updatedAt, expectedRevision).Scan(&revision)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, workspace.ErrConflict
+	}
+	return revision, err
 }
 
 func (s *Store) GetSystemConfig(ctx context.Context) (*ai.StoredConfig, error) {
@@ -464,11 +491,27 @@ func (s *Store) SaveBinding(ctx context.Context, binding printer.Binding) error 
 }
 
 func (s *Store) DeleteBinding(ctx context.Context, userID string, bindingID string) error {
-	_, err := s.db.Exec(ctx, `
-		delete from printer_bindings
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `
+		update printer_bindings
+		set status = 'offline', updated_at = now()
 		where user_id = $1 and id = $2
-	`, userID, bindingID)
-	return err
+	`, userID, bindingID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		update print_schedules
+		set enabled = false, lease_until = null, updated_at = now()
+		where user_id = $1 and device_id = $2
+	`, userID, bindingID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Store) FindJobByID(ctx context.Context, userID string, jobID string) (*printer.Job, error) {

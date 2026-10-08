@@ -137,15 +137,7 @@ func (s *Service) Create(ctx context.Context, accessToken string, input UpsertIn
 		return ScheduleView{}, err
 	}
 
-	if err := s.repo.Save(ctx, current); err != nil {
-		return ScheduleView{}, err
-	}
-
-	views, err := s.mapViews(ctx, []PrintSchedule{current})
-	if err != nil {
-		return ScheduleView{}, err
-	}
-	return views[0], nil
+	return s.saveScheduleView(ctx, current)
 }
 
 func (s *Service) Update(ctx context.Context, accessToken string, scheduleID string, input UpsertInput) (ScheduleView, error) {
@@ -180,15 +172,7 @@ func (s *Service) Update(ctx context.Context, accessToken string, scheduleID str
 		return ScheduleView{}, err
 	}
 
-	if err := s.repo.Save(ctx, updated); err != nil {
-		return ScheduleView{}, err
-	}
-
-	views, err := s.mapViews(ctx, []PrintSchedule{updated})
-	if err != nil {
-		return ScheduleView{}, err
-	}
-	return views[0], nil
+	return s.saveScheduleView(ctx, updated)
 }
 
 func (s *Service) Toggle(ctx context.Context, accessToken string, scheduleID string) (ScheduleView, error) {
@@ -208,6 +192,13 @@ func (s *Service) Toggle(ctx context.Context, accessToken string, scheduleID str
 	existing.Enabled = !existing.Enabled
 	existing.UpdatedAt = s.clock.Now()
 	if existing.Enabled {
+		device, err := s.printerRepo.FindBindingByID(ctx, currentUser.ID, existing.DeviceID)
+		if err != nil {
+			return ScheduleView{}, err
+		}
+		if device == nil || device.Status != workspace.DeviceStatusConnected {
+			return ScheduleView{}, fmt.Errorf("%w: device must be connected", ErrInvalidInput)
+		}
 		nextRun, err := NextRunAt(existing.FrequencyType, existing.Timezone, existing.Hour, existing.Minute, existing.Weekdays, s.clock.Now())
 		if err != nil {
 			return ScheduleView{}, err
@@ -215,11 +206,21 @@ func (s *Service) Toggle(ctx context.Context, accessToken string, scheduleID str
 		existing.NextRunAt = nextRun
 	}
 
-	if err := s.repo.Save(ctx, *existing); err != nil {
+	return s.saveScheduleView(ctx, *existing)
+}
+
+func (s *Service) saveScheduleView(ctx context.Context, current PrintSchedule) (ScheduleView, error) {
+	if err := s.repo.Save(ctx, current); err != nil {
 		return ScheduleView{}, err
 	}
-
-	views, err := s.mapViews(ctx, []PrintSchedule{*existing})
+	persisted, err := s.repo.FindByID(ctx, current.UserID, current.ID)
+	if err != nil {
+		return ScheduleView{}, err
+	}
+	if persisted == nil {
+		return ScheduleView{}, ErrNotFound
+	}
+	views, err := s.mapViews(ctx, []PrintSchedule{*persisted})
 	if err != nil {
 		return ScheduleView{}, err
 	}

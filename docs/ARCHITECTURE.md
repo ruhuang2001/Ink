@@ -44,6 +44,15 @@ The API exposes authentication, workspace, printer, plugin, schedule, feedback, 
 
 PostgreSQL stores users, refresh sessions, workspace state, printer bindings, print jobs, plugin installations and bindings, collected items, print schedules, and delivery records.
 
+Workspace saves compare a database revision atomically. An outdated snapshot
+returns a conflict without replacing saved content; the browser retains the
+local draft and offers export or a confirmed reload. See [Workspace API](WORKSPACE_API.md).
+
+Removing a printer marks its binding offline and disables its schedules.
+Print jobs and delivery history remain readable; queued jobs accepted before
+removal remain eligible for completion checks. A retained binding can be
+reconnected, but its schedules need explicit re-enabling.
+
 Important idempotency boundaries:
 
 - plugin content is unique by `(plugin_binding_id, external_id)`;
@@ -90,6 +99,9 @@ plugin blocks
 ```
 
 Manual preview stops after PNG generation and never creates a job or contacts Memobird.
+It requires an authenticated session and shares content and image-height limits
+with physical printing. Oversized input is rejected before image allocation;
+the renderer does not truncate it. See [Print API limits](PRINT_API.md#content-limits).
 
 Print lists return paginated summaries without the content body. A separate
 detail endpoint supplies content for preview, while a lightweight status

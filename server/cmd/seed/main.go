@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -45,11 +46,12 @@ func main() {
 	}
 
 	serverDir := filepath.Dir(config.ResolveProjectPath(".env.example"))
+	credentialsPath := cmp.Or(os.Getenv("INK_DEV_ADMIN_CREDENTIALS_PATH"), filepath.Join(serverDir, ".dev-admin-password"))
 	seedCtx, cancelSeed := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelSeed()
 
 	result, err := seed.EnsureDevAdmin(seedCtx, db, seed.DevAdminOptions{
-		CredentialsPath: filepath.Join(serverDir, ".dev-admin-password"),
+		CredentialsPath: credentialsPath,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run seed: %v\n", err)

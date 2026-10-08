@@ -4,7 +4,6 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname "$0")" && pwd)
 SERVER_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
-REPO_DIR=$(CDPATH='' cd -- "$SERVER_DIR/.." && pwd)
 
 SMOKE_PORT="${SMOKE_PORT:-18080}"
 SMOKE_BASE_URL="${SMOKE_BASE_URL:-http://127.0.0.1:${SMOKE_PORT}}"
@@ -13,17 +12,12 @@ BOOTSTRAP_DB="${INK_SMOKE_BOOTSTRAP_DB:-1}"
 SMOKE_RUN_ID="$(date +%s)-$$"
 SMOKE_PRINTER_ID="printer_smoke_${SMOKE_RUN_ID}"
 SMOKE_PLUGIN_KEY="ink-smoke-source-${SMOKE_RUN_ID}"
+SMOKE_DB_CONTAINER=""
+SMOKE_DIR=""
 export INK_SMOKE_PRINTER_ID="$SMOKE_PRINTER_ID"
 export INK_SMOKE_PLUGIN_KEY="$SMOKE_PLUGIN_KEY"
 
 cleanup() {
-  if [ "${ACCESS_TOKEN:-}" != "" ] && [ -r "${WORKSPACE_BEFORE:-}" ] && [ "${SERVER_PID:-}" != "" ] && kill -0 "$SERVER_PID" >/dev/null 2>&1; then
-    curl --silent --show-error \
-      -H "Authorization: Bearer $ACCESS_TOKEN" \
-      -H "Content-Type: application/json" \
-      -X PUT --data-binary "@$WORKSPACE_BEFORE" \
-      "$SMOKE_BASE_URL/api/v1/workspace" >/dev/null 2>&1 || true
-  fi
   if [ "${SERVER_PID:-}" != "" ] && kill -0 "$SERVER_PID" >/dev/null 2>&1; then
     kill "$SERVER_PID" >/dev/null 2>&1 || true
     wait "$SERVER_PID" >/dev/null 2>&1 || true
@@ -31,34 +25,111 @@ cleanup() {
   if [ "${FIXTURE_SETUP:-0}" = "1" ]; then
     (cd "$SERVER_DIR" && go run ./cmd/smoke-fixture cleanup) >/dev/null 2>&1 || true
   fi
-  rm -rf "${SMOKE_PLUGIN_ROOT:-}"
-  rm -f "${SERVER_LOG:-}" "${WORKSPACE_BEFORE:-}" "${WORKSPACE_AFTER:-}" "${WORKSPACE_RESTORED:-}" \
-    "${LOGIN_JSON:-}" "${UPDATED_PAYLOAD:-}" "${CONFIRMATION_PAYLOAD:-}" "${PLUGIN_ZIP:-}" \
-    "${UPLOAD_JSON:-}" "${BINDING_PAYLOAD:-}" "${BINDING_JSON:-}" "${VALIDATION_JSON:-}" \
-    "${RUN_JSON:-}" "${SCHEDULE_PAYLOAD:-}" "${SCHEDULE_JSON:-}" "${SCHEDULE_RUN_JSON:-}" \
-    "${PRINT_JOBS_JSON:-}" "${PRINT_STATUS_JSON:-}" "${PRINT_DETAIL_JSON:-}" "${SERVER_BINARY:-}"
+  if [ -n "$SMOKE_DB_CONTAINER" ]; then
+    docker stop "$SMOKE_DB_CONTAINER" >/dev/null 2>&1 || true
+  fi
+  if [ -n "$SMOKE_DIR" ]; then
+    rm -rf "$SMOKE_DIR"
+  fi
 }
 
 trap cleanup EXIT INT TERM
-
-"$SERVER_DIR/scripts/ensure_dev_env.sh"
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "uv is required for the plugin lifecycle smoke fixture." >&2
   exit 1
 fi
 
-if [ "$BOOTSTRAP_DB" = "1" ]; then
-  (
-    cd "$REPO_DIR"
-    make dev-db
-  )
-fi
+python3 - "$SMOKE_PORT" "$SMOKE_BASE_URL" <<'PY'
+import socket
+import sys
+import urllib.parse
+
+try:
+    port = int(sys.argv[1])
+    url = urllib.parse.urlsplit(sys.argv[2])
+    if not 1 <= port <= 65535:
+        raise ValueError("invalid port")
+    if (
+        url.scheme != "http"
+        or url.hostname not in ("127.0.0.1", "localhost")
+        or url.port != port
+        or url.path or url.query or url.fragment or url.username or url.password
+    ):
+        raise ValueError("base URL must point to the smoke API")
+except ValueError:
+    raise SystemExit("SMOKE_BASE_URL must be http://127.0.0.1:SMOKE_PORT (or localhost) with a valid port.")
+try:
+    with socket.socket() as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", port))
+except OSError:
+    raise SystemExit("Smoke API port is already in use; choose a free SMOKE_PORT.")
+PY
+
+case "$BOOTSTRAP_DB" in
+  0)
+    if [ -z "${DATABASE_URL:-}" ]; then
+      echo "INK_SMOKE_BOOTSTRAP_DB=0 requires DATABASE_URL for an empty, disposable test database." >&2
+      exit 1
+    fi
+    ;;
+  1)
+    if ! docker info >/dev/null 2>&1; then
+      echo "Docker is required for the isolated smoke database. Start Docker Desktop or OrbStack first." >&2
+      exit 1
+    fi
+    SMOKE_DB_CONTAINER="ink-smoke-postgres-${SMOKE_RUN_ID}"
+    docker run --rm --detach \
+      --name "$SMOKE_DB_CONTAINER" \
+      --env POSTGRES_DB=ink \
+      --env POSTGRES_USER=postgres \
+      --env POSTGRES_PASSWORD=postgres \
+      --publish 127.0.0.1::5432 \
+      postgres:16 >/dev/null
+
+    attempt=0
+    until docker exec "$SMOKE_DB_CONTAINER" pg_isready -U postgres -d ink >/dev/null 2>&1; do
+      attempt=$((attempt + 1))
+      if [ "$attempt" -ge 30 ]; then
+        echo "Temporary PostgreSQL did not become ready." >&2
+        docker logs "$SMOKE_DB_CONTAINER" >&2 || true
+        exit 1
+      fi
+      sleep 1
+    done
+
+    smoke_db_address=$(docker port "$SMOKE_DB_CONTAINER" 5432/tcp)
+    smoke_db_port=${smoke_db_address##*:}
+    case "$smoke_db_port" in
+      '' | *[!0-9]*)
+        echo "Could not determine the temporary PostgreSQL port." >&2
+        exit 1
+        ;;
+    esac
+    DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${smoke_db_port}/ink?sslmode=disable"
+    ;;
+  *)
+    echo "INK_SMOKE_BOOTSTRAP_DB must be 0 or 1." >&2
+    exit 1
+    ;;
+esac
+
+umask 077
+SMOKE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ink-smoke.XXXXXX")
+CREDENTIALS_FILE="$SMOKE_DIR/admin-credentials"
+export DATABASE_URL
+export INK_DEV_ADMIN_CREDENTIALS_PATH="$CREDENTIALS_FILE"
+JWT_SECRET=$(openssl rand -hex 32)
+AI_CONFIG_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '\n')
+export JWT_SECRET AI_CONFIG_ENCRYPTION_KEY
+export MEMOBIRD_ACCESS_KEY=""
+export PRINT_STATUS_SYNC_ENABLED=false
 
 (
   cd "$SERVER_DIR"
   go run ./cmd/migrate up
-  INK_TEST_DATABASE_URL="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/ink?sslmode=disable}" \
+  INK_TEST_DATABASE_URL="$DATABASE_URL" \
     go test ./internal/platform/store/postgres -count=1
   go run ./cmd/seed dev
   go run ./cmd/smoke-fixture cleanup
@@ -66,9 +137,8 @@ fi
 )
 FIXTURE_SETUP=1
 
-CREDENTIALS_FILE="$SERVER_DIR/.dev-admin-password"
 if [ ! -r "$CREDENTIALS_FILE" ]; then
-  echo "Missing credentials file: $CREDENTIALS_FILE" >&2
+  echo "Smoke credentials were not created; use an empty, disposable test database." >&2
   exit 1
 fi
 
@@ -80,27 +150,27 @@ if [ -z "$LOGIN_NAME" ] || [ -z "$LOGIN_PASSWORD" ]; then
   exit 1
 fi
 
-SERVER_LOG=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-server.XXXXXX.log")
-SERVER_BINARY=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-api.XXXXXX")
-WORKSPACE_BEFORE=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-workspace-before.XXXXXX.json")
-WORKSPACE_AFTER=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-workspace-after.XXXXXX.json")
-WORKSPACE_RESTORED=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-workspace-restored.XXXXXX.json")
-LOGIN_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-login.XXXXXX.json")
-UPDATED_PAYLOAD=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-workspace-updated.XXXXXX.json")
-CONFIRMATION_PAYLOAD=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-workspace-confirmation.XXXXXX.json")
-PLUGIN_ZIP=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-plugin.XXXXXX.zip")
-UPLOAD_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-upload.XXXXXX.json")
-BINDING_PAYLOAD=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-binding.XXXXXX.json")
-BINDING_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-binding-result.XXXXXX.json")
-VALIDATION_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-validation.XXXXXX.json")
-RUN_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-run.XXXXXX.json")
-SCHEDULE_PAYLOAD=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-schedule.XXXXXX.json")
-SCHEDULE_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-schedule-result.XXXXXX.json")
-SCHEDULE_RUN_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-schedule-run.XXXXXX.json")
-PRINT_JOBS_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-print-jobs.XXXXXX.json")
-PRINT_STATUS_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-print-status.XXXXXX.json")
-PRINT_DETAIL_JSON=$(mktemp "${TMPDIR:-/tmp}/ink-smoke-print-detail.XXXXXX.json")
-SMOKE_PLUGIN_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/ink-smoke-plugins.XXXXXX")
+SERVER_LOG="$SMOKE_DIR/server.log"
+SERVER_BINARY="$SMOKE_DIR/api"
+WORKSPACE_BEFORE="$SMOKE_DIR/workspace-before.json"
+WORKSPACE_AFTER="$SMOKE_DIR/workspace-after.json"
+WORKSPACE_RESTORED="$SMOKE_DIR/workspace-restored.json"
+LOGIN_JSON="$SMOKE_DIR/login.json"
+UPDATED_PAYLOAD="$SMOKE_DIR/workspace-updated.json"
+CONFIRMATION_PAYLOAD="$SMOKE_DIR/workspace-confirmation.json"
+PLUGIN_ZIP="$SMOKE_DIR/plugin.zip"
+UPLOAD_JSON="$SMOKE_DIR/upload.json"
+BINDING_PAYLOAD="$SMOKE_DIR/binding-payload.json"
+BINDING_JSON="$SMOKE_DIR/binding.json"
+VALIDATION_JSON="$SMOKE_DIR/validation.json"
+RUN_JSON="$SMOKE_DIR/run.json"
+SCHEDULE_PAYLOAD="$SMOKE_DIR/schedule-payload.json"
+SCHEDULE_JSON="$SMOKE_DIR/schedule.json"
+SCHEDULE_RUN_JSON="$SMOKE_DIR/schedule-run.json"
+PRINT_JOBS_JSON="$SMOKE_DIR/print-jobs.json"
+PRINT_STATUS_JSON="$SMOKE_DIR/print-status.json"
+PRINT_DETAIL_JSON="$SMOKE_DIR/print-detail.json"
+SMOKE_PLUGIN_ROOT="$SMOKE_DIR/plugins"
 
 (cd "$SERVER_DIR" && go build -o "$SERVER_BINARY" ./cmd/api)
 
@@ -134,7 +204,18 @@ PY
 SERVER_PID=$!
 
 attempt=0
-until curl --silent --show-error --fail "$SMOKE_BASE_URL/healthz" >/dev/null 2>&1; do
+while :; do
+  if ! kill -0 "$SERVER_PID" >/dev/null 2>&1; then
+    echo "Smoke API exited before becoming healthy. Recent log output:" >&2
+    tail -n 40 "$SERVER_LOG" >&2 || true
+    exit 1
+  fi
+  if curl --silent --show-error --fail --max-time 2 "$SMOKE_BASE_URL/healthz" >/dev/null 2>&1; then
+    if kill -0 "$SERVER_PID" >/dev/null 2>&1; then
+      break
+    fi
+    continue
+  fi
   attempt=$((attempt + 1))
   if [ "$attempt" -ge "$SMOKE_TIMEOUT_SECONDS" ]; then
     echo "API failed to start in time. Recent log output:" >&2
@@ -208,9 +289,48 @@ after_flag = bool(after.get("preferences", {}).get("sendConfirmationEnabled", Fa
 
 if before_flag == after_flag:
     raise SystemExit("workspace update did not persist the expected change")
+if after.get("revision") != before.get("revision", 0) + 1:
+    raise SystemExit("workspace revision did not advance")
 PY
 
-python3 - "$WORKSPACE_BEFORE" "$CONFIRMATION_PAYLOAD" <<'PY'
+stale_status=$(curl --silent --show-error --output "$SMOKE_DIR/workspace-conflict.json" --write-out '%{http_code}' \
+  -H "$AUTH_HEADER" -H "Content-Type: application/json" \
+  -X PUT --data-binary "@$UPDATED_PAYLOAD" "$SMOKE_BASE_URL/api/v1/workspace")
+if [ "$stale_status" != "409" ]; then
+  echo "Stale workspace save was not rejected." >&2
+  exit 1
+fi
+
+python3 - "$WORKSPACE_AFTER" "$SMOKE_DIR/workspace-unversioned.json" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    workspace = json.load(fh)
+workspace.pop("revision", None)
+with open(sys.argv[2], "w", encoding="utf-8") as fh:
+    json.dump(workspace, fh)
+PY
+unversioned_status=$(curl --silent --show-error --output "$SMOKE_DIR/workspace-revision-error.json" --write-out '%{http_code}' \
+  -H "$AUTH_HEADER" -H "Content-Type: application/json" \
+  -X PUT --data-binary "@$SMOKE_DIR/workspace-unversioned.json" "$SMOKE_BASE_URL/api/v1/workspace")
+if [ "$unversioned_status" != "428" ]; then
+  echo "Unversioned workspace save was not rejected." >&2
+  exit 1
+fi
+curl --silent --show-error --fail -H "$AUTH_HEADER" \
+  "$SMOKE_BASE_URL/api/v1/workspace" >"$SMOKE_DIR/workspace-after-rejections.json"
+python3 - "$WORKSPACE_AFTER" "$SMOKE_DIR/workspace-after-rejections.json" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    expected = json.load(fh)
+with open(sys.argv[2], encoding="utf-8") as fh:
+    actual = json.load(fh)
+if expected != actual:
+    raise SystemExit("Rejected saves changed the workspace or its revision")
+PY
+
+python3 - "$WORKSPACE_AFTER" "$CONFIRMATION_PAYLOAD" <<'PY'
 import json
 import sys
 
@@ -226,7 +346,25 @@ curl --silent --show-error --fail \
   -H "Content-Type: application/json" \
   -X PUT \
   --data-binary "@$CONFIRMATION_PAYLOAD" \
-  "$SMOKE_BASE_URL/api/v1/workspace" >/dev/null
+  "$SMOKE_BASE_URL/api/v1/workspace" >"$WORKSPACE_AFTER"
+
+curl --silent --show-error --fail \
+  -H "$AUTH_HEADER" -H "Content-Type: application/json" \
+  -X POST -d '{"title":"Smoke preview","content":"Hello from Ink"}' \
+  "$SMOKE_BASE_URL/api/v1/print-preview" >"$SMOKE_DIR/preview.json"
+python3 - "$SMOKE_DIR/preview.json" <<'PY'
+import base64
+import json
+import struct
+import sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    image = base64.b64decode(json.load(fh)["image"], validate=True)
+if image[:8] != b"\x89PNG\r\n\x1a\n":
+    raise SystemExit("Preview did not return a PNG")
+width, height = struct.unpack(">II", image[16:24])
+if width != 384 or height > 8192:
+    raise SystemExit("Preview dimensions exceed the printing limit")
+PY
 
 curl --silent --show-error --fail \
   -H "$AUTH_HEADER" \
@@ -373,11 +511,22 @@ if detail.get("id") != sys.argv[3] or not detail.get("content"):
     raise SystemExit("print detail did not preserve the job body")
 PY
 
+python3 - "$WORKSPACE_BEFORE" "$WORKSPACE_AFTER" "$SMOKE_DIR/workspace-restore-payload.json" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    original = json.load(fh)
+with open(sys.argv[2], encoding="utf-8") as fh:
+    current = json.load(fh)
+original["revision"] = current["revision"]
+with open(sys.argv[3], "w", encoding="utf-8") as fh:
+    json.dump(original, fh)
+PY
 curl --silent --show-error --fail \
   -H "$AUTH_HEADER" \
   -H "Content-Type: application/json" \
   -X PUT \
-  --data-binary "@$WORKSPACE_BEFORE" \
+  --data-binary "@$SMOKE_DIR/workspace-restore-payload.json" \
   "$SMOKE_BASE_URL/api/v1/workspace" >"$WORKSPACE_RESTORED"
 
 python3 - "$WORKSPACE_BEFORE" "$WORKSPACE_RESTORED" <<'PY'
@@ -389,8 +538,10 @@ with open(sys.argv[1], "r", encoding="utf-8") as fh:
 with open(sys.argv[2], "r", encoding="utf-8") as fh:
     restored = json.load(fh)
 
+expected.pop("revision", None)
+restored.pop("revision", None)
 if expected != restored:
     raise SystemExit("workspace state was not restored after smoke test")
 PY
 
-echo "Smoke test passed: auth, workspace persistence, plugin lifecycle, schedule delivery, and paginated print/status/detail reads succeeded."
+echo "Smoke test passed: auth, workspace persistence and conflict protection, PNG preview, plugin lifecycle, schedule delivery, and paginated print/status/detail reads succeeded."

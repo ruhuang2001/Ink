@@ -40,10 +40,14 @@ Never trust a CIDR containing arbitrary clients, and configure every proxy in th
 - `make migrate-up`: apply SQL migrations from `server/migrations/`
 - `make seed-dev`: create the development admin account if it does not already exist
 - `make check-api`: `gofmt`, Go tests, and backend build
-- `make smoke-api`: real API smoke flow for auth, workspace persistence, plugin upload/binding/fetch, and schedule delivery (requires `uv`)
+- `make smoke-api`: real API smoke flow for auth, workspace persistence, plugin upload/binding/fetch, and schedule delivery (requires Docker and `uv`; uses a disposable PostgreSQL container and temporary credentials)
 - `make reset-db`: remove the local PostgreSQL volume
 
 `make reset-db` deletes local development database data. It is not a production migration or rollback command.
+
+Smoke runs keep their database, credentials, and plugin artifacts separate from local development and clean them up on exit. CI can supply an empty disposable database explicitly with `INK_SMOKE_BOOTSTRAP_DB=0 DATABASE_URL=... make smoke-api`. This override does not read the database URL from `.env` and should never target a development or production database.
+
+`INK_DEV_ADMIN_CREDENTIALS_PATH` optionally changes where `ink-seed dev` writes initial credentials; relative paths are resolved from the command's working directory. The default remains `server/.dev-admin-password`.
 
 ## Endpoint groups
 

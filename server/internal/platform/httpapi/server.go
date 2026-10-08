@@ -457,7 +457,14 @@ func (s *Server) handleSaveWorkspace(w http.ResponseWriter, r *http.Request, req
 
 	saved, err := s.workspace.SaveState(r.Context(), accessToken, state)
 	if err != nil {
-		s.writeAuthError(w, requestID, err)
+		switch {
+		case errors.Is(err, workspace.ErrRevisionRequired):
+			writeError(w, requestID, http.StatusPreconditionRequired, "workspace_revision_required", "请重新加载工作区后再保存。")
+		case errors.Is(err, workspace.ErrConflict):
+			writeError(w, requestID, http.StatusConflict, "workspace_conflict", "工作区已在其他位置更新，请重新加载后再保存。")
+		default:
+			s.writeAuthError(w, requestID, err)
+		}
 		return
 	}
 
@@ -701,8 +708,13 @@ func (s *Server) handleCreatePrintJob(w http.ResponseWriter, r *http.Request, re
 }
 
 func (s *Server) handlePrintPreview(w http.ResponseWriter, r *http.Request, requestID string) {
-	if bearerToken(r.Header.Get("Authorization")) == "" {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
 		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+	if _, err := s.auth.GetCurrentUser(r.Context(), accessToken); err != nil {
+		s.writeAuthError(w, requestID, err)
 		return
 	}
 	var payload printPreviewRequest

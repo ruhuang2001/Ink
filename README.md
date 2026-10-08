@@ -6,6 +6,11 @@ Ink is a self-hosted workspace for collecting content and printing it on Memobir
 
 > Ink is an early `0.x` project. APIs, database schemas, and plugin contracts may change before `1.0`.
 
+Current development focuses on the basic printing flow: sign in, bind a device,
+write and preview content, submit a job, and check its status and history. AI,
+trusted plugins, and recurring schedules remain available; their expansion is
+deferred while the core is stabilized. See [Maintenance scope](docs/MAINTENANCE.md).
+
 ## What it does
 
 - Manage Memobird devices, print jobs, and recurring print schedules.
@@ -30,6 +35,9 @@ make dev-web
 
 - [Self-hosting guide](docs/SELF_HOSTING.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Maintenance scope and stability checklist](docs/MAINTENANCE.md)
+- [Workspace synchronization API](docs/WORKSPACE_API.md)
+- [Database backup and restore verification](docs/BACKUP_RESTORE.md)
 - [Plugin development and protocol](docs/PLUGIN_SPEC.md)
 - [Server reference](server/README.md)
 - [Frontend reference](web/README.md)

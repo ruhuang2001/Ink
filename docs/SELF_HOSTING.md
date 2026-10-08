@@ -6,7 +6,7 @@ This guide covers a single-instance Ink deployment. Ink currently ships source c
 
 - Node.js 22
 - pnpm 10
-- Go 1.25
+- Go 1.26.6 (see `server/go.mod`)
 - PostgreSQL 16
 - `uv` when installing or testing Python plugins
 - A Memobird Open Platform access key for physical printing
@@ -164,6 +164,12 @@ Back up both:
 
 Also retain the encryption key required to decrypt stored AI and plugin secrets. A database backup without its corresponding encryption key is incomplete.
 
+See [Backup and restore verification](BACKUP_RESTORE.md) for the reproducible
+PostgreSQL test and its production limits. Workspace synchronization now uses
+revision checks: apply migration `010_workspace_revision.sql` before starting
+the updated API and deploy the updated frontend alongside it. Older web clients
+must reload because unversioned saves return HTTP 428. See [Workspace API](WORKSPACE_API.md).
+
 The repository does not yet provide automated production backup or restore tooling. Define and test your own PostgreSQL backup, restore, retention, and rollback procedures before relying on Ink for important workflows.
 
 ## Health and operations
@@ -194,7 +200,7 @@ make check-api
 make check-local-ci
 ```
 
-The smoke test uses an isolated PostgreSQL container and does not contact the physical printer provider.
+`make smoke-api` creates an isolated temporary PostgreSQL container, keeps credentials and plugin artifacts in a private temporary directory, and removes them on exit. It leaves the development database, `.env`, and `.dev-admin-password` unchanged and does not contact the physical printer provider. Docker and `uv` are required. CI may reuse its own empty disposable database by setting `INK_SMOKE_BOOTSTRAP_DB=0` and an explicit `DATABASE_URL`.
 
 On macOS, local CI exposes the act cache on port `18333` through
 `host.docker.internal` so Docker can reach it even when a VPN changes the

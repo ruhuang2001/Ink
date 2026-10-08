@@ -606,7 +606,14 @@ describe("workspace store plugin flows", () => {
 
     expect(store.devices.map((device) => device.id)).toEqual(["device-2"]);
     expect(store.defaultDeviceId).toBe("device-2");
-    expect(store.remotePrintJobs.map((job) => job.id)).toEqual(["print-2"]);
-    expect(store.remoteSchedules.map((schedule) => schedule.id)).toEqual(["schedule-2"]);
+    expect(store.getDeviceName("device-1")).toBe("已移除设备");
+    expect(store.remotePrintJobs.map((job) => job.id)).toEqual(["print-1", "print-2"]);
+    expect(store.remoteSchedules.map((schedule) => schedule.id)).toEqual([
+      "schedule-1",
+      "schedule-2",
+    ]);
+    expect(store.remoteSchedules.find((schedule) => schedule.id === "schedule-1")?.enabled).toBe(
+      false,
+    );
   });
 });

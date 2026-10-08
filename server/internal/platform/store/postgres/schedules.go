@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/ruhuang/ink/server/internal/schedule"
+	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
 var _ schedule.Repository = (*Store)(nil)
@@ -59,7 +60,24 @@ func (s *Store) Save(ctx context.Context, current schedule.PrintSchedule) error 
 		return err
 	}
 
-	_, err = s.db.Exec(ctx, `
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Lock the binding before its schedules, matching device removal. A stale
+	// runner must not re-enable a schedule after its device was removed.
+	var deviceStatus workspace.DeviceStatus
+	if err := tx.QueryRow(ctx, `
+		select status from printer_bindings
+		where id = $1 and user_id = $2 for update
+	`, current.DeviceID, current.UserID).Scan(&deviceStatus); err != nil {
+		return err
+	}
+	current.Enabled = current.Enabled && deviceStatus == workspace.DeviceStatusConnected
+
+	_, err = tx.Exec(ctx, `
 		insert into print_schedules (
 			id, user_id, plugin_installation_id, plugin_binding_id, title, frequency_type,
 			timezone, hour, minute, weekdays, print_policy_json, device_id, enabled,
@@ -83,6 +101,7 @@ func (s *Store) Save(ctx context.Context, current schedule.PrintSchedule) error 
 			lease_until = excluded.lease_until,
 			last_error = excluded.last_error,
 			updated_at = excluded.updated_at
+		where print_schedules.updated_at <= excluded.updated_at
 	`,
 		current.ID,
 		current.UserID,
@@ -104,7 +123,10 @@ func (s *Store) Save(ctx context.Context, current schedule.PrintSchedule) error 
 		current.CreatedAt,
 		current.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Store) Delete(ctx context.Context, userID string, scheduleID string) error {

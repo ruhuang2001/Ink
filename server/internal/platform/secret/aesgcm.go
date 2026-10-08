@@ -72,6 +72,9 @@ func (b *Box) Decrypt(ciphertext []byte, nonce []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(nonce) != gcm.NonceSize() {
+		return "", fmt.Errorf("invalid secret nonce length")
+	}
 
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {

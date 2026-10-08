@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -37,7 +38,7 @@ func TestSaveStatePersistsNormalizedWorkspace(t *testing.T) {
 		fakeClock{now: time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)},
 	)
 
-	saved, err := service.SaveState(context.Background(), "access-token", State{})
+	saved, err := service.SaveState(context.Background(), "access-token", State{Revision: 1})
 	if err != nil {
 		t.Fatalf("save state failed: %v", err)
 	}
@@ -51,6 +52,7 @@ func TestSaveStatePersistsNormalizedWorkspace(t *testing.T) {
 
 	disabled := false
 	saved, err = service.SaveState(context.Background(), "access-token", State{
+		Revision:    saved.Revision,
 		Preferences: Preferences{TutorialTabEnabled: &disabled},
 	})
 	if err != nil {
@@ -63,6 +65,7 @@ func TestSaveStatePersistsNormalizedWorkspace(t *testing.T) {
 
 func TestAccountWorkspaceExcludesPrintHistory(t *testing.T) {
 	state := EmptyState()
+	state.Revision = 1
 	state.PrintJobs = []PrintJob{{ID: "legacy-copy", Content: "print body", Status: PrintStatusCompleted}}
 	state.Conversations = []Conversation{{ID: "conversation", Title: "keep me"}}
 	repo := &fakeRepository{current: &state}
@@ -94,6 +97,15 @@ type fakeRepository struct {
 	savedState  *State
 }
 
+func (f *fakeRepository) InitializeByUserID(_ context.Context, userID string, state State, _ time.Time) error {
+	if f.current == nil {
+		state.Revision = 1
+		f.savedUserID = userID
+		f.current = new(state)
+	}
+	return nil
+}
+
 func (f *fakeRepository) FindByUserID(_ context.Context, _ string) (*State, error) {
 	return f.current, nil
 }
@@ -103,12 +115,41 @@ func (f *fakeRepository) SaveByUserID(
 	userID string,
 	state State,
 	_ time.Time,
-) error {
+) (int64, error) {
+	if f.current != nil && state.Revision != f.current.Revision {
+		return 0, ErrConflict
+	}
 	copy := state
+	copy.Revision++
 	f.savedUserID = userID
 	f.savedState = &copy
 	f.current = &copy
-	return nil
+	return copy.Revision, nil
+}
+
+func TestSaveStateRejectsMissingAndStaleRevision(t *testing.T) {
+	state := EmptyState()
+	state.Revision = 1
+	state.Conversations = []Conversation{{ID: "existing", Title: "Original"}}
+	repo := &fakeRepository{current: &state}
+	service := NewService(repo, fakeAuthenticator{}, fakeClock{now: time.Now()})
+	if _, err := service.SaveState(t.Context(), "token", State{}); !errors.Is(err, ErrRevisionRequired) {
+		t.Fatalf("expected missing revision rejection, got %v", err)
+	}
+	first := state
+	first.Conversations = []Conversation{{ID: "first", Title: "Saved in first tab"}}
+	saved, err := service.SaveState(t.Context(), "token", first)
+	if err != nil || saved.Revision != 2 {
+		t.Fatalf("first save: %+v, %v", saved, err)
+	}
+	second := state
+	second.Conversations = []Conversation{{ID: "second", Title: "Stale tab"}}
+	if _, err := service.SaveState(t.Context(), "token", second); !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected stale save conflict, got %v", err)
+	}
+	if repo.current.Revision != 2 || repo.current.Conversations[0].ID != "first" {
+		t.Fatalf("stale save replaced the first tab's content: %+v", repo.current)
+	}
 }
 
 type fakeAuthenticator struct{}
