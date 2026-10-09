@@ -12,14 +12,18 @@ toolchain installed:
 
 ```sh
 python3 server/scripts/print_performance.py \
-  --baseline-ref 4399d13 \
+  --baseline-ref 39026e74aa7a0f50f908684006f335345d278bea \
   --assert-improvement --verify-store-tests \
   --output /tmp/ink-print-performance.json
 
 python3 server/scripts/print_performance.py \
-  --baseline-ref 4399d13 --provider-delay-ms 0 --core-only \
+  --baseline-ref 39026e74aa7a0f50f908684006f335345d278bea --provider-delay-ms 0 --core-only \
   --assert-improvement --output /tmp/ink-print-performance-zero-delay.json
 ```
+
+Fresh reruns use the stable pre-optimization commit on `main` above. The historical
+2026-10-01 reports retain their original PR-internal baseline `4399d13` and candidate
+`f08952b`; those exact reruns require a checkout retaining those Git objects.
 
 Each route has 3 warmup requests and 30 measured sequential requests by default.
 p95 uses nearest rank, including reading the complete response body. The fixture
@@ -63,6 +67,11 @@ The report includes pre-render RSS, observed peak, and their difference. PNG
 signatures and SHA-256 hashes must match across versions. The renderer is unchanged,
 so these figures establish a baseline and do not demonstrate a rendering optimization.
 
+Current reruns render 486-byte and 999-byte inputs within the image-height limit,
+and separately require an oversized preview to return `print_content_too_large`.
+The historical results below used the earlier 4,077-byte fixture before render
+limits were introduced; they are preserved as measurements of that revision.
+
 `--assert-improvement` requires the candidate list p95 to be less than half the
 baseline and both list and workspace responses to contain less than one tenth
 as many bytes. Those gates are intended for the documented fixture; very small
@@ -73,7 +82,9 @@ does not occur.
 
 ## Results — 2026-10-01
 
-Both experiments passed the improvement gates and contract checks. The machine
+Both experiments passed their foreground improvement gates and data-contract checks.
+The full run additionally verified rendering, schedule delivery, and background
+completion. The `--core-only` zero-delay run did not run those additional checks. The machine
 was macOS 27 on arm64, with API binaries built by Go 1.26.6 and PostgreSQL 16.
 The host Go launcher was 1.26.5; the module automatically selected 1.26.6. Raw
 samples, the Docker image digest, and frozen source hashes are preserved in
@@ -124,7 +135,7 @@ rendering as a candidate for profiling. They do not measure exact peak memory
 or prove a rendering improvement. Rendering latency varied substantially between
 the runs, so it is not used as an improvement claim.
 
-## Remaining work
+## Work identified at measurement time
 
 This batch establishes paging, lightweight local status reads, background status
 synchronization, and removal of duplicated print history from workspace reads.
@@ -136,6 +147,8 @@ Broader workspace convergence and snapshot version conflicts, job claims and
 leases, bounded execution concurrency, frontend domain-store separation, plugin
 batch inserts, rendering changes, and additional SQL index tuning remain separate
 work. This experiment does not rank those candidates as production bottlenecks.
+The later PR #86 review implements workspace revision conflicts and recoverable
+status/submission claims; the original measurements do not validate those changes.
 Before changing them, collect production list p95 and body sizes, total provider
 calls from worker telemetry, schedule due-to-created delays, and render profiles
 on representative inputs and concurrency.

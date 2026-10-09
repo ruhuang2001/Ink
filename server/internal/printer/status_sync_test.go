@@ -177,3 +177,21 @@ func TestSubmitOnlySendsPrintAndSchedulesBackgroundCheck(t *testing.T) {
 		t.Fatal("accepted print was not scheduled for background status check")
 	}
 }
+
+func TestUnknownSubmissionIsNotAutomaticallyPrintedAgain(t *testing.T) {
+	now := time.Now()
+	repo := statusFixture(now, 0)
+	repo.jobs["uncertain"] = Job{ID: "uncertain", UserID: "user-1", PrinterBindingID: "device-1", Status: workspace.PrintStatusFailed, ErrorMessage: new(SubmissionOutcomeUnknown)}
+	pipeline := &countingImagePipeline{}
+	service := NewService(repo, fakeAuthenticator{}, nil, fakeClock{now: now}, "key", "", time.Second)
+	service.imagePrinter = pipeline
+	if _, err := service.CreatePrintJobForUser(t.Context(), "user-1", CreateJobInput{JobID: "uncertain", SubmitImmediately: true}); !errors.Is(err, ErrUnavailable) || pipeline.calls.Load() != 0 {
+		t.Fatalf("unknown submission was retried: calls=%d, err=%v", pipeline.calls.Load(), err)
+	}
+	if mapJob(repo.jobs["uncertain"]).ErrorMessage != SubmissionOutcomeUnknown {
+		t.Fatal("recovery instruction was hidden")
+	}
+	if mapJob(Job{ErrorMessage: new("https://provider.example?ak=private-key")}).ErrorMessage != "" {
+		t.Fatal("internal provider error was exposed")
+	}
+}

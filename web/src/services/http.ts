@@ -52,24 +52,27 @@ export async function request<T>(input: string, init: HttpRequestInit = {}): Pro
   let attempt = await fetchWithTimeout(input, init, headers);
   let response = attempt.response;
 
-  if (response.status === 401 && canRefresh) {
-    attempt.cleanup();
-    const accessToken = headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-    const nextAccessToken = await refreshAccessToken(accessToken);
-    if (nextAccessToken) {
-      attempt.cleanup();
-      headers.set("Authorization", `Bearer ${nextAccessToken}`);
-      attempt = await fetchWithTimeout(input, init, headers);
-      response = attempt.response;
-    }
-  }
-
   try {
+    if (response.status === 401 && canRefresh) {
+      await response.body?.cancel().catch(() => undefined);
+      attempt.cleanup();
+      const accessToken = headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+      const nextAccessToken = await refreshAccessToken(accessToken);
+      if (init.signal?.aborted) {
+        throw networkError(new DOMException("aborted", "AbortError"), false);
+      }
+      if (nextAccessToken) {
+        headers.set("Authorization", `Bearer ${nextAccessToken}`);
+        attempt = await fetchWithTimeout(input, init, headers);
+        response = attempt.response;
+      }
+    }
     if (!response.ok) {
       let errorPayload: ApiErrorResponse | null = null;
       try {
-        errorPayload = (await response.json()) as ApiErrorResponse;
-      } catch {
+        errorPayload = (await attempt.readJSON()) as ApiErrorResponse;
+      } catch (error) {
+        if (error instanceof AuthApiError) throw error;
         errorPayload = null;
       }
 
@@ -85,7 +88,7 @@ export async function request<T>(input: string, init: HttpRequestInit = {}): Pro
       return undefined as T;
     }
 
-    return (await response.json()) as T;
+    return (await attempt.readJSON()) as T;
   } finally {
     attempt.cleanup();
   }
@@ -108,8 +111,17 @@ async function fetchWithTimeout(input: string, init: HttpRequestInit, headers: H
   }
 
   try {
+    const response = await fetch(input, { ...init, headers, signal: controller.signal });
     return {
-      response: await fetch(input, { ...init, headers, signal: controller.signal }),
+      response,
+      readJSON: async (): Promise<unknown> => {
+        try {
+          return await response.json();
+        } catch (error) {
+          if (controller.signal.aborted) throw networkError(error, timedOut);
+          throw error;
+        }
+      },
       cleanup: () => {
         globalThis.clearTimeout(timeoutId);
         init.signal?.removeEventListener("abort", onAbort);
@@ -118,16 +130,20 @@ async function fetchWithTimeout(input: string, init: HttpRequestInit, headers: H
   } catch (error) {
     globalThis.clearTimeout(timeoutId);
     init.signal?.removeEventListener("abort", onAbort);
-    const message =
-      error instanceof DOMException && error.name === "AbortError" && timedOut
-        ? "请求超时，请稍后重试。"
-        : error instanceof DOMException && error.name === "AbortError" && !timedOut
-          ? "请求已取消。"
-          : error instanceof Error
-            ? `网络异常，请检查连接后重试。${error.message ? ` (${error.message})` : ""}`
-            : "网络异常，请检查连接后重试。";
-    throw new AuthApiError(0, "network_error", message);
+    throw networkError(error, timedOut);
   }
+}
+
+function networkError(error: unknown, timedOut: boolean) {
+  const message =
+    error instanceof DOMException && error.name === "AbortError" && timedOut
+      ? "请求超时，请稍后重试。"
+      : error instanceof DOMException && error.name === "AbortError" && !timedOut
+        ? "请求已取消。"
+        : error instanceof Error
+          ? `网络异常，请检查连接后重试。${error.message ? ` (${error.message})` : ""}`
+          : "网络异常，请检查连接后重试。";
+  return new AuthApiError(0, "network_error", message);
 }
 
 function createRequestId() {
@@ -142,13 +158,11 @@ async function refreshAccessToken(authorization: string) {
     return null;
   }
   if (!authRefreshOperation || authRefreshOperation.accessToken !== authorization) {
-    const promise = authRefreshHandler(authorization)
-      .catch(() => null)
-      .finally(() => {
-        if (authRefreshOperation?.promise === promise) {
-          authRefreshOperation = null;
-        }
-      });
+    const promise = authRefreshHandler(authorization).finally(() => {
+      if (authRefreshOperation?.promise === promise) {
+        authRefreshOperation = null;
+      }
+    });
     authRefreshOperation = { accessToken: authorization, promise };
   }
   return authRefreshOperation.promise;

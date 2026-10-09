@@ -8,8 +8,8 @@ import type { RouterHistory } from "vue-router";
 
 import { translate } from "@/i18n";
 import AppShell from "@/layouts/AppShell.vue";
-import SettingsLayout from "@/layouts/SettingsLayout.vue";
 import { DEFAULT_LOGIN_REDIRECT, resolveLoginRedirect } from "@/router/authRedirect";
+import { installChunkRecovery } from "@/router/chunkRecovery";
 import { pinia } from "@/stores/pinia";
 import { useWorkspaceStore } from "@/stores/workspace";
 
@@ -17,6 +17,7 @@ const ConversationsView = () => import("@/views/ConversationsView.vue");
 const LoginView = () => import("@/views/LoginView.vue");
 const PrintsView = () => import("@/views/PrintsView.vue");
 const SettingsView = () => import("@/views/SettingsView.vue");
+const SettingsLayout = () => import("@/layouts/SettingsLayout.vue");
 const StatusView = () => import("@/views/StatusView.vue");
 const TutorialView = () => import("@/views/TutorialView.vue");
 
@@ -140,23 +141,7 @@ export function createAppRouter(
     routes,
   });
 
-  router.onError((error, to) => {
-    if (!isDynamicImportError(error) || typeof window === "undefined") {
-      return;
-    }
-
-    const reloadKey = "ink.route-chunk-reload";
-    try {
-      const target = to?.fullPath ?? window.location.href;
-      if (window.sessionStorage.getItem(reloadKey) === target) {
-        return;
-      }
-      window.sessionStorage.setItem(reloadKey, target);
-      window.location.assign(target);
-    } catch {
-      // Storage and reload can be unavailable in embedded or restricted browsers.
-    }
-  });
+  installChunkRecovery(router);
 
   router.beforeEach(async (to) => {
     const workspaceStore = useWorkspaceStore(piniaInstance);
@@ -188,13 +173,6 @@ export function createAppRouter(
   });
 
   router.afterEach((to) => {
-    if (typeof window !== "undefined") {
-      try {
-        window.sessionStorage.removeItem("ink.route-chunk-reload");
-      } catch {
-        // Storage can be unavailable in embedded or restricted browsers.
-      }
-    }
     const title = to.meta.titleKey
       ? `${translate("app.name")} · ${translate(to.meta.titleKey)}`
       : translate("app.name");
@@ -202,13 +180,6 @@ export function createAppRouter(
   });
 
   return router;
-}
-
-function isDynamicImportError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /dynamically imported module|importing a module script failed|loading chunk/i.test(
-    message,
-  );
 }
 
 export function createTestRouter(piniaInstance = pinia) {

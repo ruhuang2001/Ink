@@ -269,6 +269,35 @@ func TestToggleRejectsEnablingRemovedPrinter(t *testing.T) {
 	}
 }
 
+func TestProcessDueSkipsInvalidatedClaimsAfterRebind(t *testing.T) {
+	now := time.Now()
+	for _, change := range []string{"removed", "deleted", "edited", "reclaimed"} {
+		t.Run(change, func(t *testing.T) {
+			repo := newScheduleRepo()
+			original := PrintSchedule{ID: "schedule-1", UserID: "member-user", DeviceID: "device-1", Enabled: true, UpdatedAt: now, LeaseUntil: new(now.Add(time.Minute))}
+			repo.claimed = []PrintSchedule{original}
+			current := original
+			switch change {
+			case "removed":
+				current.Enabled = false
+				current.LeaseUntil = nil
+			case "edited":
+				current.UpdatedAt = now.Add(time.Microsecond)
+			case "reclaimed":
+				current.LeaseUntil = new(now.Add(2 * time.Minute))
+			}
+			if change != "deleted" {
+				repo.schedules[current.ID] = current
+			}
+			dispatcher := &fakeDispatcher{}
+			service := newScheduleService(now, repo, dispatcher)
+			if _, err := service.ProcessDue(t.Context(), 20); err != nil || len(dispatcher.calls) != 0 {
+				t.Fatalf("stale claim dispatched after %s: %+v, %v", change, dispatcher.calls, err)
+			}
+		})
+	}
+}
+
 func TestScheduleMutationsReturnPersistedDisabledState(t *testing.T) {
 	for _, operation := range []string{"create", "update", "toggle"} {
 		t.Run(operation, func(t *testing.T) {

@@ -30,7 +30,7 @@ function isSectionActive(name: string) {
 
     <nav
       class="settings-section-nav mt-8 overflow-x-auto overflow-y-hidden border-b border-stone-200"
-      aria-label="Settings"
+      :aria-label="t('navigation.settings.label')"
     >
       <div class="flex min-w-max gap-7">
         <RouterLink

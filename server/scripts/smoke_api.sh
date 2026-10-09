@@ -487,6 +487,45 @@ with open(sys.argv[1], "r", encoding="utf-8") as fh:
 PY
 )
 
+python3 - "$SMOKE_DIR/manual-print.json" "$SMOKE_PRINTER_ID" <<'PY'
+import json
+import sys
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump({"title": "Pagination smoke fixture", "source": "Manual", "content": "Synthetic content", "printerBindingId": sys.argv[2], "submitImmediately": False}, fh)
+PY
+curl --silent --show-error --fail \
+  -H "$AUTH_HEADER" -H "Content-Type: application/json" \
+  -X POST --data-binary "@$SMOKE_DIR/manual-print.json" \
+  "$SMOKE_BASE_URL/api/v1/print-jobs" >"$SMOKE_DIR/manual-created.json"
+curl --silent --show-error --fail -H "$AUTH_HEADER" \
+  "$SMOKE_BASE_URL/api/v1/print-jobs?limit=1" >"$SMOKE_DIR/page-first.json"
+PRINT_PAGE_CURSOR=$(python3 - "$SMOKE_DIR/page-first.json" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    page = json.load(fh)
+if len(page.get("printJobs", [])) != 1 or not page.get("nextCursor"):
+    raise SystemExit("small print page did not provide a continuation cursor")
+print(page["nextCursor"])
+PY
+)
+curl --silent --show-error --fail -H "$AUTH_HEADER" --get \
+  --data-urlencode "limit=1" --data-urlencode "cursor=$PRINT_PAGE_CURSOR" \
+  "$SMOKE_BASE_URL/api/v1/print-jobs" >"$SMOKE_DIR/page-second.json"
+python3 - "$SMOKE_DIR/page-first.json" "$SMOKE_DIR/page-second.json" "$SMOKE_DIR/manual-created.json" "$PRINT_JOB_ID" <<'PY'
+import json
+import sys
+pages = []
+for path in sys.argv[1:3]:
+    with open(path, encoding="utf-8") as fh:
+        pages.append(json.load(fh))
+with open(sys.argv[3], encoding="utf-8") as fh:
+    manual = json.load(fh)["printJob"]
+rows = [job for page in pages for job in page.get("printJobs", [])]
+if len(rows) != 2 or any("content" in job for job in rows) or {job["id"] for job in rows} != {manual["id"], sys.argv[4]} or pages[1].get("nextCursor") is not None:
+    raise SystemExit("cursor continuation lost or duplicated print summaries")
+PY
+
 curl --silent --show-error --fail \
   -H "$AUTH_HEADER" \
   "$SMOKE_BASE_URL/api/v1/print-jobs/status?ids=$PRINT_JOB_ID" >"$PRINT_STATUS_JSON"

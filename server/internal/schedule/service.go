@@ -19,6 +19,7 @@ import (
 var (
 	ErrInvalidInput = errors.New("invalid schedule input")
 	ErrNotFound     = errors.New("schedule not found")
+	ErrConflict     = errors.New("schedule changed concurrently")
 )
 
 type Repository interface {
@@ -324,6 +325,22 @@ func advanceScheduleTimings(current *PrintSchedule, now time.Time) {
 }
 
 func (s *Service) processSchedule(ctx context.Context, current PrintSchedule, now time.Time) {
+	claim := current
+	validate := func(ctx context.Context) error {
+		latest, err := s.repo.FindByID(ctx, claim.UserID, claim.ID)
+		if err != nil {
+			return err
+		}
+		if latest == nil || !latest.Enabled || !latest.UpdatedAt.Equal(claim.UpdatedAt) ||
+			(latest.LeaseUntil == nil) != (claim.LeaseUntil == nil) ||
+			latest.LeaseUntil != nil && (!latest.LeaseUntil.Equal(*claim.LeaseUntil) || !latest.LeaseUntil.After(s.clock.Now())) {
+			return ErrConflict
+		}
+		return nil
+	}
+	if err := validate(ctx); err != nil {
+		return
+	}
 	advanceScheduleTimings(&current, now)
 
 	installation, binding, _, ok := s.resolveScheduleRun(ctx, current)
@@ -336,6 +353,7 @@ func (s *Service) processSchedule(ctx context.Context, current PrintSchedule, no
 		Installation: installation,
 		DeviceID:     current.DeviceID,
 		BatchSize:    current.PrintPolicy.BatchSize,
+		BeforePrint:  validate,
 	}); err != nil {
 		s.failSchedule(ctx, current, err.Error())
 		return

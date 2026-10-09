@@ -36,6 +36,7 @@ export async function bindPrinter(accessToken: string, payload: BindPrinterPaylo
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(payload),
+    timeoutMs: 120000,
   });
 
   return response.device;
@@ -82,12 +83,18 @@ export async function fetchPrintJob(accessToken: string, jobId: string) {
   return response.printJob;
 }
 
-export async function fetchPrintJobStatuses(accessToken: string, ids: string[], since: string) {
+export async function fetchPrintJobStatuses(
+  accessToken: string,
+  ids: string[],
+  since: string,
+  includeMetadata = true,
+) {
   const query = new URLSearchParams({ since });
   if (ids.length) query.set("ids", ids.join(","));
+  if (!includeMetadata) query.set("metadata", "false");
   return request<{
     printJobs: Pick<PrintJobSummary, "id" | "status" | "updatedAt" | "deviceId">[];
-    counts: PrintJobCounts;
+    counts?: PrintJobCounts;
     latestJobId: string | null;
   }>(`/api/v1/print-jobs/status?${query}`, {
     headers: { Authorization: `Bearer ${accessToken}` },

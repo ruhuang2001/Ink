@@ -9,7 +9,11 @@ const maxInitialJavaScriptGzip = 150 * 1024;
 const maxInitialCssGzip = 80 * 1024;
 const maxFontAssetBytes = 64 * 1024;
 
-const files = await readdir(assetsDir);
+const files = await readdir(assetsDir).catch((error) => {
+  if (error.code === "ENOENT")
+    throw new Error("Build output is missing; run pnpm build before pnpm check:budget.");
+  throw error;
+});
 const entryScripts = files.filter((file) => /^index-[^/]+\.js$/.test(file));
 const entryStyles = files.filter((file) => /^index-[^/]+\.css$/.test(file));
 if (entryScripts.length !== 1 || entryStyles.length !== 1) {
@@ -23,10 +27,12 @@ const checks = [
   await checkGzip(join(distDir, "assets", entryStyles[0]), maxInitialCssGzip),
 ];
 
-for (const file of files.filter((name) => /\.woff2?$/.test(name))) {
-  const bytes = (await stat(join(distDir, "assets", file))).size;
+for (const file of await readdir(distDir, { recursive: true, withFileTypes: true })) {
+  if (!file.isFile() || !/\.(woff2?|ttf|otf)$/i.test(file.name)) continue;
+  const path = join(file.parentPath, file.name);
+  const bytes = (await stat(path)).size;
   if (bytes > maxFontAssetBytes) {
-    throw new Error(`font asset ${file} is ${bytes} bytes; limit is ${maxFontAssetBytes}`);
+    throw new Error(`font asset ${path} is ${bytes} bytes; limit is ${maxFontAssetBytes}`);
   }
 }
 

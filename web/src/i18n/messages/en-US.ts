@@ -277,6 +277,7 @@ const enUS = {
       "Absolutely. You could print it like this: {prompt}{summary} Leave one blank line so it fits the paper note better.",
   },
   shell: {
+    routeLoadError: "This page could not load. Check your connection and retry.",
     syncErrors: {
       title: "Some data could not be synchronized",
       workspace: "Workspace: {message}",
@@ -892,6 +893,7 @@ const enUS = {
       invalid_plugin_input: "Enter a valid plugin configuration.",
       plugin_git_install_disabled: "Installing plugins from Git is disabled on the server.",
       schedule_not_found: "The requested schedule could not be found.",
+      schedule_conflict: "The schedule changed. Reload it before editing again.",
     },
   },
 } as const;

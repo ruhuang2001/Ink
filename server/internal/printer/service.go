@@ -61,7 +61,7 @@ type Repository interface {
 	ListJobSummaries(ctx context.Context, userID string, query JobPageQuery) ([]JobSummaryRecord, error)
 	ListJobStatuses(ctx context.Context, userID string, ids []string) ([]JobStatusRecord, error)
 	GetJobCounts(ctx context.Context, userID string, since time.Time) (JobCounts, *string, error)
-	ListDueStatusJobs(ctx context.Context, now time.Time, limit int) ([]StatusSyncJob, error)
+	ClaimDueStatusJobs(ctx context.Context, now time.Time, leaseUntil time.Time, limit int) ([]StatusSyncJob, error)
 	SaveStatusCheck(ctx context.Context, job StatusSyncJob, result StatusCheckResult) (bool, error)
 	FindJobByID(ctx context.Context, userID string, jobID string) (*Job, error)
 	SavePendingJob(ctx context.Context, job Job, expectedUpdatedAt time.Time) (bool, error)
@@ -314,6 +314,9 @@ func (s *Service) createPrintJobForUser(ctx context.Context, userID string, inpu
 			return workspace.PrintJob{}, err
 		}
 		if existing != nil {
+			if existing.ErrorMessage != nil && *existing.ErrorMessage == SubmissionOutcomeUnknown {
+				return workspace.PrintJob{}, fmt.Errorf("%w: %s", ErrUnavailable, SubmissionOutcomeUnknown)
+			}
 			if input.SubmitImmediately && existing.Status == workspace.PrintStatusFailed {
 				if _, err := printableTextForRender(existing.Title, existing.Content); err != nil {
 					return workspace.PrintJob{}, err
@@ -601,15 +604,25 @@ func (s *Service) newClient(binding Binding) (*memobirdapi.Client, error) {
 
 func mapJob(job Job) workspace.PrintJob {
 	return workspace.PrintJob{
-		ID:        job.ID,
-		Title:     job.Title,
-		Source:    job.Source,
-		DeviceID:  job.PrinterBindingID,
-		Status:    job.Status,
-		CreatedAt: job.CreatedAt.UTC().Format(time.RFC3339Nano),
-		UpdatedAt: job.UpdatedAt.UTC().Format(time.RFC3339Nano),
-		Content:   job.Content,
+		ID:           job.ID,
+		Title:        job.Title,
+		Source:       job.Source,
+		DeviceID:     job.PrinterBindingID,
+		Status:       job.Status,
+		CreatedAt:    job.CreatedAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt:    job.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		Content:      job.Content,
+		ErrorMessage: derefErrorMessage(job.ErrorMessage),
 	}
+}
+
+func derefErrorMessage(message *string) string {
+	// Provider errors can contain request URLs and credentials. Only the
+	// fixed recovery instruction is safe to expose in print-job responses.
+	if message == nil || *message != SubmissionOutcomeUnknown {
+		return ""
+	}
+	return *message
 }
 
 func chooseString(value string, fallback string) string {

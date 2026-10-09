@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ruhuang/ink/server/internal/printer"
+	"github.com/ruhuang/ink/server/internal/schedule"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
@@ -94,11 +96,11 @@ func TestRemovePrinterPreservesHistoryAndDisablesSchedules(t *testing.T) {
 	if err != nil || len(history) != 1 || history[0].ID != "completed-job" {
 		t.Fatalf("history is not readable: %+v, %v", history, err)
 	}
-	due, err := store.ListDueStatusJobs(ctx, time.Now().Add(time.Minute), 20)
+	due, err := store.ClaimDueStatusJobs(ctx, time.Now().Add(time.Minute), time.Now().Add(2*time.Minute), 20)
 	if err != nil || len(due) != 1 || due[0].ID != "queued-job" {
 		t.Fatalf("accepted job lost status synchronization: %+v, %v", due, err)
 	}
-	if err := store.Save(ctx, *staleSchedule); err != nil {
+	if err := store.Save(ctx, *staleSchedule); !errors.Is(err, schedule.ErrConflict) {
 		t.Fatal(err)
 	}
 	current, err = store.FindByID(ctx, "remove-user", "remove-schedule")
@@ -114,7 +116,7 @@ func TestRemovePrinterPreservesHistoryAndDisablesSchedules(t *testing.T) {
 	if err := store.SaveBinding(ctx, *binding); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Save(ctx, *staleSchedule); err != nil {
+	if err := store.Save(ctx, *staleSchedule); !errors.Is(err, schedule.ErrConflict) {
 		t.Fatal(err)
 	}
 	current, err = store.FindByID(ctx, "remove-user", "remove-schedule")

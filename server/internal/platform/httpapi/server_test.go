@@ -712,7 +712,7 @@ func (f fakePrinterService) GetPrintJobStatuses(_ context.Context, _ string, inp
 	if f.statusInput != nil {
 		*f.statusInput = input
 	}
-	return printer.JobStatuses{PrintJobs: []printer.JobStatus{}, Counts: printer.JobCounts{Queued: len(f.printJobs)}, LatestJobID: f.latestJobID}, f.err
+	return printer.JobStatuses{PrintJobs: []printer.JobStatus{}, Counts: new(printer.JobCounts{Queued: len(f.printJobs)}), LatestJobID: f.latestJobID}, f.err
 }
 
 func (f fakePrinterService) GetPrintJob(_ context.Context, _ string, id string) (workspace.PrintJob, error) {

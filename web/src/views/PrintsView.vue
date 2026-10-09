@@ -558,6 +558,9 @@ async function submitScheduleDialog() {
               <div class="ui-timeline-row">
                 <div class="ui-timeline-copy">
                   <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
+                  <p v-if="item.errorMessage" class="mt-1 text-sm text-red-700" role="alert">
+                    {{ item.errorMessage }}
+                  </p>
                   <p class="mt-0.5 text-sm text-stone-500">
                     {{ workspaceStore.getDeviceName(item.deviceId) }} ·
                     {{ workspaceStore.formatPrintTime(item.updatedAt) }}

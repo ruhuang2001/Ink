@@ -14,23 +14,25 @@ const MaxJobPageSize = 100
 
 // JobSummary contains only the fields needed to display a list row.
 type JobSummary struct {
-	ID        string                `json:"id"`
-	Title     string                `json:"title"`
-	Source    string                `json:"source"`
-	DeviceID  string                `json:"deviceId"`
-	Status    workspace.PrintStatus `json:"status"`
-	CreatedAt string                `json:"createdAt"`
-	UpdatedAt string                `json:"updatedAt"`
+	ID           string                `json:"id"`
+	Title        string                `json:"title"`
+	Source       string                `json:"source"`
+	DeviceID     string                `json:"deviceId"`
+	Status       workspace.PrintStatus `json:"status"`
+	CreatedAt    string                `json:"createdAt"`
+	UpdatedAt    string                `json:"updatedAt"`
+	ErrorMessage string                `json:"errorMessage,omitempty"`
 }
 
 type JobSummaryRecord struct {
-	ID        string
-	Title     string
-	Source    string
-	DeviceID  string
-	Status    workspace.PrintStatus
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID           string
+	Title        string
+	Source       string
+	DeviceID     string
+	Status       workspace.PrintStatus
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	ErrorMessage string
 }
 
 type ListJobsInput struct {
@@ -80,13 +82,14 @@ type JobCounts struct {
 }
 
 type JobStatusesInput struct {
-	IDs   []string
-	Since time.Time
+	IDs          []string
+	Since        time.Time
+	SkipMetadata bool
 }
 
 type JobStatuses struct {
 	PrintJobs   []JobStatus `json:"printJobs"`
-	Counts      JobCounts   `json:"counts"`
+	Counts      *JobCounts  `json:"counts,omitempty"`
 	LatestJobID *string     `json:"latestJobId"`
 }
 
@@ -140,6 +143,7 @@ func (s *Service) ListPrintJobs(ctx context.Context, accessToken string, input L
 		page.PrintJobs = append(page.PrintJobs, JobSummary{
 			ID: job.ID, Title: job.Title, Source: job.Source, DeviceID: job.DeviceID, Status: job.Status,
 			CreatedAt: job.CreatedAt.UTC().Format(time.RFC3339Nano), UpdatedAt: job.UpdatedAt.UTC().Format(time.RFC3339Nano),
+			ErrorMessage: job.ErrorMessage,
 		})
 	}
 	return page, nil
@@ -169,11 +173,15 @@ func (s *Service) GetPrintJobStatuses(ctx context.Context, accessToken string, i
 		now := s.clock.Now().UTC()
 		input.Since = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	}
-	counts, latestJobID, err := s.repo.GetJobCounts(ctx, currentUser.ID, input.Since)
-	if err != nil {
-		return JobStatuses{}, err
+	result := JobStatuses{PrintJobs: make([]JobStatus, 0, len(ids))}
+	if !input.SkipMetadata {
+		counts, latestJobID, err := s.repo.GetJobCounts(ctx, currentUser.ID, input.Since)
+		if err != nil {
+			return JobStatuses{}, err
+		}
+		result.Counts = new(counts)
+		result.LatestJobID = latestJobID
 	}
-	result := JobStatuses{PrintJobs: make([]JobStatus, 0, len(ids)), Counts: counts, LatestJobID: latestJobID}
 	if len(ids) == 0 {
 		return result, nil
 	}

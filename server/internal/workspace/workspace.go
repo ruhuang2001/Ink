@@ -59,14 +59,15 @@ type Conversation struct {
 }
 
 type PrintJob struct {
-	ID        string      `json:"id"`
-	Title     string      `json:"title"`
-	Source    string      `json:"source"`
-	DeviceID  string      `json:"deviceId"`
-	Status    PrintStatus `json:"status"`
-	CreatedAt string      `json:"createdAt"`
-	UpdatedAt string      `json:"updatedAt"`
-	Content   string      `json:"content"`
+	ID           string      `json:"id"`
+	Title        string      `json:"title"`
+	Source       string      `json:"source"`
+	DeviceID     string      `json:"deviceId"`
+	Status       PrintStatus `json:"status"`
+	CreatedAt    string      `json:"createdAt"`
+	UpdatedAt    string      `json:"updatedAt"`
+	Content      string      `json:"content"`
+	ErrorMessage string      `json:"errorMessage,omitempty"`
 }
 
 type Schedule struct {

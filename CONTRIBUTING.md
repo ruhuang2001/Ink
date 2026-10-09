@@ -47,7 +47,7 @@ This helps avoid duplicate work and keeps the project direction consistent.
 
 - Node.js 22
 - pnpm 10
-- Go 1.25
+- Go 1.26.6 or newer
 - Docker with PostgreSQL 16 support
 - Git
 

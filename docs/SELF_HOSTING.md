@@ -71,7 +71,7 @@ Important settings:
 | `MEMOBIRD_ACCESS_KEY`      | Enables Memobird device binding and physical printing.                                |
 | `MEMOBIRD_BASE_URL`        | Optional provider endpoint override; leave empty for the SDK default.                 |
 | `PRINT_STATUS_SYNC_ENABLED` | Enables background completion checks (default `true`). Disable only when another process owns synchronization. |
-| `PRINT_STATUS_POLL_INTERVAL` | Interval for scanning due print jobs (default `2s`). Each healthy queued job is checked about every `10s`. |
+| `PRINT_STATUS_POLL_INTERVAL` | Interval for scanning due print jobs (default `2s`). Healthy jobs are rescheduled after `10s`; bounded batches, leases, and load can delay actual checks. |
 | `PRINT_STATUS_BATCH_SIZE` | Maximum jobs considered per synchronization round (default `20`, maximum `100`). |
 | `PRINT_STATUS_TIMEOUT` | Timeout for each provider status request (default `5s`), independent of print submission timeout. |
 | `PLUGIN_ROOT`              | Persistent plugin installation directory. It must survive API restarts.               |
@@ -107,13 +107,14 @@ The print-status migration adds persisted check times and pagination indexes,
 and schedules previously queued provider jobs for background reconciliation.
 Deploy the frontend and API from the same revision because print lists now
 return summaries; full content is fetched from the job detail endpoint.
-Completion checks run without an open browser. Keep a single status-worker
-owner when running multiple API processes; distributed claims are not added
-by this optimization.
+Completion checks run without an open browser. Status workers use recoverable
+database leases across API processes. Each started check gets its full timeout;
+the worker yields between checks after its 15 s batch budget.
 
 Serve `web/dist/` as static files and proxy `/api/` to `127.0.0.1:8080`. The API does not serve frontend assets itself.
 
-Configure the reverse proxy to compress JavaScript, CSS, and font responses.
+Configure the reverse proxy to compress JavaScript and CSS responses (Brotli when
+available). Leave already compressed WOFF2 fonts uncompressed.
 Use long-lived immutable caching for hashed files under `web/dist/assets/`,
 while keeping `index.html`, `site.webmanifest`, and `sw.js` revalidatable. The
 service worker caches only the shell and same-origin static assets; it never
@@ -122,6 +123,11 @@ caches API responses.
 ## Reverse proxy
 
 Terminate TLS at the reverse proxy. Forward `/api/` without stripping the `/api` prefix, and serve the SPA with an `index.html` fallback for client-side routes.
+
+Persistent browser sessions coordinate refresh-token rotation through Web Locks,
+which requires a secure browser context (HTTPS or localhost). Tabs reuse only a
+rotated session belonging to the same account. Temporary refresh failures retain
+the saved session for a later retry.
 
 Ink ignores forwarded client-IP headers by default. If the proxy controls and sanitizes one header family, configure both settings:
 

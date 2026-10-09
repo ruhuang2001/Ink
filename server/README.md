@@ -45,7 +45,7 @@ Never trust a CIDR containing arbitrary clients, and configure every proxy in th
 
 `make reset-db` deletes local development database data. It is not a production migration or rollback command.
 
-Smoke runs keep their database, credentials, and plugin artifacts separate from local development and clean them up on exit. CI can supply an empty disposable database explicitly with `INK_SMOKE_BOOTSTRAP_DB=0 DATABASE_URL=... make smoke-api`. This override does not read the database URL from `.env` and should never target a development or production database.
+Default smoke runs use an isolated temporary PostgreSQL container and remove it, the temporary credentials, and plugin artifacts on exit. CI can supply an empty disposable database explicitly with `INK_SMOKE_BOOTSTRAP_DB=0 DATABASE_URL=... make smoke-api`; its migrated schema and seeded admin remain in that external database, which the caller must dispose of. This override does not read the database URL from `.env` and should never target a development or production database.
 
 `INK_DEV_ADMIN_CREDENTIALS_PATH` optionally changes where `ink-seed dev` writes initial credentials; relative paths are resolved from the command's working directory. The default remains `server/.dev-admin-password`.
 

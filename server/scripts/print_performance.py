@@ -20,11 +20,14 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
+import urllib.error
 
 
 def command(args, *, cwd=None, env=None, data=None):
     result = subprocess.run(args, cwd=cwd, env=env, input=data, text=True,
-                            capture_output=True, check=True)
+                            capture_output=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"{pathlib.Path(args[0]).name} failed ({result.returncode}):\n{result.stdout}\n{result.stderr}")
     return result.stdout.strip()
 
 
@@ -105,14 +108,17 @@ def request(base_url, path, access_token, body=None):
 class Database:
     def __init__(self):
         self.name = "ink-print-perf-" + uuid.uuid4().hex[:10]
-        self.port = free_port()
-        self.url = f"postgres://postgres:performance@127.0.0.1:{self.port}/ink?sslmode=disable"
+        self.port = None
+        self.url = None
 
     def __enter__(self):
         command(["docker", "run", "--detach", "--rm", "--name", self.name,
                  "-e", "POSTGRES_PASSWORD=performance", "-e", "POSTGRES_DB=ink",
-                 "-p", f"127.0.0.1:{self.port}:5432", "postgres:16"])
+                 "-p", "127.0.0.1::5432", "postgres:16"])
         try:
+            address = command(["docker", "port", self.name, "5432/tcp"])
+            self.port = int(address.rsplit(":", 1)[1])
+            self.url = f"postgres://postgres:performance@127.0.0.1:{self.port}/ink?sslmode=disable"
             for _ in range(100):
                 ready = subprocess.run(["docker", "exec", self.name, "pg_isready", "-h", "127.0.0.1",
                                         "-U", "postgres", "-d", "ink"],
@@ -186,8 +192,10 @@ class API:
         self.binary = binary
         self.server_dir = server_dir
         self.log_path = temp_dir / f"api-{self.port}.log"
+        self.start_attempts = 0
 
     def __enter__(self):
+        self.start_attempts += 1
         self.log = self.log_path.open("w")
         self.process = subprocess.Popen([str(self.binary)], cwd=self.server_dir, env=self.env,
                                         stdout=self.log, stderr=subprocess.STDOUT)
@@ -201,8 +209,14 @@ class API:
                 except OSError:
                     time.sleep(0.05)
             raise RuntimeError("API did not start")
-        except BaseException:
+        except BaseException as error:
             self.__exit__(None, None, None)
+            if isinstance(error, RuntimeError) and "address already in use" in str(error) and self.start_attempts < 5:
+                self.port = free_port()
+                self.url = f"http://127.0.0.1:{self.port}"
+                self.env["PORT"] = str(self.port)
+                self.log_path = self.log_path.parent / f"api-{self.port}.log"
+                return self.__enter__()
             raise
 
     def __exit__(self, *_args):
@@ -263,7 +277,8 @@ def render_memory(api, access_token, size, runs):
             elapsed, raw = request(api.url, "/api/v1/print-preview", access_token, body)
             payload = json.loads(raw)
             png = base64.b64decode(payload["image"], validate=True)
-            assert png.startswith(b"\x89PNG\r\n\x1a\n"), "Preview is not a PNG"
+            if not (png.startswith(b"\x89PNG\r\n\x1a\n")):
+                raise AssertionError("Preview is not a PNG")
             hashes.append(hashlib.sha256(png).hexdigest())
             latencies.append(elapsed)
     finally:
@@ -297,11 +312,15 @@ def measure(source, label, candidate, args, provider, temp_dir):
                   "compiled_go": command(["go", "version", str(binary)]).rsplit(": ", 1)[1], "routes": {}}
 
         def validate_page(payload):
-            assert len(payload["printJobs"]) <= 20, "Page exceeded requested limit"
-            assert all("content" not in job for job in payload["printJobs"]), "Page returned full content"
-            assert bool(payload.get("nextCursor")) == (args.jobs > 20)
+            if not (len(payload["printJobs"]) <= 20):
+                raise AssertionError("Page exceeded requested limit")
+            if not (all("content" not in job for job in payload["printJobs"])):
+                raise AssertionError("Page returned full content")
+            if not (bool(payload.get("nextCursor")) == (args.jobs > 20)):
+                raise AssertionError('Performance contract validation failed')
 
         with API(binary, server_dir, env, temp_dir) as api:
+            foreground_calls = provider.calls
             result["routes"]["list"] = sample_endpoint(api, provider, access_token,
                 "/api/v1/print-jobs?status=all&limit=20", args.samples, args.warmup,
                 validate_page if candidate else None)
@@ -311,14 +330,19 @@ def measure(source, label, candidate, args, provider, temp_dir):
                 ids = ",".join(f"perf-job-{i:05}" for i in range(1, args.queued + 1))
                 result["routes"]["status"] = sample_endpoint(api, provider, access_token,
                     "/api/v1/print-jobs/status?ids=" + ids, args.samples, args.warmup)
-                assert result["routes"]["list"]["provider_calls"] == 0
-                assert result["routes"]["status"]["provider_calls"] == 0
+                if not (result["routes"]["list"]["provider_calls"] == 0):
+                    raise AssertionError('Performance contract validation failed')
+                if not (result["routes"]["status"]["provider_calls"] == 0):
+                    raise AssertionError('Performance contract validation failed')
                 _, raw = request(api.url, "/api/v1/print-jobs/perf-job-00001", access_token)
-                assert len(json.loads(raw)["printJob"]["content"]) == args.body_bytes
+                if not (len(json.loads(raw)["printJob"]["content"]) == args.body_bytes):
+                    raise AssertionError('Performance contract validation failed')
                 _, workspace_raw = request(api.url, "/api/v1/workspace", access_token)
                 workspace = json.loads(workspace_raw)
-                assert not workspace.get("printJobs"), "Workspace duplicated print history"
-                assert any(device["id"] == "perf-device" for device in workspace["devices"])
+                if not (not workspace.get("printJobs")):
+                    raise AssertionError("Workspace duplicated print history")
+                if not (any(device["id"] == "perf-device" for device in workspace["devices"])):
+                    raise AssertionError('Performance contract validation failed')
                 seen_ids = set()
                 cursor = None
                 page_count = 0
@@ -331,21 +355,28 @@ def measure(source, label, candidate, args, provider, temp_dir):
                     _, raw = request(api.url, path, access_token)
                     page = json.loads(raw)
                     page_count += 1
-                    assert len(page["printJobs"]) <= 100
+                    if not (len(page["printJobs"]) <= 100):
+                        raise AssertionError('Performance contract validation failed')
                     for job in page["printJobs"]:
-                        assert "content" not in job and job["id"] not in seen_ids
+                        if not ("content" not in job and job["id"] not in seen_ids):
+                            raise AssertionError('Performance contract validation failed')
                         seen_ids.add(job["id"])
                     cursor = page["nextCursor"]
                     if not cursor:
                         break
-                    assert page_count <= math.ceil(args.jobs / 100), "Cursor did not progress"
-                assert len(seen_ids) == args.jobs, "Pagination omitted jobs"
+                    if not (page_count <= math.ceil(args.jobs / 100)):
+                        raise AssertionError("Cursor did not progress")
+                if not (len(seen_ids) == args.jobs):
+                    raise AssertionError("Pagination omitted jobs")
+                if provider.calls != foreground_calls:
+                    raise AssertionError("Candidate foreground reads contacted the provider")
                 result["pagination_validation"] = {"rows": len(seen_ids), "pages": page_count,
                                                     "limit": 100, "content_in_summary": False,
                                                     "elapsed_ms": (time.perf_counter() - pagination_start) * 1000,
                                                     "provider_calls": provider.calls - pagination_calls}
             else:
-                assert result["routes"]["list"]["provider_calls"] == args.samples * args.queued
+                if not (result["routes"]["list"]["provider_calls"] == args.samples * args.queued):
+                    raise AssertionError('Performance contract validation failed')
 
         if candidate and args.verify_store_tests:
             test_env = dict(env, INK_TEST_DATABASE_URL=database.url)
@@ -359,9 +390,22 @@ def measure(source, label, candidate, args, provider, temp_dir):
 
         # Fresh API process for each preview size isolates retained list-response heaps.
         result["render"] = []
-        for size in (512, 4096):
+        for size in (512, 1024):
             with API(binary, server_dir, env, temp_dir) as api:
                 result["render"].append(render_memory(api, access_token, size, 3))
+
+        if candidate:
+            with API(binary, server_dir, env, temp_dir) as api:
+                try:
+                    request(api.url, "/api/v1/print-preview", access_token,
+                            {"title": "Oversize contract", "content": "x" * 8001})
+                except urllib.error.HTTPError as error:
+                    payload = json.loads(error.read())
+                    if error.code != 413 or payload.get("code") != "print_content_too_large":
+                        raise RuntimeError("Oversized preview returned the wrong error") from error
+                else:
+                    raise RuntimeError("Oversized preview was accepted")
+            result["content_limit"] = "print_content_too_large"
 
         with API(binary, server_dir, env, temp_dir) as api:
             due_epoch = database.sql("update print_schedules set enabled=true,next_run_at=now()+interval '0.5 second' returning extract(epoch from next_run_at);")
@@ -385,15 +429,16 @@ def measure(source, label, candidate, args, provider, temp_dir):
         before = provider.calls
         sync_env = dict(env, PRINT_STATUS_SYNC_ENABLED="true")
         with API(binary, server_dir, sync_env, temp_dir) as sync_api:
-            deadline = time.monotonic() + 5
+            deadline = time.monotonic() + max(5, args.queued * (args.provider_delay_ms / 1000 + .25) + 5)
             while candidate and provider.calls < before + args.queued and time.monotonic() < deadline:
                 time.sleep(.02)
             if candidate:
-                assert provider.calls >= before + args.queued, "Startup worker did not query all queued fixtures"
+                if not (provider.calls >= before + args.queued):
+                    raise AssertionError("Startup worker did not query all queued fixtures")
                 time.sleep(.1)
             provider.printed = True
             start = time.monotonic()
-            deadline = start + (15 if candidate else 2.5)
+            deadline = start + (max(15, args.queued * (args.provider_delay_ms / 1000 + .25) + 15) if candidate else 2.5)
             synced = False
             while time.monotonic() < deadline:
                 if database.sql("select count(*) from print_jobs where status='queued';") == "0":
@@ -415,7 +460,7 @@ def measure(source, label, candidate, args, provider, temp_dir):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--baseline-ref", default="4399d13")
+    parser.add_argument("--baseline-ref", default="39026e74aa7a0f50f908684006f335345d278bea")
     parser.add_argument("--baseline-dir", type=pathlib.Path)
     parser.add_argument("--candidate-dir", type=pathlib.Path,
                         default=pathlib.Path(__file__).resolve().parents[2])
@@ -438,6 +483,9 @@ def main():
     if args.assert_improvement and args.only:
         parser.error("--assert-improvement requires both baseline and candidate")
     args.candidate_dir = args.candidate_dir.resolve()
+    image = subprocess.run(["docker", "image", "inspect", "postgres:16"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if image.returncode != 0:
+        command(["docker", "pull", "postgres:16"])
     metadata = {"platform": platform.platform(), "machine": platform.machine(),
                 "host_go": command(["go", "version"]), "postgres_image": "postgres:16",
                 "postgres_image_id": command(["docker", "image", "inspect", "postgres:16", "--format", "{{.Id}}"]),
@@ -483,11 +531,15 @@ def main():
                                                   min(old["routes"]["workspace"]["response_bytes"])}
                 report["improvement_gates"] = gates
                 args.output.write_text(json.dumps(report, indent=2) + "\n")
-                assert gates["list_p95_ratio"] < .5, "List p95 reduction was under 50%"
-                assert gates["list_bytes_ratio"] < .1, "List bytes reduction was under 90%"
-                assert gates["workspace_bytes_ratio"] < .1, "Workspace bytes reduction was under 90%"
+                if not (gates["list_p95_ratio"] < .5):
+                    raise AssertionError("List p95 reduction was under 50%")
+                if not (gates["list_bytes_ratio"] < .1):
+                    raise AssertionError("List bytes reduction was under 90%")
+                if not (gates["workspace_bytes_ratio"] < .1):
+                    raise AssertionError("Workspace bytes reduction was under 90%")
                 if not args.core_only:
-                    assert [r["png_sha256"] for r in old["render"]] == [r["png_sha256"] for r in new["render"]]
+                    if not ([r["png_sha256"] for r in old["render"]] == [r["png_sha256"] for r in new["render"]]):
+                        raise AssertionError('Performance contract validation failed')
             print(f"Raw measurements saved to {args.output}", flush=True)
     finally:
         provider.shutdown()

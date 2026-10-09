@@ -22,7 +22,7 @@ func (s *Store) ListJobSummaries(ctx context.Context, userID string, query print
 		args = append(args, query.Cursor.CreatedAt, query.Cursor.ID)
 	}
 	rows, err := s.db.Query(ctx, `
-		select id, title, source, printer_binding_id, status, created_at, updated_at
+		select id, title, source, printer_binding_id, status, created_at, updated_at, coalesce(error_message, '')
 		from print_jobs where user_id = $1`+filter+`
 		order by created_at desc, id desc limit $2
 	`, args...)
@@ -33,8 +33,11 @@ func (s *Store) ListJobSummaries(ctx context.Context, userID string, query print
 	jobs := make([]printer.JobSummaryRecord, 0, query.Limit)
 	for rows.Next() {
 		var job printer.JobSummaryRecord
-		if err := rows.Scan(&job.ID, &job.Title, &job.Source, &job.DeviceID, &job.Status, &job.CreatedAt, &job.UpdatedAt); err != nil {
+		if err := rows.Scan(&job.ID, &job.Title, &job.Source, &job.DeviceID, &job.Status, &job.CreatedAt, &job.UpdatedAt, &job.ErrorMessage); err != nil {
 			return nil, err
+		}
+		if job.ErrorMessage != printer.SubmissionOutcomeUnknown {
+			job.ErrorMessage = ""
 		}
 		jobs = append(jobs, job)
 	}
@@ -78,15 +81,32 @@ func (s *Store) GetJobCounts(ctx context.Context, userID string, since time.Time
 	return counts, latestJobID, err
 }
 
-func (s *Store) ListDueStatusJobs(ctx context.Context, now time.Time, limit int) ([]printer.StatusSyncJob, error) {
+func (s *Store) ClaimDueStatusJobs(ctx context.Context, now time.Time, leaseUntil time.Time, limit int) ([]printer.StatusSyncJob, error) {
 	rows, err := s.db.Query(ctx, `
-		select j.id, j.user_id, j.provider_print_content_id, j.updated_at,
+		with abandoned_due as (
+			select id from print_jobs
+			where status = 'queued' and provider_print_content_id is null
+				and updated_at <= $1::timestamptz - interval '3 minutes'
+			order by updated_at, id limit $3 for update skip locked
+		), abandoned as (
+			update print_jobs set status = 'failed', error_message = $4, updated_at = $1, next_status_check_at = null
+			from abandoned_due where print_jobs.id = abandoned_due.id
+			returning print_jobs.id
+		), due as (
+			select j.id
+			from print_jobs j join printer_bindings b on b.id = j.printer_binding_id and b.user_id = j.user_id
+			where j.status = 'queued' and j.provider_print_content_id is not null
+				and (j.next_status_check_at <= $1 or j.next_status_check_at is null)
+			order by j.next_status_check_at nulls first, j.id limit $3
+			for update of j skip locked
+		)
+		update print_jobs j set next_status_check_at = $2
+		from due, printer_bindings b
+		where j.id = due.id and b.id = j.printer_binding_id and b.user_id = j.user_id
+		returning j.id, j.user_id, j.provider_print_content_id, j.updated_at,
 			j.next_status_check_at, j.status_check_attempts,
 			b.id, b.device_identifier, b.provider_user_id
-		from print_jobs j join printer_bindings b on b.id = j.printer_binding_id and b.user_id = j.user_id
-		where j.status = 'queued' and j.provider_print_content_id is not null and j.next_status_check_at <= $1
-		order by j.next_status_check_at, j.id limit $2
-	`, now, limit)
+	`, now, leaseUntil, limit, printer.SubmissionOutcomeUnknown)
 	if err != nil {
 		return nil, err
 	}
