@@ -1381,7 +1381,26 @@ export const useWorkspaceStore = defineStore("workspace", () => {
             return true;
           }
           const snapshot = JSON.parse(JSON.stringify(workspaceState.value)) as WorkspaceState;
-          const saved = await saveWorkspaceStateWithApi(saveSession.accessToken, snapshot);
+          let saved: WorkspaceState;
+          try {
+            saved = await saveWorkspaceStateWithApi(saveSession.accessToken, snapshot);
+          } catch (error) {
+            const latestSession = authSession.value;
+            if (
+              !(error instanceof AuthApiError) ||
+              error.status !== 401 ||
+              !latestSession ||
+              latestSession.accessToken === saveSession.accessToken ||
+              disposed ||
+              accountVersion !== remotePrintAccountVersion ||
+              authUser.value?.id !== currentUser.id ||
+              workspaceOwnerId.value !== currentUser.id
+            )
+              throw error;
+            // Retry the unchanged revision only after this same account's
+            // token was rotated by another request.
+            saved = await saveWorkspaceStateWithApi(latestSession.accessToken, snapshot);
+          }
           if (accountVersion !== remotePrintAccountVersion) return false;
           workspaceRevision.value = saved.revision ?? workspaceRevision.value;
         } while (

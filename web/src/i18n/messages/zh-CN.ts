@@ -759,7 +759,7 @@ const zhCN = {
       pluginDetails: {
         fetchFrequency: "抓取频率",
         fetchEveryMinutes: "每 {minutes} 分钟抓取一次",
-        fetchHint: "插件会按上方频率获取内容，定时任务会从中选择未打印的内容。",
+        fetchHint: "插件会按上方频率获取内容，每个定时任务会选择该任务尚未打印的内容。",
         fetchStatus: "抓取状态",
         lastFetchedAt: "最近抓取 {time}",
         neverFetched: "尚未抓取过",

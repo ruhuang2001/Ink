@@ -74,6 +74,9 @@ Important settings:
 | `PRINT_STATUS_POLL_INTERVAL` | Interval for scanning due print jobs (default `2s`). Healthy jobs are rescheduled after `10s`; bounded batches, leases, and load can delay actual checks. |
 | `PRINT_STATUS_BATCH_SIZE` | Maximum jobs considered per synchronization round (default `20`, maximum `100`). |
 | `PRINT_STATUS_TIMEOUT` | Timeout for each provider status request (default `5s`), independent of print submission timeout. |
+| `PRINT_STATUS_RECHECK_INTERVAL` | Delay after a successful not-printed response (default `10s`); the delay backs off exponentially. |
+| `PRINT_STATUS_MAX_RECHECK_INTERVAL` | Maximum recheck delay (default `5m`); accepted jobs remain queued until completion is confirmed. |
+| `PRINT_STATUS_MAX_ATTEMPTS` | Number of unsuccessful status checks before the job is marked failed with a check-device message (default `6`); it is never automatically resubmitted. |
 | `PLUGIN_ROOT`              | Persistent plugin installation directory. It must survive API restarts.               |
 | `PLUGIN_GIT_ALLOWED_HOSTS` | Comma-separated allowlist for Git plugin installation. Keep it narrow.                |
 | `PLUGIN_ENV_ALLOWLIST`     | Explicit server environment variables passed to plugin subprocesses. Empty is safest. |

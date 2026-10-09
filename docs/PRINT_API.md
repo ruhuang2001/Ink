@@ -79,6 +79,12 @@ worker checks due jobs in bounded serial batches, persists completion, and
 backs off on provider failures. Completion is eventually visible through
 the status endpoint even when no browser is open. Failed status requests do
 not mark an accepted print job as a failed print or resubmit its content.
+Successful `not printed` responses also back off using
+`PRINT_STATUS_RECHECK_INTERVAL` and `PRINT_STATUS_MAX_RECHECK_INTERVAL`. The
+job remains queued until the provider reports completion, so a delayed physical
+printer is not mistaken for a safe duplicate-print retry. After
+`PRINT_STATUS_MAX_ATTEMPTS` unsuccessful checks, the job is marked failed with
+a fixed instruction to check the device; it is never automatically resubmitted.
 
 The worker updates only the same observed queued provider job/version.
 Cancellation or resubmission while a provider call is outstanding prevents

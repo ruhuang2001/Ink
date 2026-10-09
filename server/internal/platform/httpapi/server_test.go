@@ -925,12 +925,14 @@ func TestPrintJobReadRoutes(t *testing.T) {
 		if response.Code != test.expected || strings.Contains(response.Body.String(), "full private body") != test.content {
 			t.Fatalf("%s: code=%d body=%s", test.url, response.Code, response.Body.String())
 		}
-	}
-	if listInput.Status != "active" || listInput.Limit != 10 || listInput.Cursor != "token" {
-		t.Fatalf("list params: %+v", listInput)
-	}
-	if len(statusInput.IDs) != 1 || statusInput.IDs[0] != "job-1" || statusInput.Since.UTC().Format(time.RFC3339) != "2026-09-30T16:00:00Z" {
-		t.Fatalf("status params: %+v", statusInput)
+		if strings.HasPrefix(test.url, "/api/v1/print-jobs?status=") &&
+			(listInput.Status != "active" || listInput.Limit != 10 || listInput.Cursor != "token") {
+			t.Fatalf("list params for %s: %+v", test.url, listInput)
+		}
+		if strings.HasPrefix(test.url, "/api/v1/print-jobs/status?") &&
+			(len(statusInput.IDs) != 1 || statusInput.IDs[0] != "job-1" || statusInput.Since.UTC().Format(time.RFC3339) != "2026-09-30T16:00:00Z") {
+			t.Fatalf("status params for %s: %+v", test.url, statusInput)
+		}
 	}
 	for _, url := range []string{"/api/v1/print-jobs", "/api/v1/print-jobs/status", "/api/v1/print-jobs/job-1"} {
 		response := httptest.NewRecorder()

@@ -14,41 +14,44 @@ import (
 
 // Config contains the runtime settings required by the auth service.
 type Config struct {
-	AppName                     string
-	Port                        int
-	DatabaseURL                 string
-	JWTSecret                   string
-	AccessTokenTTL              time.Duration
-	RefreshTokenTTL             time.Duration
-	RateLimitWindow             time.Duration
-	RateLimitMax                int
-	RateLimitMaxEntries         int
-	TrustedProxyCIDRs           []netip.Prefix
-	TrustedProxyHeader          string
-	AIConfigEncryptionKey       string
-	AIAllowInsecurePrivateURL   bool
-	AIProviderTimeout           time.Duration
-	MemobirdAccessKey           string
-	MemobirdBaseURL             string
-	MemobirdTimeout             time.Duration
-	PrintStatusSyncEnabled      bool
-	PrintStatusPollInterval     time.Duration
-	PrintStatusBatchSize        int
-	PrintStatusTimeout          time.Duration
-	PluginRoot                  string
-	PluginExecTimeout           time.Duration
-	PluginInstallTimeout        time.Duration
-	PluginUploadMaxBytes        int64
-	PluginOutputMaxBytes        int64
-	PluginFetchMaxItems         int
-	PluginFetchMaxBlocksPerItem int
-	PluginFetchMaxTextBytes     int
-	PluginFetchMaxURLBytes      int
-	PluginEnvAllowlist          []string
-	PluginGitAllowedHosts       []string
-	SchedulerPollInterval       time.Duration
-	InboxJanitorInterval        time.Duration
-	InboxRetention              time.Duration
+	AppName                       string
+	Port                          int
+	DatabaseURL                   string
+	JWTSecret                     string
+	AccessTokenTTL                time.Duration
+	RefreshTokenTTL               time.Duration
+	RateLimitWindow               time.Duration
+	RateLimitMax                  int
+	RateLimitMaxEntries           int
+	TrustedProxyCIDRs             []netip.Prefix
+	TrustedProxyHeader            string
+	AIConfigEncryptionKey         string
+	AIAllowInsecurePrivateURL     bool
+	AIProviderTimeout             time.Duration
+	MemobirdAccessKey             string
+	MemobirdBaseURL               string
+	MemobirdTimeout               time.Duration
+	PrintStatusSyncEnabled        bool
+	PrintStatusPollInterval       time.Duration
+	PrintStatusBatchSize          int
+	PrintStatusTimeout            time.Duration
+	PrintStatusRecheckInterval    time.Duration
+	PrintStatusMaxRecheckInterval time.Duration
+	PrintStatusMaxAttempts        int
+	PluginRoot                    string
+	PluginExecTimeout             time.Duration
+	PluginInstallTimeout          time.Duration
+	PluginUploadMaxBytes          int64
+	PluginOutputMaxBytes          int64
+	PluginFetchMaxItems           int
+	PluginFetchMaxBlocksPerItem   int
+	PluginFetchMaxTextBytes       int
+	PluginFetchMaxURLBytes        int
+	PluginEnvAllowlist            []string
+	PluginGitAllowedHosts         []string
+	SchedulerPollInterval         time.Duration
+	InboxJanitorInterval          time.Duration
+	InboxRetention                time.Duration
 }
 
 // Load reads application configuration from the current environment.
@@ -114,6 +117,18 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	printStatusRecheckInterval, err := envDuration("PRINT_STATUS_RECHECK_INTERVAL", 10*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+	printStatusMaxRecheckInterval, err := envDuration("PRINT_STATUS_MAX_RECHECK_INTERVAL", 5*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+	printStatusMaxAttempts, err := envInt("PRINT_STATUS_MAX_ATTEMPTS", 6)
+	if err != nil {
+		return Config{}, err
+	}
 
 	pluginExecTimeout, err := envDuration("PLUGIN_EXEC_TIMEOUT", 20*time.Second)
 	if err != nil {
@@ -171,41 +186,44 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		AppName:                     envString("APP_NAME", "ink-auth"),
-		Port:                        port,
-		DatabaseURL:                 os.Getenv("DATABASE_URL"),
-		JWTSecret:                   os.Getenv("JWT_SECRET"),
-		AccessTokenTTL:              accessTokenTTL,
-		RefreshTokenTTL:             refreshTokenTTL,
-		RateLimitWindow:             rateLimitWindow,
-		RateLimitMax:                rateLimitMax,
-		RateLimitMaxEntries:         rateLimitMaxEntries,
-		TrustedProxyCIDRs:           trustedProxyCIDRs,
-		TrustedProxyHeader:          trustedProxyHeader,
-		AIConfigEncryptionKey:       os.Getenv("AI_CONFIG_ENCRYPTION_KEY"),
-		AIAllowInsecurePrivateURL:   envBool("AI_ALLOW_INSECURE_PRIVATE_URL", false),
-		AIProviderTimeout:           aiProviderTimeout,
-		MemobirdAccessKey:           os.Getenv("MEMOBIRD_ACCESS_KEY"),
-		MemobirdBaseURL:             os.Getenv("MEMOBIRD_BASE_URL"),
-		MemobirdTimeout:             memobirdTimeout,
-		PrintStatusSyncEnabled:      envBool("PRINT_STATUS_SYNC_ENABLED", true),
-		PrintStatusPollInterval:     printStatusPollInterval,
-		PrintStatusBatchSize:        printStatusBatchSize,
-		PrintStatusTimeout:          printStatusTimeout,
-		PluginRoot:                  envString("PLUGIN_ROOT", ".plugins"),
-		PluginExecTimeout:           pluginExecTimeout,
-		PluginInstallTimeout:        pluginInstallTimeout,
-		PluginUploadMaxBytes:        pluginUploadMaxBytes,
-		PluginOutputMaxBytes:        pluginOutputMaxBytes,
-		PluginFetchMaxItems:         pluginFetchMaxItems,
-		PluginFetchMaxBlocksPerItem: pluginFetchMaxBlocksPerItem,
-		PluginFetchMaxTextBytes:     pluginFetchMaxTextBytes,
-		PluginFetchMaxURLBytes:      pluginFetchMaxURLBytes,
-		PluginEnvAllowlist:          envStringList("PLUGIN_ENV_ALLOWLIST", []string{}),
-		PluginGitAllowedHosts:       envStringList("PLUGIN_GIT_ALLOWED_HOSTS", []string{"github.com", "gitee.com", "gitlab.com"}),
-		SchedulerPollInterval:       schedulerPollInterval,
-		InboxJanitorInterval:        inboxJanitorInterval,
-		InboxRetention:              inboxRetention,
+		AppName:                       envString("APP_NAME", "ink-auth"),
+		Port:                          port,
+		DatabaseURL:                   os.Getenv("DATABASE_URL"),
+		JWTSecret:                     os.Getenv("JWT_SECRET"),
+		AccessTokenTTL:                accessTokenTTL,
+		RefreshTokenTTL:               refreshTokenTTL,
+		RateLimitWindow:               rateLimitWindow,
+		RateLimitMax:                  rateLimitMax,
+		RateLimitMaxEntries:           rateLimitMaxEntries,
+		TrustedProxyCIDRs:             trustedProxyCIDRs,
+		TrustedProxyHeader:            trustedProxyHeader,
+		AIConfigEncryptionKey:         os.Getenv("AI_CONFIG_ENCRYPTION_KEY"),
+		AIAllowInsecurePrivateURL:     envBool("AI_ALLOW_INSECURE_PRIVATE_URL", false),
+		AIProviderTimeout:             aiProviderTimeout,
+		MemobirdAccessKey:             os.Getenv("MEMOBIRD_ACCESS_KEY"),
+		MemobirdBaseURL:               os.Getenv("MEMOBIRD_BASE_URL"),
+		MemobirdTimeout:               memobirdTimeout,
+		PrintStatusSyncEnabled:        envBool("PRINT_STATUS_SYNC_ENABLED", true),
+		PrintStatusPollInterval:       printStatusPollInterval,
+		PrintStatusBatchSize:          printStatusBatchSize,
+		PrintStatusTimeout:            printStatusTimeout,
+		PrintStatusRecheckInterval:    printStatusRecheckInterval,
+		PrintStatusMaxRecheckInterval: printStatusMaxRecheckInterval,
+		PrintStatusMaxAttempts:        printStatusMaxAttempts,
+		PluginRoot:                    envString("PLUGIN_ROOT", ".plugins"),
+		PluginExecTimeout:             pluginExecTimeout,
+		PluginInstallTimeout:          pluginInstallTimeout,
+		PluginUploadMaxBytes:          pluginUploadMaxBytes,
+		PluginOutputMaxBytes:          pluginOutputMaxBytes,
+		PluginFetchMaxItems:           pluginFetchMaxItems,
+		PluginFetchMaxBlocksPerItem:   pluginFetchMaxBlocksPerItem,
+		PluginFetchMaxTextBytes:       pluginFetchMaxTextBytes,
+		PluginFetchMaxURLBytes:        pluginFetchMaxURLBytes,
+		PluginEnvAllowlist:            envStringList("PLUGIN_ENV_ALLOWLIST", []string{}),
+		PluginGitAllowedHosts:         envStringList("PLUGIN_GIT_ALLOWED_HOSTS", []string{"github.com", "gitee.com", "gitlab.com"}),
+		SchedulerPollInterval:         schedulerPollInterval,
+		InboxJanitorInterval:          inboxJanitorInterval,
+		InboxRetention:                inboxRetention,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -255,6 +273,15 @@ func Load() (Config, error) {
 	}
 	if cfg.PrintStatusTimeout <= 0 {
 		return Config{}, fmt.Errorf("PRINT_STATUS_TIMEOUT must be positive")
+	}
+	if cfg.PrintStatusRecheckInterval <= 0 {
+		return Config{}, fmt.Errorf("PRINT_STATUS_RECHECK_INTERVAL must be positive")
+	}
+	if cfg.PrintStatusMaxRecheckInterval < cfg.PrintStatusRecheckInterval {
+		return Config{}, fmt.Errorf("PRINT_STATUS_MAX_RECHECK_INTERVAL must be at least PRINT_STATUS_RECHECK_INTERVAL")
+	}
+	if cfg.PrintStatusMaxAttempts < 1 || cfg.PrintStatusMaxAttempts > 100 {
+		return Config{}, fmt.Errorf("PRINT_STATUS_MAX_ATTEMPTS must be between 1 and 100")
 	}
 
 	if cfg.PluginExecTimeout <= 0 {

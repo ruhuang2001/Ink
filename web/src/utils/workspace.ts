@@ -5,7 +5,6 @@ import {
   getPluginInstallationStatusLabelForLocale,
   getPrintStatusLabelForLocale,
   getSourceStatusLabelForLocale,
-  getThemeDescriptionForLocale,
   getUserRoleLabelForLocale,
 } from "@/i18n/formatters";
 import type { PluginDetails, PluginInstallationStatus } from "@/types/plugins";
@@ -192,8 +191,4 @@ export function resolveThemeMode(theme: ThemeMode, prefersDark: boolean): Resolv
   }
 
   return theme;
-}
-
-export function getThemeDescription(theme: ThemeMode) {
-  return getThemeDescriptionForLocale(theme);
 }

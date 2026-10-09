@@ -106,6 +106,52 @@ func TestStatusSyncFailureBackoffAndProviderDeadline(t *testing.T) {
 	}
 }
 
+func TestStatusSyncUsesConfiguredBackoffForUnprintedJobs(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, `{"showapi_res_code":1,"printflag":0}`)
+	}))
+	defer provider.Close()
+	now := time.Now().UTC()
+	repo := statusFixture(now, 1)
+	service := NewService(repo, nil, nil, fakeClock{now: now}, "key", provider.URL, time.Second)
+	syncer := NewStatusSynchronizerWithPolling(service, time.Second, 2*time.Minute, 5*time.Minute)
+	if _, err := syncer.SyncDue(t.Context(), 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.jobs["job-00"].NextStatusCheckAt; got == nil || !got.Equal(now.Add(2*time.Minute)) || repo.jobs["job-00"].StatusCheckAttempts != 1 {
+		t.Fatalf("configured first recheck was not persisted: %+v", repo.jobs["job-00"])
+	}
+	service.clock = fakeClock{now: now.Add(2 * time.Minute)}
+	if _, err := syncer.SyncDue(t.Context(), 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.jobs["job-00"].NextStatusCheckAt; got == nil || !got.Equal(now.Add(6*time.Minute)) || repo.jobs["job-00"].StatusCheckAttempts != 2 {
+		t.Fatalf("configured exponential recheck was not persisted: %+v", repo.jobs["job-00"])
+	}
+}
+
+func TestStatusSyncStopsAfterConfiguredAttemptsWithoutResubmitting(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, `{"showapi_res_code":1,"printflag":0}`)
+	}))
+	defer provider.Close()
+	now := time.Now().UTC()
+	repo := statusFixture(now, 1)
+	service := NewService(repo, nil, nil, fakeClock{now: now}, "key", provider.URL, time.Second)
+	syncer := NewStatusSynchronizerWithPollingAndAttempts(service, time.Second, time.Second, time.Minute, 2)
+	if _, err := syncer.SyncDue(t.Context(), 1); err != nil {
+		t.Fatal(err)
+	}
+	service.clock = fakeClock{now: now.Add(time.Second)}
+	if _, err := syncer.SyncDue(t.Context(), 1); err != nil {
+		t.Fatal(err)
+	}
+	job := repo.jobs["job-00"]
+	if job.Status != workspace.PrintStatusFailed || job.NextStatusCheckAt != nil || job.ErrorMessage == nil || *job.ErrorMessage != SubmissionOutcomeUnknown {
+		t.Fatalf("unconfirmed job did not stop safely: %+v", job)
+	}
+}
+
 func TestStatusSyncDoesNotReportCompletionWhenPersistenceFails(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprint(w, `{"showapi_res_code":1,"printflag":1}`)

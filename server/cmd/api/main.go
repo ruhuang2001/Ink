@@ -157,7 +157,8 @@ func main() {
 	)
 	var statusDone <-chan struct{}
 	if cfg.PrintStatusSyncEnabled {
-		statusRunner := scheduler.NewPrintStatusRunner(printer.NewStatusSynchronizer(printerService, cfg.PrintStatusTimeout), logger, cfg.PrintStatusPollInterval, cfg.PrintStatusBatchSize)
+		statusSync := printer.NewStatusSynchronizerWithPollingAndAttempts(printerService, cfg.PrintStatusTimeout, cfg.PrintStatusRecheckInterval, cfg.PrintStatusMaxRecheckInterval, cfg.PrintStatusMaxAttempts)
+		statusRunner := scheduler.NewPrintStatusRunner(statusSync, logger, cfg.PrintStatusPollInterval, cfg.PrintStatusBatchSize)
 		statusDone = statusRunner.Start(ctx)
 	} else {
 		done := make(chan struct{})

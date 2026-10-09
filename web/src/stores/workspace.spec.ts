@@ -770,6 +770,31 @@ describe("workspace store", () => {
     }
   });
 
+  it("retries an in-flight workspace save after same-account token rotation", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      vi.mocked(saveWorkspaceStateWithApi).mockImplementationOnce(async (_token, _state) => {
+        store.authSession = { ...store.authSession!, accessToken: "rotated-token" };
+        throw new AuthApiError(401, "unauthorized", "expired old token");
+      });
+      store.updateCurrentDraft("pending draft survives token rotation");
+      await vi.advanceTimersByTimeAsync(750);
+      expect(vi.mocked(saveWorkspaceStateWithApi).mock.calls.map(([token]) => token)).toEqual([
+        "access-token",
+        "rotated-token",
+      ]);
+      expect(vi.mocked(saveWorkspaceStateWithApi).mock.calls[1]?.[1]).toEqual(
+        vi.mocked(saveWorkspaceStateWithApi).mock.calls[0]?.[1],
+      );
+      expect(store.workspaceSyncError).toBe("");
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
   it("sends each saved revision with the next workspace change", async () => {
     vi.useFakeTimers();
     try {

@@ -4,7 +4,6 @@ import type {
   LocaleCode,
   PrintStatus,
   SourceConnectionStatus,
-  ThemeMode,
   UserRole,
 } from "@/types/workspace";
 
@@ -120,8 +119,4 @@ export function getPluginInstallationStatusLabelForLocale(status: string) {
 
 export function getUserRoleLabelForLocale(role: UserRole) {
   return translate(`statuses.userRole.${role}`);
-}
-
-export function getThemeDescriptionForLocale(theme: ThemeMode) {
-  return translate(`theme.${theme}`);
 }
