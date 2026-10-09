@@ -17,42 +17,8 @@ import (
 )
 
 func TestDeliveryMigrationUpgradeAndClaims(t *testing.T) {
-	databaseURL := os.Getenv("INK_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("INK_TEST_DATABASE_URL is not set")
-	}
-
-	ctx := context.Background()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("connect to PostgreSQL: %v", err)
-	}
-	t.Cleanup(admin.Close)
-	if err := admin.Ping(ctx); err != nil {
-		t.Fatalf("ping PostgreSQL: %v", err)
-	}
-
-	schema := fmt.Sprintf("delivery_upgrade_%d", time.Now().UnixNano())
-	if _, err := admin.Exec(ctx, "create schema "+schema); err != nil {
-		t.Fatalf("create test schema: %v", err)
-	}
-	t.Cleanup(func() {
-		if _, err := admin.Exec(context.Background(), "drop schema "+schema+" cascade"); err != nil {
-			t.Errorf("drop test schema: %v", err)
-		}
-	})
-
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatalf("parse PostgreSQL URL: %v", err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	db, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatalf("connect to test schema: %v", err)
-	}
-	t.Cleanup(db.Close)
-
+	ctx := t.Context()
+	db := newIsolatedTestDB(t, "delivery_upgrade")
 	for version := 1; version <= 7; version++ {
 		applyMigration(t, ctx, db, version)
 	}

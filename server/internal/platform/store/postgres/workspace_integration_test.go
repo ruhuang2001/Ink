@@ -1,10 +1,7 @@
 package postgres
 
 import (
-	"context"
 	"errors"
-	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -125,35 +122,8 @@ func TestWorkspaceConcurrentSavesRejectStaleRevision(t *testing.T) {
 
 func workspaceTestDatabase(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := os.Getenv("INK_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("INK_TEST_DATABASE_URL is not set")
-	}
 	ctx := t.Context()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(admin.Close)
-	schema := fmt.Sprintf("workspace_print_%d", time.Now().UnixNano())
-	if _, err := admin.Exec(ctx, "create schema "+schema); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if _, err := admin.Exec(context.Background(), "drop schema "+schema+" cascade"); err != nil {
-			t.Error(err)
-		}
-	})
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	db, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(db.Close)
+	db := newIsolatedTestDB(t, "workspace_print")
 	for version := 1; version <= 10; version++ {
 		applyMigration(t, ctx, db, version)
 	}
