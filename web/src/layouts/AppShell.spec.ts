@@ -147,14 +147,17 @@ describe("AppShell", () => {
     confirm.mockRestore();
   });
 
-  it("hides account controls for anonymous visitors", async () => {
-    const { wrapper } = await mountShellAt("/conversations", false);
+  it.each(["/conversations", "/prints"])(
+    "hides account controls for anonymous visitors at %s",
+    async (path) => {
+      const { wrapper } = await mountShellAt(path, false);
 
-    expect(wrapper.text()).toContain("登录");
-    expect(wrapper.text()).not.toContain("当前设备、对话、打印页均为演示内容");
-    expect(wrapper.text()).not.toContain("name@example.com");
-    expect(wrapper.text()).not.toContain("退出");
-  });
+      expect(wrapper.text()).toContain("登录");
+      expect(wrapper.text()).not.toContain("当前设备、对话、打印页均为演示内容");
+      expect(wrapper.text()).not.toContain("name@example.com");
+      expect(wrapper.text()).not.toContain("退出");
+    },
+  );
 
   it("disables page controls during reload and exposes a local draft download", async () => {
     const { wrapper, store } = await mountShellAt("/conversations");

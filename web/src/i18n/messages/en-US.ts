@@ -779,7 +779,7 @@ const enUS = {
         fetchFrequency: "Fetch frequency",
         fetchEveryMinutes: "Fetch every {minutes} minutes",
         fetchHint:
-          "The plugin gets content at the interval above. Scheduled tasks select items that have not been printed yet.",
+          "The plugin gets content at the interval above. Each scheduled task selects items it has not printed yet.",
         fetchStatus: "Fetch status",
         lastFetchedAt: "Last fetched {time}",
         neverFetched: "No fetch has run yet",

@@ -648,8 +648,14 @@ func (f *fakePrinterRepo) SaveStatusCheck(_ context.Context, expected StatusSync
 	}
 	job.NextStatusCheckAt = new(result.NextCheck)
 	job.StatusCheckAttempts = result.Attempts
-	if result.Completed {
+	if result.Completed || result.Failed {
+		if result.Failed {
+			job.ErrorMessage = new(result.ErrorMessage)
+		}
 		job.Status = workspace.PrintStatusCompleted
+		if result.Failed {
+			job.Status = workspace.PrintStatusFailed
+		}
 		job.UpdatedAt = result.CheckedAt
 		job.NextStatusCheckAt = nil
 	}

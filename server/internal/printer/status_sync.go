@@ -10,6 +10,7 @@ import (
 const (
 	statusCheckInterval      = 10 * time.Second
 	statusBatchBudget        = 15 * time.Second
+	defaultStatusMaxAttempts = 6
 	SubmissionOutcomeUnknown = "提交结果未知，请先检查设备是否已打印，再手动创建新任务。"
 )
 
@@ -26,10 +27,12 @@ type StatusSyncJob struct {
 }
 
 type StatusCheckResult struct {
-	Completed bool
-	CheckedAt time.Time
-	NextCheck time.Time
-	Attempts  int
+	Completed    bool
+	Failed       bool
+	ErrorMessage string
+	CheckedAt    time.Time
+	NextCheck    time.Time
+	Attempts     int
 }
 
 type StatusSyncError struct {
@@ -42,12 +45,38 @@ func (e *StatusSyncError) Unwrap() error     { return e.Err }
 func (e *StatusSyncError) FailureCount() int { return e.Failures }
 
 type StatusSynchronizer struct {
-	service *Service
-	timeout time.Duration
+	service            *Service
+	timeout            time.Duration
+	recheckInterval    time.Duration
+	maxRecheckInterval time.Duration
+	maxAttempts        int
 }
 
 func NewStatusSynchronizer(service *Service, timeout time.Duration) *StatusSynchronizer {
-	return &StatusSynchronizer{service: service, timeout: timeout}
+	return NewStatusSynchronizerWithPollingAndAttempts(service, timeout, statusCheckInterval, 5*time.Minute, defaultStatusMaxAttempts)
+}
+
+func NewStatusSynchronizerWithPolling(service *Service, timeout, interval, maxInterval time.Duration) *StatusSynchronizer {
+	return NewStatusSynchronizerWithPollingAndAttempts(service, timeout, interval, maxInterval, defaultStatusMaxAttempts)
+}
+
+func NewStatusSynchronizerWithPollingAndAttempts(service *Service, timeout, interval, maxInterval time.Duration, maxAttempts int) *StatusSynchronizer {
+	return &StatusSynchronizer{service: service, timeout: timeout, recheckInterval: interval, maxRecheckInterval: maxInterval, maxAttempts: max(1, maxAttempts)}
+}
+
+func (s *StatusSynchronizer) recheckDelay(attempts int, providerFailed bool) time.Duration {
+	steps := attempts - 1
+	if providerFailed {
+		steps++
+	}
+	delay := s.recheckInterval
+	for range steps {
+		if delay > s.maxRecheckInterval/2 {
+			return s.maxRecheckInterval
+		}
+		delay *= 2
+	}
+	return min(delay, s.maxRecheckInterval)
 }
 
 func (s *StatusSynchronizer) SyncDue(ctx context.Context, limit int) (int, error) {
@@ -89,11 +118,20 @@ func (s *StatusSynchronizer) SyncDue(ctx context.Context, limit int) (int, error
 			return processed, syncError(ctx.Err())
 		}
 		now := s.service.clock.Now()
-		result := StatusCheckResult{Completed: completed, CheckedAt: now, NextCheck: now.Add(statusCheckInterval)}
+		result := StatusCheckResult{Completed: completed, CheckedAt: now, NextCheck: now.Add(s.recheckInterval)}
+		if !completed {
+			// A successful "not printed" response also backs off. Keep an
+			// accepted job queued: failing or resubmitting it can print twice.
+			result.Attempts = min(max(job.Attempts+1, 1), s.maxAttempts)
+			result.NextCheck = now.Add(s.recheckDelay(result.Attempts, providerErr != nil))
+			if result.Attempts >= s.maxAttempts {
+				result.Failed = true
+				result.ErrorMessage = SubmissionOutcomeUnknown
+				result.NextCheck = now
+			}
+		}
 		if providerErr != nil {
 			failedJobs++
-			result.Attempts = min(job.Attempts+1, 6)
-			result.NextCheck = now.Add(min(statusCheckInterval*time.Duration(1<<result.Attempts), 5*time.Minute))
 			failures = append(failures, fmt.Errorf("print job %s status: %w", job.ID, providerErr))
 		}
 		updated, err := s.service.repo.SaveStatusCheck(ctx, job, result)

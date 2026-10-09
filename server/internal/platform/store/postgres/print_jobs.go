@@ -130,14 +130,15 @@ func (s *Store) SaveStatusCheck(ctx context.Context, job printer.StatusSyncJob, 
 	}
 	tag, err := s.db.Exec(ctx, `
 		update print_jobs set
-			status = case when $7 then 'completed' else status end,
-			updated_at = case when $7 then $8 else updated_at end,
-			next_status_check_at = case when $7 then null::timestamptz else $9::timestamptz end,
+			status = case when $7 then 'completed' when $11 then 'failed' else status end,
+			updated_at = case when $7 or $11 then $8 else updated_at end,
+			next_status_check_at = case when $7 or $11 then null::timestamptz else $9::timestamptz end,
+			error_message = case when $11 then $12 else error_message end,
 			status_check_attempts = $10
 		where id = $1 and user_id = $2 and status = 'queued'
 			and provider_print_content_id = $3 and updated_at = $4
 			and next_status_check_at = $5 and printer_binding_id = $6
 	`, job.ID, job.UserID, job.ProviderPrintID, job.UpdatedAt, job.NextStatusCheckAt, job.Binding.ID,
-		result.Completed, result.CheckedAt, result.NextCheck, result.Attempts)
+		result.Completed, result.CheckedAt, result.NextCheck, result.Attempts, result.Failed, result.ErrorMessage)
 	return tag.RowsAffected() == 1, err
 }

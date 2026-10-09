@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 :root {
+  --font-cjk:
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, -apple-system,
+    sans-serif;
   color-scheme: light;
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
@@ -82,14 +85,7 @@
     min-height: 100vh;
     min-height: 100svh;
     min-height: 100dvh;
-    font-family:
-      "PingFang SC",
-      "Hiragino Sans GB",
-      "Microsoft YaHei",
-      "Noto Sans SC",
-      system-ui,
-      -apple-system,
-      sans-serif;
+    font-family: var(--font-cjk);
     color: var(--app-text);
     background: var(--app-bg);
   }
