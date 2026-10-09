@@ -428,10 +428,10 @@ func envBool(key string, fallback bool) bool {
 		return fallback
 	}
 
-	switch value {
-	case "1", "true", "TRUE", "yes", "YES", "on", "ON":
+	switch strings.ToLower(value) {
+	case "1", "true", "yes", "on":
 		return true
-	case "0", "false", "FALSE", "no", "NO", "off", "OFF":
+	case "0", "false", "no", "off":
 		return false
 	default:
 		return fallback

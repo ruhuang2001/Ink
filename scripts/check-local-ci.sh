@@ -58,7 +58,7 @@ run_act() {
   # Advertise Docker's host gateway instead of the auto-detected interface.
   if [ "$(uname -s)" = "Darwin" ]; then
     set -- \
-      --cache-server-addr 0.0.0.0 \
+      --cache-server-addr 127.0.0.1 \
       --cache-server-port 18333 \
       --cache-server-external-url http://host.docker.internal:18333 \
       "$@"

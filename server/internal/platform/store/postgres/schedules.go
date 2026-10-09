@@ -77,7 +77,7 @@ func (s *Store) Save(ctx context.Context, current schedule.PrintSchedule) error 
 	}
 	current.Enabled = current.Enabled && deviceStatus == workspace.DeviceStatusConnected
 
-	_, err = tx.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 		insert into print_schedules (
 			id, user_id, plugin_installation_id, plugin_binding_id, title, frequency_type,
 			timezone, hour, minute, weekdays, print_policy_json, device_id, enabled,
@@ -125,6 +125,9 @@ func (s *Store) Save(ctx context.Context, current schedule.PrintSchedule) error 
 	)
 	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return schedule.ErrConflict
 	}
 	return tx.Commit(ctx)
 }

@@ -51,6 +51,10 @@ timestamp used for `todayCompleted`; clients pass the start of their local
 day, with its timezone offset. If omitted, the server uses the start of the
 current UTC day.
 
+Use `metadata=false` for additional ID chunks in the same poll to omit `counts`
+and avoid repeating the account-wide aggregate. `latestJobId` is null in these
+responses and must be ignored. The default includes metadata.
+
 ```json
 {
   "printJobs": [],
@@ -79,8 +83,17 @@ not mark an accepted print job as a failed print or resubmit its content.
 The worker updates only the same observed queued provider job/version.
 Cancellation or resubmission while a provider call is outstanding prevents
 the old result from overwriting the newer state. Persisted next-check times
-survive API restarts. Multiple API processes still require coordinated worker
-ownership before horizontal scaling.
+survive API restarts. Due rows are atomically leased with `SKIP LOCKED` before
+provider calls, so multiple API processes do not poll the same claim. An expired
+lease can be reclaimed after a worker exits; late results cannot replace a newer
+claim. Queued rows written by an older API without a next-check time are also
+eligible for reconciliation.
+
+If a process exits before persisting the submission result, a queued job without
+a provider ID becomes failed after three minutes. Its summary and detail expose
+an optional `errorMessage` instructing the user to check the device first.
+Automatic delivery retries never resubmit these uncertain jobs. Other internal
+provider errors remain private. Existing content and history are preserved.
 
 In the print view, active jobs and history load independently in pages of 20.
 Each section offers **Load more** when another page exists; **Preview** retrieves
@@ -102,7 +115,11 @@ limited to 384 × 8,192 pixels. Excessive runs of zero-width characters are
 also rejected to bound layout computation. These checks happen before image
 allocation, and content is never silently truncated.
 
-Oversized input returns HTTP 413, `print_content_too_large`. This applies to
+Print-content limit violations return HTTP 413, `print_content_too_large`. This applies to
 plain text, flattened plugin blocks, new jobs and previously stored pending
 jobs when submitted. Existing jobs rejected before submission remain pending,
 so they can still be cancelled or assigned to another device.
+
+JSON request bodies have a separate 1 MiB limit; exceeding that limit returns
+HTTP 413, `request_too_large` before print-content validation. Feedback printing
+also uses the print-content limit response.

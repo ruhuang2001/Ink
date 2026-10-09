@@ -7,7 +7,11 @@ import (
 	"time"
 )
 
-const statusCheckInterval = 10 * time.Second
+const (
+	statusCheckInterval      = 10 * time.Second
+	statusBatchBudget        = 15 * time.Second
+	SubmissionOutcomeUnknown = "提交结果未知，请先检查设备是否已打印，再手动创建新任务。"
+)
 
 // StatusSyncJob excludes the rendered content and carries the version checked
 // by SaveStatusCheck, so a delayed provider response cannot overwrite a retry.
@@ -51,14 +55,15 @@ func (s *StatusSynchronizer) SyncDue(ctx context.Context, limit int) (int, error
 		return 0, nil
 	}
 	limit = min(max(limit, 1), MaxJobPageSize)
-	jobs, err := s.service.repo.ListDueStatusJobs(ctx, s.service.clock.Now(), limit)
+	now := s.service.clock.Now()
+	jobs, err := s.service.repo.ClaimDueStatusJobs(ctx, now, now.Add(statusBatchBudget+s.timeout+5*time.Second), limit)
 	if err != nil {
 		return 0, err
 	}
 	processed := 0
 	// Keep a failing provider from monopolizing the worker. Persist each failed
 	// check with the parent context before yielding to the next batch.
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(statusBatchBudget)
 	var failures []error
 	failedJobs := 0
 	syncError := func(extra error) error {
@@ -77,7 +82,9 @@ func (s *StatusSynchronizer) SyncDue(ctx context.Context, limit int) (int, error
 		if err := ctx.Err(); err != nil {
 			return processed, syncError(err)
 		}
-		completed, providerErr := s.check(ctx, job, min(s.timeout, time.Until(deadline)))
+		// Each started check gets its full configured timeout. Yield between
+		// checks instead of counting an exhausted batch budget as provider failure.
+		completed, providerErr := s.check(ctx, job, s.timeout)
 		if ctx.Err() != nil {
 			return processed, syncError(ctx.Err())
 		}

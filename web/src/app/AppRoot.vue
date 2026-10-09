@@ -3,13 +3,14 @@ import { onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import { useRoute } from "vue-router";
 
 import { translate } from "@/i18n";
+import { retryRouteLoad, routeLoadFailure } from "@/router/chunkRecovery";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { resolveThemeMode } from "@/utils/workspace";
 
 const route = useRoute();
 const workspaceStore = useWorkspaceStore();
 const themeColors = {
-  light: "#fafaf9",
+  light: "#f3f3f0",
   dark: "#14110f",
 } as const;
 const prefersDark = ref(false);
@@ -78,5 +79,11 @@ watchEffect(() => {
 </script>
 
 <template>
+  <div v-if="routeLoadFailure" role="alert" class="mx-auto max-w-xl p-8 text-stone-900">
+    <p>{{ translate("shell.routeLoadError") }}</p>
+    <button type="button" class="ui-btn-primary mt-4 px-4 py-2" @click="retryRouteLoad">
+      {{ translate("shell.syncErrors.retry") }}
+    </button>
+  </div>
   <RouterView />
 </template>

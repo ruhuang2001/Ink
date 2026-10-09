@@ -1,9 +1,9 @@
-const CACHE_NAME = "ink-shell-v2";
+const CACHE_NAME = "ink-shell-v3";
 const APP_SHELL_PATHS = [
   "./",
   "./site.webmanifest",
   "./favicon.svg",
-  "./icon.jpg",
+  "./icon.png",
   "./apple-touch-icon.png",
   "./pwa-192.png",
   "./pwa-512.png",
@@ -33,7 +33,11 @@ self.addEventListener("activate", (event) => {
       caches
         .keys()
         .then((keys) =>
-          Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))),
+          Promise.all(
+            keys
+              .filter((key) => key.startsWith("ink-shell-") && key !== CACHE_NAME)
+              .map((key) => caches.delete(key)),
+          ),
         ),
       self.clients.claim(),
     ]),
@@ -61,14 +65,18 @@ function isStaticAsset(request, url) {
 }
 
 async function respondToNavigation(request) {
-  const cache = await caches.open(CACHE_NAME);
   const url = new URL(request.url);
 
   try {
     const response = await fetch(request);
     const contentType = response.headers.get("Content-Type") || "";
     if (response.ok && !url.pathname.includes("/api/") && contentType.includes("text/html")) {
-      await cache.put(APP_SHELL_URL, response.clone());
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put(APP_SHELL_URL, response.clone());
+      } catch {
+        // A cache failure must not replace a successful network navigation.
+      }
     }
     return response;
   } catch {
@@ -96,8 +104,12 @@ async function respondToStaticAsset(request) {
 
   const response = await fetch(request);
   if (response && response.status < 400) {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.put(request, response.clone());
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    } catch {
+      // Return the fetched asset even when the browser's cache is full.
+    }
   }
   return response;
 }

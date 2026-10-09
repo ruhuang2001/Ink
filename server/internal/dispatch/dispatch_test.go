@@ -286,6 +286,20 @@ func TestRunSchedulePrintsOldestUndeliveredItemsUpToBatchSize(t *testing.T) {
 	assertDeliveryPresence(t, repo, "schedule-1", "item-3", false)
 }
 
+func TestInvalidatedScheduleClaimDoesNotReachPrinter(t *testing.T) {
+	now := time.Now()
+	repo := newMemoryRepo()
+	repo.items["item-1"] = buildItem("item-1", "binding-1", "Receipt", now)
+	printerStub := &stubPrinter{}
+	service := newService(now, repo, printerStub)
+	input := buildScheduleRunInput("schedule-1", 1)
+	invalidated := fmt.Errorf("claim invalidated after device removal")
+	input.BeforePrint = func(context.Context) error { return invalidated }
+	if _, err := service.RunSchedule(t.Context(), input); !errors.Is(err, invalidated) || len(printerStub.created) != 0 {
+		t.Fatalf("invalidated claim reached printer: %+v, %v", printerStub.created, err)
+	}
+}
+
 func TestRunScheduleAllowsDifferentSchedulesToPrintSameCollectedItem(t *testing.T) {
 	t.Parallel()
 

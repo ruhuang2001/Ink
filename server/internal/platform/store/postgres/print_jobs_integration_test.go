@@ -109,7 +109,7 @@ func TestPrintJobsMigrationPaginationAndStatusCAS(t *testing.T) {
 		t.Fatalf("stale pending mutation should fail: %v, %v", changed, err)
 	}
 
-	jobs, err := store.ListDueStatusJobs(ctx, now.Add(time.Second), 3)
+	jobs, err := store.ClaimDueStatusJobs(ctx, now.Add(time.Second), now.Add(time.Minute), 3)
 	if err != nil || len(jobs) != 3 {
 		t.Fatalf("due batch: %+v, %v", jobs, err)
 	}
@@ -122,21 +122,17 @@ func TestPrintJobsMigrationPaginationAndStatusCAS(t *testing.T) {
 	if updated, err := store.SaveStatusCheck(ctx, checked, result); err != nil || updated {
 		t.Fatalf("stale due version should fail: %v, %v", updated, err)
 	}
-	next, err := store.ListDueStatusJobs(ctx, now.Add(time.Second), 20)
+	next, err := store.ClaimDueStatusJobs(ctx, now.Add(time.Second), now.Add(time.Minute), 20)
 	if err != nil || slices.ContainsFunc(next, func(j printer.StatusSyncJob) bool { return j.ID == checked.ID || j.ID == "foreign" }) {
 		t.Fatalf("rescheduled or foreign not-due job present: %+v, %v", next, err)
 	}
-	for _, test := range []struct{ name, update string }{
+	for index, test := range []struct{ name, update string }{
 		{"provider retry", "provider_print_content_id = provider_print_content_id + 1"},
 		{"same provider newer version", "updated_at = updated_at + interval '1 second'"},
 		{"terminal", "status = 'cancelled'"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			candidates, err := store.ListDueStatusJobs(t.Context(), now.Add(time.Second), 20)
-			if err != nil || len(candidates) == 0 {
-				t.Fatal(err)
-			}
-			candidate := candidates[0]
+			candidate := next[index]
 			if _, err := db.Exec(t.Context(), "update print_jobs set "+test.update+" where id = $1", candidate.ID); err != nil {
 				t.Fatal(err)
 			}
@@ -146,10 +142,7 @@ func TestPrintJobsMigrationPaginationAndStatusCAS(t *testing.T) {
 			}
 		})
 	}
-	candidates, err := store.ListDueStatusJobs(ctx, now.Add(time.Second), 20)
-	if err != nil || len(candidates) == 0 {
-		t.Fatal(err)
-	}
+	candidates := next[3:]
 	result.Completed = true
 	candidate := candidates[0]
 	if changed, err := store.SaveStatusCheck(ctx, candidate, result); err != nil || !changed {

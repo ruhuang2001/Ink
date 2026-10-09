@@ -294,7 +294,7 @@ async function recoverSynchronization() {
       >
         <RouterView v-slot="{ Component, route: currentRoute }">
           <Transition name="page-swap" mode="out-in">
-            <component :is="Component" :key="currentRoute.fullPath" />
+            <component :is="Component" :key="currentRoute.matched[1]?.path ?? currentRoute.path" />
           </Transition>
         </RouterView>
       </fieldset>

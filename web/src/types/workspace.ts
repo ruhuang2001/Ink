@@ -52,6 +52,7 @@ export interface PrintJob {
   createdAt: string;
   updatedAt: string;
   content: string;
+  errorMessage?: string;
 }
 
 export type PrintJobSummary = Omit<PrintJob, "content">;

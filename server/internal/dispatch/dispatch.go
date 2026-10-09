@@ -49,6 +49,8 @@ type ScheduleRunInput struct {
 	Installation plugins.Installation
 	DeviceID     string
 	BatchSize    int
+	// BeforePrint revalidates the originating schedule claim before each item.
+	BeforePrint func(context.Context) error
 }
 
 type ScheduleRunResult struct {
@@ -184,6 +186,11 @@ func (s *Service) dispatchOne(
 		return "", "", nil
 	}
 	current.Delivery = delivery
+	if input.BeforePrint != nil {
+		if err := input.BeforePrint(ctx); err != nil {
+			return "", "", err
+		}
+	}
 
 	rendered, err := printer.RenderBlocksToText(current.Item.Blocks)
 	if err != nil {

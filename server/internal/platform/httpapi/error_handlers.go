@@ -82,7 +82,7 @@ func (s *Server) writeFeedbackError(w http.ResponseWriter, requestID string, err
 		writeError(w, requestID, http.StatusPreconditionFailed, "feedback_recipient_missing", "当前还没有可接收反馈的管理员账号。")
 	case errors.Is(err, feedback.ErrNoAdminDevice):
 		writeError(w, requestID, http.StatusPreconditionFailed, "feedback_printer_missing", "管理员当前还没有可接收反馈的默认咕咕机。")
-	case errors.Is(err, printer.ErrNotConfigured), errors.Is(err, printer.ErrNotFound), errors.Is(err, printer.ErrInvalidInput), errors.Is(err, printer.ErrUnavailable), errors.Is(err, printer.ErrForbidden):
+	case errors.Is(err, printer.ErrNotConfigured), errors.Is(err, printer.ErrNotFound), errors.Is(err, printer.ErrInvalidInput), errors.Is(err, printer.ErrContentTooLarge), errors.Is(err, printer.ErrUnavailable), errors.Is(err, printer.ErrForbidden):
 		s.writePrinterError(w, requestID, err)
 	default:
 		s.writeAuthError(w, requestID, err)
@@ -115,6 +115,8 @@ func (s *Server) writePluginError(w http.ResponseWriter, requestID string, err e
 
 func (s *Server) writeScheduleError(w http.ResponseWriter, requestID string, err error) {
 	switch {
+	case errors.Is(err, schedule.ErrConflict):
+		writeError(w, requestID, http.StatusConflict, "schedule_conflict", "定时任务已更新，请重新加载后再修改。")
 	case errors.Is(err, schedule.ErrNotFound):
 		writeError(w, requestID, http.StatusNotFound, "schedule_not_found", "指定定时任务不存在。")
 	case errors.Is(err, schedule.ErrInvalidInput):

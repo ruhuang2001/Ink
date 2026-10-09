@@ -58,6 +58,6 @@ export async function generateAIReply(
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(payload),
-    timeoutMs: 60000,
+    timeoutMs: 120000,
   });
 }

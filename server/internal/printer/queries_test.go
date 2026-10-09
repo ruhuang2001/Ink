@@ -117,3 +117,17 @@ func TestPrintJobCountsRespectLocalDayAndDetectNewJobs(t *testing.T) {
 		t.Fatalf("new background job detection: %+v, %v", result, err)
 	}
 }
+
+func TestStatusChunksCanSkipAccountMetadata(t *testing.T) {
+	now := time.Now()
+	repo := statusFixture(now, 2)
+	service := NewService(repo, fakeAuthenticator{}, nil, fakeClock{now: now}, "", "", time.Second)
+	first, err := service.GetPrintJobStatuses(t.Context(), "token", JobStatusesInput{IDs: []string{"job-00"}})
+	if err != nil || first.Counts == nil || first.Counts.Queued != 2 {
+		t.Fatalf("first metadata: %+v, %v", first, err)
+	}
+	second, err := service.GetPrintJobStatuses(t.Context(), "token", JobStatusesInput{IDs: []string{"job-01"}, SkipMetadata: true})
+	if err != nil || len(second.PrintJobs) != 1 || second.Counts != nil || second.LatestJobID != nil || repo.countCalls != 1 {
+		t.Fatalf("extra chunk repeated metadata: %+v, calls=%d, %v", second, repo.countCalls, err)
+	}
+}

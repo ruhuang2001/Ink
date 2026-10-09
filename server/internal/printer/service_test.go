@@ -458,6 +458,7 @@ type fakePrinterRepo struct {
 	jobs                 map[string]Job
 	statusSaveErr        error
 	forcePendingSaveMiss bool
+	countCalls           int
 }
 
 func TestCreatePrintJobForUserReusesInternalJobID(t *testing.T) {
@@ -580,6 +581,7 @@ func (f *fakePrinterRepo) ListJobStatuses(_ context.Context, userID string, ids 
 }
 
 func (f *fakePrinterRepo) GetJobCounts(_ context.Context, userID string, since time.Time) (JobCounts, *string, error) {
+	f.countCalls++
 	var counts JobCounts
 	var latest *Job
 	for _, job := range f.jobs {
@@ -611,18 +613,29 @@ func (f *fakePrinterRepo) GetJobCounts(_ context.Context, userID string, since t
 	return counts, new(latest.ID), nil
 }
 
-func (f *fakePrinterRepo) ListDueStatusJobs(_ context.Context, now time.Time, limit int) ([]StatusSyncJob, error) {
+func (f *fakePrinterRepo) ClaimDueStatusJobs(_ context.Context, now time.Time, leaseUntil time.Time, limit int) ([]StatusSyncJob, error) {
 	jobs := []StatusSyncJob{}
 	for _, job := range f.jobs {
-		if job.Status != workspace.PrintStatusQueued || job.ProviderPrintContentID == nil || job.NextStatusCheckAt == nil || job.NextStatusCheckAt.After(now) {
+		if job.Status != workspace.PrintStatusQueued || job.ProviderPrintContentID == nil || job.NextStatusCheckAt != nil && job.NextStatusCheckAt.After(now) {
 			continue
 		}
-		jobs = append(jobs, StatusSyncJob{ID: job.ID, UserID: job.UserID, ProviderPrintID: *job.ProviderPrintContentID, Binding: f.bindings[job.PrinterBindingID], UpdatedAt: job.UpdatedAt, NextStatusCheckAt: *job.NextStatusCheckAt, Attempts: job.StatusCheckAttempts})
+		due := job.UpdatedAt
+		if job.NextStatusCheckAt != nil {
+			due = *job.NextStatusCheckAt
+		}
+		jobs = append(jobs, StatusSyncJob{ID: job.ID, UserID: job.UserID, ProviderPrintID: *job.ProviderPrintContentID, Binding: f.bindings[job.PrinterBindingID], UpdatedAt: job.UpdatedAt, NextStatusCheckAt: due, Attempts: job.StatusCheckAttempts})
 	}
 	slices.SortFunc(jobs, func(a, b StatusSyncJob) int {
 		return cmp.Or(a.NextStatusCheckAt.Compare(b.NextStatusCheckAt), cmp.Compare(a.ID, b.ID))
 	})
-	return jobs[:min(len(jobs), limit)], nil
+	jobs = jobs[:min(len(jobs), limit)]
+	for index := range jobs {
+		jobs[index].NextStatusCheckAt = leaseUntil
+		job := f.jobs[jobs[index].ID]
+		job.NextStatusCheckAt = new(leaseUntil)
+		f.jobs[job.ID] = job
+	}
+	return jobs, nil
 }
 
 func (f *fakePrinterRepo) SaveStatusCheck(_ context.Context, expected StatusSyncJob, result StatusCheckResult) (bool, error) {
@@ -630,7 +643,7 @@ func (f *fakePrinterRepo) SaveStatusCheck(_ context.Context, expected StatusSync
 		return false, f.statusSaveErr
 	}
 	job := f.jobs[expected.ID]
-	if job.Status != workspace.PrintStatusQueued || job.ProviderPrintContentID == nil || *job.ProviderPrintContentID != expected.ProviderPrintID || !job.UpdatedAt.Equal(expected.UpdatedAt) || job.NextStatusCheckAt == nil || !job.NextStatusCheckAt.Equal(expected.NextStatusCheckAt) {
+	if job.UserID != expected.UserID || job.PrinterBindingID != expected.Binding.ID || job.Status != workspace.PrintStatusQueued || job.ProviderPrintContentID == nil || *job.ProviderPrintContentID != expected.ProviderPrintID || !job.UpdatedAt.Equal(expected.UpdatedAt) || job.NextStatusCheckAt == nil || !job.NextStatusCheckAt.Equal(expected.NextStatusCheckAt) {
 		return false, nil
 	}
 	job.NextStatusCheckAt = new(result.NextCheck)

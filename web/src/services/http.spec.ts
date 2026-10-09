@@ -27,6 +27,7 @@ describe("http client", () => {
     );
     const requestHeaders = fetchMock.mock.calls[0]?.[1]?.headers;
     expect(new Headers(requestHeaders).get("X-Request-ID")).toBeTruthy();
+    expect(new Headers(requestHeaders).get("Content-Type")).toBe("application/json");
   });
 
   it("refreshes once and retries an authorized request after a 401", async () => {
@@ -63,7 +64,7 @@ describe("http client", () => {
         authorization === currentToken ? "next-token" : null,
       );
     configureAuthRefresh(refresh);
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
       currentToken = "new-token";
       return new Response(JSON.stringify({ code: "expired" }), { status: 401 });
     });
@@ -72,6 +73,7 @@ describe("http client", () => {
       request("/api/account-a", { headers: { Authorization: "Bearer old-token" } }),
     ).rejects.toMatchObject({ status: 401 });
     expect(refresh).toHaveBeenCalledWith("old-token");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("shares one refresh across concurrent 401 responses", async () => {
@@ -115,5 +117,40 @@ describe("http client", () => {
     await expect(request("/api/slow", { timeoutMs: 1 })).rejects.toMatchObject({
       code: "network_error",
     } satisfies Partial<AuthApiError>);
+  });
+
+  it("normalizes a timeout while reading the response body", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const response = new Response(null, { status: 200 });
+      vi.spyOn(response, "json").mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("aborted", "AbortError")),
+              { once: true },
+            );
+          }),
+      );
+      return response;
+    });
+    await expect(request("/slow-body", { timeoutMs: 1 })).rejects.toMatchObject({
+      code: "network_error",
+      message: "请求超时，请稍后重试。",
+    });
+  });
+
+  it("cancels an abandoned 401 body and propagates a transient refresh failure", async () => {
+    const response = new Response("expired", { status: 401 });
+    const cancel = vi.spyOn(response.body!, "cancel");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+    const failure = new AuthApiError(503, "request_failed", "temporary failure");
+    configureAuthRefresh(async () => {
+      throw failure;
+    });
+    await expect(request("/test", { headers: { Authorization: "Bearer token" } })).rejects.toBe(
+      failure,
+    );
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 });

@@ -39,6 +39,22 @@ func TestPrintRoutesRejectOversizedContent(t *testing.T) {
 	}
 }
 
+func TestFeedbackPreservesPrintLimitAndRequestBodyErrors(t *testing.T) {
+	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{err: printer.ErrContentTooLarge}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	assertPrintContentTooLarge(t, server, "/api/v1/feedback/print", map[string]string{"content": "oversized feedback"})
+	body, err := json.Marshal(map[string]string{"content": strings.Repeat("a", (1<<20)+1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/feedback/print", bytes.NewReader(body))
+	request.Header.Set("Authorization", "Bearer access-token")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusRequestEntityTooLarge || !strings.Contains(response.Body.String(), `"code":"request_too_large"`) {
+		t.Fatalf("expected body limit error, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestBlocksPreviewRejectsOversizedContent(t *testing.T) {
 	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
 	server.printer = limitCheckingPrinter{service: printer.NewService(nil, fakeAuthService{}, nil, nil, "", "", time.Second)}

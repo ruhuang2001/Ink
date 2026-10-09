@@ -38,7 +38,11 @@ func TestSaveStatePersistsNormalizedWorkspace(t *testing.T) {
 		fakeClock{now: time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)},
 	)
 
-	saved, err := service.SaveState(context.Background(), "access-token", State{Revision: 1})
+	initial, err := service.GetState(t.Context(), "access-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := service.SaveState(t.Context(), "access-token", State{Revision: initial.Revision})
 	if err != nil {
 		t.Fatalf("save state failed: %v", err)
 	}
@@ -116,7 +120,7 @@ func (f *fakeRepository) SaveByUserID(
 	state State,
 	_ time.Time,
 ) (int64, error) {
-	if f.current != nil && state.Revision != f.current.Revision {
+	if f.current == nil || state.Revision != f.current.Revision {
 		return 0, ErrConflict
 	}
 	copy := state

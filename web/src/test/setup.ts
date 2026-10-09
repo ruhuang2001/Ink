@@ -5,14 +5,14 @@ import { afterEach, beforeEach, vi } from "vitest";
 import i18n, { setI18nLocale } from "@/i18n";
 import { configureAuthRefresh } from "@/services/http";
 
-enableAutoUnmount(afterEach);
-
 afterEach(() => {
   const pinia = getActivePinia();
   if (pinia) disposePinia(pinia);
   setActivePinia(undefined);
   configureAuthRefresh(null);
 });
+
+enableAutoUnmount(afterEach);
 
 type MatchMediaEventHandler = (
   type: string,

@@ -78,7 +78,9 @@ const AI_PROVIDER_TYPE = "openai-compatible";
 const AI_PROVIDER_NAME_FALLBACK = "OpenAI Compatible";
 const AI_MODEL_FALLBACK = "gpt-4.1-mini";
 
-const aiConfigErrorMessage = computed(() => aiFormError.value || workspaceStore.aiConfigError);
+const aiConfigErrorMessage = computed(
+  () => aiFormError.value || workspaceStore.aiConfigSaveError || workspaceStore.aiConfigError,
+);
 const pluginInstallations = computed(() =>
   workspaceStore.isAdmin ? adminPlugins.value : availablePlugins.value,
 );
@@ -465,7 +467,7 @@ async function handleAIConfigSubmit() {
   });
 
   if (!success) {
-    aiFormError.value = workspaceStore.aiConfigError;
+    aiFormError.value = workspaceStore.aiConfigSaveError;
     return;
   }
 

@@ -51,7 +51,7 @@ func (r *PrintStatusRunner) Start(ctx context.Context) <-chan struct{} {
 func (r *PrintStatusRunner) runOnce(ctx context.Context) {
 	started := time.Now()
 	processed, err := r.processor.SyncDue(ctx, r.limit)
-	if errors.Is(err, context.Canceled) {
+	if cancellationOnly(err) {
 		return
 	}
 	if err != nil {
@@ -68,4 +68,26 @@ func (r *PrintStatusRunner) runOnce(ctx context.Context) {
 	if processed > 0 {
 		r.logger.Info("synchronized print statuses", "processed", processed, "duration", time.Since(started))
 	}
+}
+
+func cancellationOnly(err error) bool {
+	if err == nil {
+		return false
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		causes := joined.Unwrap()
+		if len(causes) == 0 {
+			return false
+		}
+		for _, cause := range causes {
+			if !cancellationOnly(cause) {
+				return false
+			}
+		}
+		return true
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return cancellationOnly(wrapped.Unwrap())
+	}
+	return errors.Is(err, context.Canceled)
 }

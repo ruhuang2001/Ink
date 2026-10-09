@@ -273,6 +273,7 @@ const zhCN = {
     reply: "当然可以。你可以这样写：{prompt}{summary}留一行空白，会更适合打印在纸条上。",
   },
   shell: {
+    routeLoadError: "页面加载失败，请检查网络后重试。",
     syncErrors: {
       title: "部分数据未能同步",
       workspace: "工作区：{message}",
@@ -870,6 +871,7 @@ const zhCN = {
       invalid_plugin_input: "请输入有效的插件配置。",
       plugin_git_install_disabled: "服务端未启用从 Git 仓库安装插件。",
       schedule_not_found: "指定定时任务不存在。",
+      schedule_conflict: "定时任务已更新，请重新加载后再修改。",
     },
   },
 } as const;

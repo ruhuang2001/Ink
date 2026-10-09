@@ -61,7 +61,7 @@ Important idempotency boundaries:
 
 ### Background workers
 
-The API process starts four periodic workers:
+The API process starts up to four periodic workers (print-status synchronization can be disabled):
 
 - plugin fetch worker: claims enabled bindings whose `next_fetch_at` is due;
 - schedule worker: runs enabled print schedules and reserves deliveries;
@@ -105,7 +105,7 @@ the renderer does not truncate it. See [Print API limits](PRINT_API.md#content-l
 
 Print lists return paginated summaries without the content body. A separate
 detail endpoint supplies content for preview, while a lightweight status
-endpoint supplies current states, global counts, and the latest job ID. List,
+endpoint supplies current states, account-wide counts, and the latest job ID. List,
 detail, and status reads never contact Memobird. The browser can discover jobs
 created by schedules even when its current page has no queued jobs.
 

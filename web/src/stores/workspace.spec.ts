@@ -662,7 +662,7 @@ describe("workspace store", () => {
 
       if (failure === "unauthorized") {
         vi.mocked(authService.refreshAuthSession).mockRejectedValueOnce(
-          new Error("Session expired"),
+          new AuthApiError(401, "unauthorized", "Session expired"),
         );
         vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
           new Response(JSON.stringify({ message: "expired" }), { status: 401 }),
@@ -675,7 +675,7 @@ describe("workspace store", () => {
           failure === "expired" ? new Date(Date.now() - 1000).toISOString() : "invalid";
         if (failure === "expired") {
           vi.mocked(authService.refreshAuthSession).mockRejectedValueOnce(
-            new Error("Session expired"),
+            new AuthApiError(401, "unauthorized", "Session expired"),
           );
         }
         await store.refreshSessionIfNeeded();
@@ -911,10 +911,191 @@ describe("workspace store", () => {
     await expect(store.sendCurrentDraft()).resolves.toBe(false);
     expect(store.activeConversation?.draft).toBe("before reload");
     expect(store.conversations).toHaveLength(1);
+    const preferences = {
+      theme: store.selectedTheme,
+      locale: store.localePreference,
+      loginProtection: store.loginProtectionEnabled,
+      tutorial: store.tutorialTabEnabled,
+      defaultDevice: store.defaultDeviceId,
+    };
+    store.setTheme("dark");
+    store.setLocale("en-US");
+    store.setLoginProtection(!preferences.loginProtection);
+    store.setTutorialTabEnabled(!preferences.tutorial);
+    store.setDefaultDevice("missing-device");
+    expect({
+      theme: store.selectedTheme,
+      locale: store.localePreference,
+      loginProtection: store.loginProtectionEnabled,
+      tutorial: store.tutorialTabEnabled,
+      defaultDevice: store.defaultDeviceId,
+    }).toEqual(preferences);
     loading.resolve({ ...latest, revision: 3 });
     await expect(reload).resolves.toBe(true);
     store.updateCurrentDraft("after reload");
     expect(store.activeConversation?.draft).toBe("after reload");
+  });
+
+  it("preserves the session after a temporary refresh failure and permits a later retry", async () => {
+    const store = useWorkspaceStore();
+    await store.login("name@example.com", "secret");
+    vi.mocked(authService.refreshAuthSession).mockRejectedValueOnce(
+      new AuthApiError(0, "network_error", "offline"),
+    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (_input, init) =>
+        new Headers(init?.headers).get("Authorization") === "Bearer fresh-token"
+          ? new Response(JSON.stringify({ ok: true }), { status: 200 })
+          : new Response("expired", { status: 401 }),
+      );
+    await expect(
+      request("/test", { headers: { Authorization: "Bearer access-token" } }),
+    ).rejects.toMatchObject({ code: "network_error" });
+    expect(store.isAuthenticated).toBe(true);
+    expect(store.authSession?.refreshToken).toBe("refresh-token");
+    expect(window.localStorage.getItem("ink.auth.session.v1")).toContain("refresh-token");
+    vi.mocked(authService.refreshAuthSession).mockResolvedValueOnce({
+      user: store.authUser!,
+      session: { ...store.authSession!, accessToken: "fresh-token", refreshToken: "fresh-refresh" },
+    });
+    await expect(
+      request("/test", { headers: { Authorization: "Bearer access-token" } }),
+    ).resolves.toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("uses another tab's rotated session under a browser lock", async () => {
+    const store = useWorkspaceStore();
+    await store.login("name@example.com", "secret");
+    const fresh = {
+      ...store.authSession!,
+      userId: store.authUser!.id,
+      accessToken: "shared-fresh",
+      refreshToken: "shared-refresh",
+    };
+    const lock = vi.fn<(name: string, callback: () => Promise<unknown>) => Promise<unknown>>(
+      async (_name, callback) => {
+        window.localStorage.setItem("ink.auth.session.v1", JSON.stringify(fresh));
+        return callback();
+      },
+    );
+    Object.defineProperty(navigator, "locks", { configurable: true, value: { request: lock } });
+    try {
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) =>
+        new Headers(init?.headers).get("Authorization") === "Bearer shared-fresh"
+          ? new Response(JSON.stringify({ ok: true }), { status: 200 })
+          : new Response("expired", { status: 401 }),
+      );
+      await expect(
+        request("/test", { headers: { Authorization: "Bearer access-token" } }),
+      ).resolves.toEqual({ ok: true });
+      expect(lock).toHaveBeenCalledWith("ink.auth.refresh", expect.any(Function));
+      expect(authService.refreshAuthSession).not.toHaveBeenCalled();
+      expect(store.authSession?.accessToken).toBe("shared-fresh");
+    } finally {
+      Reflect.deleteProperty(navigator, "locks");
+    }
+  });
+
+  it("keeps an AI save failure separate from synchronization retries", async () => {
+    const store = useWorkspaceStore();
+    await store.login("name@example.com", "secret");
+    vi.mocked(aiService.saveAIConfig).mockRejectedValueOnce(new Error("save failed"));
+    await expect(
+      store.saveAIServiceConfig({
+        providerName: "Draft",
+        providerType: "openai-compatible",
+        baseUrl: "https://draft.example/v1",
+        model: "draft",
+        apiKey: "",
+      }),
+    ).resolves.toBe(false);
+    expect(store.aiConfigSaveError).toBe("save failed");
+    expect(store.aiConfigError).toBe("");
+    vi.mocked(aiService.fetchAIConfigSummary).mockClear();
+    await store.retrySynchronization();
+    expect(aiService.fetchAIConfigSummary).not.toHaveBeenCalled();
+    const savedSummary = store.aiConfigSummary;
+    store.pluginError = "extensions offline";
+    await store.retrySynchronization();
+    expect(aiService.fetchAIConfigSummary).toHaveBeenCalledTimes(1);
+    expect(store.aiConfigSummary).toBe(savedSummary);
+    expect(store.aiConfigSaveError).toBe("save failed");
+  });
+
+  it("keeps healthy status metadata and retries pages after a page request fails", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = useWorkspaceStore();
+      await store.login("name@example.com", "secret");
+      vi.mocked(fetchPrintJobs).mockClear().mockRejectedValue(new Error("page offline"));
+      vi.mocked(fetchPrintJobStatuses).mockResolvedValue({
+        printJobs: [],
+        counts: printCounts({ queued: 1 }),
+        latestJobId: "new-job",
+      });
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(store.remotePrintCounts?.queued).toBe(1);
+      expect(store.printSyncError).toContain("page offline");
+      vi.mocked(fetchPrintJobs).mockResolvedValue({
+        printJobs: [printSummary("new-job", "queued")],
+        nextCursor: null,
+      });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(fetchPrintJobs).toHaveBeenCalledTimes(4);
+      expect(store.printSyncError).toBe("");
+      expect(store.remotePrintJobs.some((job) => job.id === "new-job")).toBe(true);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads the refreshed session for later status chunks and fetches counts only once", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = useWorkspaceStore();
+      const jobs = Array.from({ length: 101 }, (_, index) =>
+        printSummary(`chunk-${index}`, "queued"),
+      );
+      vi.mocked(fetchPrintJobs).mockImplementation(async (_token, options) => ({
+        printJobs: options?.status === "active" ? jobs : [],
+        nextCursor: null,
+      }));
+      await store.login("name@example.com", "secret");
+      vi.mocked(fetchPrintJobStatuses).mockClear();
+      vi.mocked(fetchPrintJobStatuses).mockImplementation(
+        async (_token, ids, _since, includeMetadata) => {
+          store.authSession = { ...store.authSession!, accessToken: "fresh-token" };
+          return {
+            printJobs: ids.map((id) => ({
+              id,
+              deviceId: "device-api-1",
+              status: "queued" as const,
+              updatedAt: "2026-04-10T00:00:00.123400Z",
+            })),
+            ...(includeMetadata ? { counts: printCounts({ queued: 101 }) } : {}),
+            latestJobId: null,
+          };
+        },
+      );
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(fetchPrintJobStatuses).toHaveBeenCalledTimes(2);
+      expect(
+        vi
+          .mocked(fetchPrintJobStatuses)
+          .mock.calls.map(([token, ids, _since, metadata]) => [token, ids.length, metadata]),
+      ).toEqual([
+        ["access-token", 100, true],
+        ["fresh-token", 1, false],
+      ]);
+      expect(store.printSyncError).toBe("");
+      expect(store.remotePrintCounts?.queued).toBe(101);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
 
   it("unlocks guest controls when signing out during a workspace reload", async () => {

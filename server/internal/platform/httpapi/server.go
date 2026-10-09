@@ -647,6 +647,13 @@ func (s *Server) handlePrintJobStatuses(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	var input printer.JobStatusesInput
+	if value := r.URL.Query().Get("metadata"); value != "" {
+		if value != "true" && value != "false" {
+			s.writePrinterError(w, requestID, printer.ErrInvalidInput)
+			return
+		}
+		input.SkipMetadata = value == "false"
+	}
 	if value := r.URL.Query().Get("ids"); value != "" {
 		input.IDs = strings.Split(value, ",")
 	}

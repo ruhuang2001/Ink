@@ -7,5 +7,6 @@ export async function submitFeedbackToAdmin(accessToken: string, content: string
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ content }),
+    timeoutMs: 120000,
   });
 }

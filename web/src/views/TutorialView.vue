@@ -156,7 +156,7 @@ async function handleFeedbackSubmit() {
         <div class="grid border-y border-stone-200 sm:grid-cols-3 sm:divide-x sm:divide-stone-200">
           <RouterLink
             to="/conversations"
-            class="border-b border-stone-200 px-4 py-5 transition-colors hover:bg-white/50 sm:border-b-0"
+            class="border-b border-stone-200 px-4 py-5 transition-colors hover:bg-stone-50 sm:border-b-0"
           >
             <p class="text-sm font-semibold text-stone-900">
               {{ t("tutorial.features.chat.title") }}
@@ -167,7 +167,7 @@ async function handleFeedbackSubmit() {
           </RouterLink>
           <RouterLink
             to="/prints"
-            class="border-b border-stone-200 px-4 py-5 transition-colors hover:bg-white/50 sm:border-b-0"
+            class="border-b border-stone-200 px-4 py-5 transition-colors hover:bg-stone-50 sm:border-b-0"
           >
             <p class="text-sm font-semibold text-stone-900">
               {{ t("tutorial.features.print.title") }}
@@ -176,7 +176,7 @@ async function handleFeedbackSubmit() {
               {{ t("tutorial.features.print.body") }}
             </p>
           </RouterLink>
-          <RouterLink to="/prints" class="px-4 py-5 transition-colors hover:bg-white/50">
+          <RouterLink to="/prints" class="px-4 py-5 transition-colors hover:bg-stone-50">
             <p class="text-sm font-semibold text-stone-900">
               {{ t("tutorial.features.schedule.title") }}
             </p>
