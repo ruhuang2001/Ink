@@ -6,7 +6,7 @@ This guide covers a single-instance Ink deployment. Ink currently ships source c
 
 - Node.js 22
 - pnpm 10
-- Go 1.26.6 (see `server/go.mod`)
+- Go 1.26.9 (see `server/go.mod`)
 - PostgreSQL 16
 - `uv` when installing or testing Python plugins
 - A Memobird Open Platform access key for physical printing
