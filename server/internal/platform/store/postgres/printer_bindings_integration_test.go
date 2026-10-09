@@ -1,49 +1,19 @@
 package postgres
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/schedule"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
 func TestRemovePrinterPreservesHistoryAndDisablesSchedules(t *testing.T) {
-	databaseURL := os.Getenv("INK_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("INK_TEST_DATABASE_URL is not set")
-	}
 	ctx := t.Context()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(admin.Close)
-	schema := fmt.Sprintf("printer_remove_%d", time.Now().UnixNano())
-	if _, err := admin.Exec(ctx, "create schema "+schema); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if _, err := admin.Exec(context.Background(), "drop schema "+schema+" cascade"); err != nil {
-			t.Error(err)
-		}
-	})
-	cfg, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = schema
-	db, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(db.Close)
+	db := newIsolatedTestDB(t, "printer_remove")
 	for version := 1; version <= 10; version++ {
 		applyMigration(t, ctx, db, version)
 	}

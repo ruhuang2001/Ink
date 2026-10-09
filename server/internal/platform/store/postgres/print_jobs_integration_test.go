@@ -1,52 +1,22 @@
 package postgres
 
 import (
-	"context"
 	"fmt"
-	"os"
 	"slices"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
 func TestPrintJobsMigrationPaginationAndStatusCAS(t *testing.T) {
-	databaseURL := os.Getenv("INK_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("INK_TEST_DATABASE_URL is not set")
-	}
 	ctx := t.Context()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(admin.Close)
-	schema := fmt.Sprintf("print_sync_%d", time.Now().UnixNano())
-	if _, err := admin.Exec(ctx, "create schema "+schema); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if _, err := admin.Exec(context.Background(), "drop schema "+schema+" cascade"); err != nil {
-			t.Error(err)
-		}
-	})
-	cfg, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = schema
-	db, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(db.Close)
+	db := newIsolatedTestDB(t, "print_sync")
 	for version := 1; version <= 8; version++ {
 		applyMigration(t, ctx, db, version)
 	}
-	_, err = db.Exec(ctx, `
+	_, err := db.Exec(ctx, `
 		insert into users (id,email,password_hash,display_name,status)
 		values ('print-user','print@example.com','hash','Print','active'), ('other-user','other-print@example.com','hash','Other','active');
 		insert into printer_bindings (id,user_id,name,device_identifier,provider_user_id,status,created_at,updated_at)
