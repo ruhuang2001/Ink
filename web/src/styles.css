@@ -8,29 +8,29 @@
   --panel-bg: rgba(255, 255, 255, 0.64);
   --surface-border: rgba(255, 255, 255, 0.6);
   --divider-strong: rgba(53, 38, 28, 0.16);
-  --app-bg: #f7f5ef;
-  --app-surface: #fbfaf6;
-  --app-surface-soft: #f0ede5;
-  --app-surface-muted: #e7e5e4;
-  --app-surface-raised: #ffffff;
-  --app-surface-floating: rgba(255, 255, 255, 0.92);
-  --app-text: #1c1917;
-  --app-text-strong: #0c0a09;
-  --app-muted: #57534e;
-  --app-muted-soft: #78716c;
-  --app-border: #e7e5e4;
-  --app-border-strong: #d6d3d1;
-  --app-ring: rgba(28, 25, 23, 0.6);
-  --app-overlay: rgba(28, 25, 23, 0.35);
-  --app-emphasis-bg: #1c1917;
-  --app-emphasis-bg-hover: #292524;
-  --app-emphasis-text: #ffffff;
+  --app-bg: #f3f3f0;
+  --app-surface: #f8f8f5;
+  --app-surface-soft: #ecece7;
+  --app-surface-muted: #e4e4de;
+  --app-surface-raised: #fbfbf8;
+  --app-surface-floating: rgba(248, 248, 245, 0.94);
+  --app-text: #292927;
+  --app-text-strong: #171716;
+  --app-muted: #5f5f5a;
+  --app-muted-soft: #81817a;
+  --app-border: #dcdcd5;
+  --app-border-strong: #c8c8c0;
+  --app-ring: rgba(41, 41, 39, 0.55);
+  --app-overlay: rgba(27, 27, 25, 0.35);
+  --app-emphasis-bg: #3c3b38;
+  --app-emphasis-bg-hover: #292826;
+  --app-emphasis-text: #fafaf7;
   --app-surface-highlight: rgba(255, 255, 255, 0.72);
   --app-shadow-card: 0 16px 38px rgba(28, 25, 23, 0.08);
   --app-shadow-dialog: 0 24px 60px rgba(28, 25, 23, 0.18);
   --app-bg-blend: white;
   --app-glow-color: rgba(214, 188, 152, 0.12);
-  --theme-color: #f7f5ef;
+  --theme-color: #f3f3f0;
 }
 
 :root[data-color-mode="dark"] {
@@ -149,6 +149,75 @@
 }
 
 @layer components {
+  .ink-page {
+    position: relative;
+    background: var(--app-bg);
+  }
+
+  .ink-page[data-design="studio"] {
+    --app-bg: #f1f0ea;
+    --app-surface: #f7f6f1;
+    --app-surface-soft: #e7e9e3;
+    --app-surface-raised: #fcfbf7;
+    --app-surface-floating: rgba(247, 246, 241, 0.94);
+    --app-text: #17211d;
+    --app-text-strong: #0d1713;
+    --app-muted: #52605a;
+    --app-muted-soft: #78827d;
+    --app-border: #d8dbd4;
+    --app-border-strong: #bec5bd;
+    --app-emphasis-bg: #1f4b3a;
+    --app-emphasis-bg-hover: #173c2e;
+  }
+
+  .ink-page[data-design="quiet"] {
+    --app-bg: #f7f7f5;
+    --app-surface: #fafaf8;
+    --app-surface-soft: #efefec;
+    --app-surface-raised: #fafaf8;
+    --app-surface-floating: rgba(250, 250, 248, 0.96);
+    --app-text: #20201f;
+    --app-text-strong: #111110;
+    --app-muted: #60605c;
+    --app-muted-soft: #85857f;
+    --app-border: #deded9;
+    --app-border-strong: #c7c7c0;
+    --app-emphasis-bg: #20201f;
+    --app-emphasis-bg-hover: #343431;
+    --app-shadow-card: none;
+  }
+
+  .ink-rule {
+    border-color: var(--app-border);
+  }
+
+  .ink-paper {
+    border: 1px solid var(--app-border);
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-card);
+  }
+
+  .ink-page[data-design="studio"] .ink-paper {
+    border-radius: 1.25rem;
+    box-shadow: 0 18px 48px color-mix(in srgb, #1f4b3a 9%, transparent);
+  }
+
+  .ink-page[data-design="quiet"] .ink-paper {
+    border-right: 0;
+    border-left: 0;
+  }
+
+  .ink-composer {
+    border: 1px solid var(--app-border-strong);
+    background: var(--app-surface-raised);
+    box-shadow: 0 10px 30px color-mix(in srgb, var(--app-text) 7%, transparent);
+  }
+
+  .ink-composer:focus-within {
+    border-color: var(--app-text);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-text) 10%, transparent);
+  }
+
   .ui-panel {
     @apply border-y border-stone-200 bg-transparent py-6;
   }
@@ -288,7 +357,7 @@
   }
 
   .ui-btn-primary {
-    @apply inline-flex min-h-10 items-center justify-center rounded-md bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-stone-800 focus-visible:ring-2 focus-visible:ring-amber-700 focus-visible:ring-offset-2 focus-visible:outline-none;
+    @apply inline-flex min-h-10 items-center justify-center rounded-md bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-800 focus-visible:ring-2 focus-visible:ring-amber-700 focus-visible:ring-offset-2 focus-visible:outline-none;
   }
 
   .ui-btn-secondary {
@@ -302,6 +371,55 @@
   .ui-btn-primary:disabled,
   .ui-btn-secondary:disabled {
     @apply cursor-not-allowed opacity-60 shadow-none;
+  }
+
+  .ink-page .ui-btn-primary {
+    background: var(--app-emphasis-bg);
+  }
+
+  .ink-page .ui-btn-primary:hover {
+    background: var(--app-emphasis-bg-hover);
+  }
+
+  .ink-page[data-design="paper"] .ui-btn-secondary {
+    border-color: var(--app-border-strong);
+    color: var(--app-text);
+  }
+
+  .ink-page[data-design="paper"] .ui-btn-secondary:hover {
+    border-color: var(--app-muted);
+    background: var(--app-surface-raised);
+  }
+
+  .ink-page[data-design="paper"] .after\:bg-amber-600::after,
+  .ink-page[data-design="paper"] .bg-amber-600 {
+    background-color: var(--app-emphasis-bg);
+  }
+
+  .print-queue {
+    border-top: 1px solid var(--app-border);
+  }
+
+  .print-ticket {
+    display: flex;
+    gap: clamp(0.875rem, 2vw, 1.5rem);
+    padding: clamp(1.125rem, 2.5vw, 1.75rem) 0;
+    border-bottom: 1px solid var(--app-border);
+  }
+
+  .ink-page[data-design="studio"] .after\:bg-amber-600::after,
+  .ink-page[data-design="studio"] .bg-amber-600 {
+    background-color: #2f6a52;
+  }
+
+  .ink-page[data-design="quiet"] .ui-btn-primary,
+  .ink-page[data-design="quiet"] .ui-btn-secondary,
+  .ink-page[data-design="quiet"] .ink-composer {
+    border-radius: 0;
+  }
+
+  .ink-page main fieldset > section {
+    animation: content-in 420ms var(--ease-out-quint) both;
   }
 
   .tutorial-hero {
@@ -349,6 +467,23 @@
   textarea {
     font-size: 16px !important;
   }
+
+  .ui-btn-primary,
+  .ui-btn-secondary {
+    min-height: 44px;
+  }
+}
+
+@keyframes content-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes tab-settle {
@@ -388,6 +523,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ink-page main fieldset > section,
   .page-swap-enter-active,
   .page-swap-leave-active,
   .dialog-fade-enter-active,

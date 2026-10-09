@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { RouterLink } from "vue-router";
 
-import AppDialog from "@/components/AppDialog.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspaceStore = useWorkspaceStore();
@@ -18,13 +17,14 @@ const emptyStateHint = computed(() =>
     ? t("conversations.emptyState.withHistory")
     : t("conversations.emptyState.firstConversation"),
 );
-const feedbackOpen = ref(false);
-const feedbackDraft = ref("");
-const feedbackFormError = ref("");
-
 function handleDraftInput(event: Event) {
   const target = event.target as HTMLTextAreaElement | null;
   workspaceStore.updateCurrentDraft(target?.value ?? "");
+}
+
+function handleConversationChange(event: Event) {
+  const target = event.target as HTMLSelectElement | null;
+  if (target?.value) workspaceStore.selectConversation(target.value);
 }
 
 function handleDeleteCurrentConversation() {
@@ -44,146 +44,40 @@ function handleDeleteCurrentConversation() {
 
   workspaceStore.deleteConversation(current.id);
 }
-
-function openFeedbackDialog() {
-  feedbackOpen.value = true;
-  feedbackDraft.value = "";
-  feedbackFormError.value = "";
-}
-
-function closeFeedbackDialog() {
-  feedbackOpen.value = false;
-  feedbackFormError.value = "";
-}
-
-async function handleFeedbackSubmit() {
-  feedbackFormError.value = "";
-
-  if (!feedbackDraft.value.trim()) {
-    feedbackFormError.value = t("feedback.errors.required");
-    return;
-  }
-
-  const success = await workspaceStore.submitFeedback(feedbackDraft.value);
-  if (!success) {
-    feedbackFormError.value = workspaceStore.feedbackError;
-    return;
-  }
-
-  feedbackDraft.value = "";
-  closeFeedbackDialog();
-}
 </script>
 
 <template>
-  <section class="mx-auto max-w-6xl space-y-7 pt-3 sm:space-y-9">
-    <div>
-      <p class="text-xs font-semibold tracking-[0.16em] text-amber-700 uppercase">Ink</p>
-      <h2 class="mt-2 text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
+  <section class="mx-auto max-w-6xl space-y-8 pt-2 sm:space-y-10">
+    <div class="ink-rule flex items-center justify-between gap-4 border-b pb-5 sm:pb-6">
+      <h1 class="text-3xl font-semibold tracking-tight text-stone-950 sm:text-[2.7rem]">
         {{ t("navigation.conversations.label") }}
-      </h2>
+      </h1>
+      <button
+        type="button"
+        class="ui-btn-secondary shrink-0 lg:hidden"
+        @click="workspaceStore.createConversation"
+      >
+        {{ t("common.actions.new") }}
+      </button>
     </div>
 
-    <section class="space-y-4 lg:hidden">
-      <div class="border-l-2 border-amber-600 py-1 pl-4">
-        <div class="flex flex-col gap-3">
-          <div>
-            <p class="text-sm font-medium text-stone-900">{{ t("feedback.card.title") }}</p>
-            <p class="mt-1 text-sm leading-6 text-stone-500">
-              {{ t("feedback.card.description") }}
-            </p>
-          </div>
-          <button
-            type="button"
-            class="ui-btn-secondary w-full px-3 py-1.5 text-sm"
-            @click="openFeedbackDialog"
-          >
-            {{ t("feedback.card.action") }}
-          </button>
-        </div>
-      </div>
+    <label class="block lg:hidden">
+      <span class="mb-2 block text-sm font-medium text-stone-600">
+        {{ t("conversations.recent") }}
+      </span>
+      <select
+        :value="workspaceStore.activeConversationId"
+        class="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-stone-900"
+        @change="handleConversationChange"
+      >
+        <option v-for="chat in workspaceStore.conversations" :key="chat.id" :value="chat.id">
+          {{ chat.title }} · {{ workspaceStore.formatPrintTime(chat.updatedAt) }}
+        </option>
+      </select>
+    </label>
 
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <h3 class="text-base leading-6 font-semibold text-stone-900">
-            {{ t("conversations.recent") }}
-          </h3>
-        </div>
-        <button
-          class="ui-btn-secondary px-3 py-1.5 text-sm"
-          @click="workspaceStore.createConversation"
-        >
-          {{ t("common.actions.new") }}
-        </button>
-      </div>
-
-      <div class="flex snap-x gap-4 overflow-x-auto pb-2">
-        <button
-          v-for="chat in workspaceStore.conversations"
-          :key="chat.id"
-          type="button"
-          class="max-w-[18rem] min-w-[85%] snap-center border-y p-5 text-left transition-colors"
-          :class="
-            workspaceStore.activeConversationId === chat.id
-              ? 'border-amber-600 bg-white/70 text-stone-900'
-              : 'border-stone-200 bg-transparent text-stone-900 hover:border-stone-400'
-          "
-          @click="workspaceStore.selectConversation(chat.id)"
-        >
-          <div class="flex items-start justify-between gap-2">
-            <p
-              class="text-sm font-medium"
-              :class="
-                workspaceStore.activeConversationId === chat.id
-                  ? 'text-stone-950'
-                  : 'text-stone-900'
-              "
-            >
-              {{ chat.title }}
-            </p>
-            <span
-              class="text-xs"
-              :class="
-                workspaceStore.activeConversationId === chat.id
-                  ? 'text-stone-500'
-                  : 'text-stone-500'
-              "
-            >
-              {{ workspaceStore.formatPrintTime(chat.updatedAt) }}
-            </span>
-          </div>
-          <p
-            class="mt-2 text-sm leading-relaxed"
-            :class="
-              workspaceStore.activeConversationId === chat.id ? 'text-stone-600' : 'text-stone-500'
-            "
-          >
-            {{ chat.preview }}
-          </p>
-        </button>
-      </div>
-    </section>
-
-    <div class="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-8">
+    <div class="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-12">
       <aside class="hidden min-w-0 space-y-4 lg:block">
-        <div class="border-l-2 border-amber-600 py-1 pl-4">
-          <div class="flex flex-col gap-3">
-            <div>
-              <p class="text-sm font-medium text-stone-900">{{ t("feedback.card.title") }}</p>
-              <p class="mt-1 text-sm leading-6 text-stone-500">
-                {{ t("feedback.card.description") }}
-              </p>
-            </div>
-            <button
-              type="button"
-              class="ui-btn-secondary w-full px-3 py-1.5 text-sm"
-              @click="openFeedbackDialog"
-            >
-              {{ t("feedback.card.action") }}
-            </button>
-          </div>
-        </div>
-
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-base leading-6 font-semibold text-stone-900">
@@ -198,7 +92,10 @@ async function handleFeedbackSubmit() {
           </button>
         </div>
 
-        <div v-if="workspaceStore.conversations.length" class="ui-list-card">
+        <div
+          v-if="workspaceStore.conversations.length"
+          class="ui-list-card max-h-[calc(100dvh-19rem)] overflow-y-auto"
+        >
           <button
             v-for="chat in workspaceStore.conversations"
             :key="chat.id"
@@ -237,7 +134,7 @@ async function handleFeedbackSubmit() {
       </aside>
 
       <div
-        class="flex min-h-[24rem] min-w-0 flex-col border-y border-stone-200 bg-transparent py-4 sm:min-h-[28rem] lg:h-[calc(100dvh-16rem)] lg:min-h-[500px] lg:border-0 lg:py-0"
+        class="ink-paper flex min-h-[24rem] min-w-0 flex-col p-4 sm:min-h-[28rem] sm:p-6 lg:h-[calc(100dvh-17rem)] lg:min-h-[500px]"
       >
         <div
           class="mb-4 flex shrink-0 flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between"
@@ -293,27 +190,15 @@ async function handleFeedbackSubmit() {
             >
               <button
                 type="button"
-                class="block max-w-[88%] rounded-xl border px-5 py-3.5 text-left text-[15px] leading-relaxed transition-colors"
+                class="block max-w-[88%] rounded-xl border px-5 py-3.5 text-left text-[15px] leading-relaxed transition-all"
                 :class="
                   message.role === 'user'
                     ? workspaceStore.selectedConversationMessageIds.includes(message.id)
-                      ? 'rounded-br-sm border-stone-900 bg-stone-800 text-white ring-1 ring-stone-400'
-                      : 'rounded-br-sm border-stone-900 bg-stone-900 text-white'
+                      ? 'rounded-br-sm border-stone-700 bg-stone-700 text-white ring-2 ring-stone-400 ring-offset-2'
+                      : 'rounded-br-sm border-stone-800 bg-stone-800 text-white'
                     : workspaceStore.selectedConversationMessageIds.includes(message.id)
-                      ? 'rounded-bl-sm border-amber-500 bg-amber-50 text-stone-900 ring-1 ring-amber-200'
+                      ? 'rounded-bl-sm border-stone-500 bg-stone-100 text-stone-950 ring-2 ring-stone-300 ring-offset-2'
                       : 'rounded-bl-sm border-stone-200 bg-white text-stone-900'
-                "
-                @click="workspaceStore.toggleConversationMessageSelection(message.id)"
-              >
-                {{ message.text }}
-              </button>
-              <button
-                type="button"
-                class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors"
-                :class="
-                  workspaceStore.selectedConversationMessageIds.includes(message.id)
-                    ? 'border-amber-500 bg-amber-500'
-                    : 'border-stone-300 bg-white'
                 "
                 :aria-label="
                   workspaceStore.selectedConversationMessageIds.includes(message.id)
@@ -323,14 +208,7 @@ async function handleFeedbackSubmit() {
                 :aria-pressed="workspaceStore.selectedConversationMessageIds.includes(message.id)"
                 @click="workspaceStore.toggleConversationMessageSelection(message.id)"
               >
-                <span
-                  class="h-2 w-2 rounded-full"
-                  :class="
-                    workspaceStore.selectedConversationMessageIds.includes(message.id)
-                      ? 'bg-white'
-                      : 'bg-transparent'
-                  "
-                />
+                {{ message.text }}
               </button>
             </div>
           </article>
@@ -379,9 +257,7 @@ async function handleFeedbackSubmit() {
             {{ workspaceStore.generationError }}
           </p>
 
-          <div
-            class="relative rounded-md border border-stone-300 bg-white transition-all focus-within:ring-2 focus-within:ring-amber-700 focus-within:ring-offset-2"
-          >
+          <div class="ink-composer relative rounded-md transition-all">
             <textarea
               :value="workspaceStore.activeConversation?.draft ?? ''"
               rows="4"
@@ -434,50 +310,5 @@ async function handleFeedbackSubmit() {
         </div>
       </div>
     </div>
-
-    <AppDialog
-      :open="feedbackOpen"
-      :title="t('feedback.dialog.title')"
-      :description="t('feedback.dialog.description')"
-      @close="closeFeedbackDialog"
-    >
-      <form class="space-y-4" @submit.prevent="handleFeedbackSubmit">
-        <label class="block">
-          <span class="mb-2 block text-sm font-medium text-stone-900">
-            {{ t("feedback.dialog.contentLabel") }}
-          </span>
-          <textarea
-            v-model="feedbackDraft"
-            rows="6"
-            :placeholder="t('feedback.dialog.placeholder')"
-            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm leading-7 text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
-          />
-        </label>
-
-        <p v-if="feedbackFormError" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {{ feedbackFormError }}
-        </p>
-
-        <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            class="ui-btn-secondary px-4 py-2.5 text-sm"
-            @click="closeFeedbackDialog"
-          >
-            {{ t("common.actions.cancel") }}
-          </button>
-          <button
-            class="ui-btn-primary px-4 py-2.5 text-sm"
-            :disabled="workspaceStore.feedbackSubmitting"
-          >
-            {{
-              workspaceStore.feedbackSubmitting
-                ? t("feedback.dialog.submitting")
-                : t("feedback.dialog.submit")
-            }}
-          </button>
-        </div>
-      </form>
-    </AppDialog>
   </section>
 </template>

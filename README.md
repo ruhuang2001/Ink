@@ -1,4 +1,6 @@
-![Ink Logo](assets/logo.png)
+<p align="center">
+  <img src="assets/logo.png" alt="Ink" width="180" />
+</p>
 
 # Ink
 

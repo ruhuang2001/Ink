@@ -313,31 +313,16 @@ describe("workspace views", () => {
     expect(store.pendingPrintJobs.at(0)?.source).toBe("对话选中问答");
   });
 
-  it("opens the feedback dialog and submits feedback from the conversations view", async () => {
-    const { pinia, router, store } = await createWorkspaceContext("/conversations");
+  it("keeps feedback solicitation out of the primary conversation flow", async () => {
+    const { pinia, router } = await createWorkspaceContext("/conversations");
     const wrapper = mount(ConversationsView, {
       global: {
         plugins: [pinia, router],
       },
     });
 
-    expect(wrapper.text()).toContain("问题 / 建议 / 吐槽反馈");
-    expect(wrapper.text()).toContain("这里的反馈会提醒作者");
-
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text() === "反馈给作者")
-      ?.trigger("click");
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
-
-    const feedbackInput = wrapper.find("textarea[placeholder='反馈（功能 / 建议 / 吐槽）']");
-    expect(feedbackInput.exists()).toBe(true);
-
-    await feedbackInput.setValue("建议把反馈入口放到顶部");
-    await wrapper.findAll("form").at(-1)?.trigger("submit");
-    await flushPromises();
-
-    expect(store.flashMessage).toBe("反馈已发送，作者会直接收到纸条。");
+    expect(wrapper.text()).not.toContain("问题 / 建议 / 吐槽反馈");
+    expect(wrapper.find("textarea[placeholder='反馈（功能 / 建议 / 吐槽）']").exists()).toBe(false);
   });
 
   it("guides and supports the first message when there is no conversation history", async () => {
@@ -529,7 +514,7 @@ describe("workspace views", () => {
     await pendingButton?.trigger("click");
 
     expect(store.pendingPrintJobs.some((job) => job.status === "queued")).toBe(true);
-    expect(wrapper.text()).toContain("默认打印设置");
+    expect(wrapper.text()).toContain("默认设备");
     expect(wrapper.text()).toContain("书桌咕咕机");
     expect(wrapper.text()).toContain("绑定教程");
   });
@@ -544,7 +529,7 @@ describe("workspace views", () => {
 
     const pendingArticle = wrapper
       .findAll("article")
-      .find((article) => article.text().includes("待确认"));
+      .find((article) => article.text().includes("晚安留言"));
     await pendingArticle
       ?.findAll("button")
       .find((button) => button.text() === "取消打印")

@@ -308,10 +308,6 @@ const zhCN = {
         },
       },
     },
-    demoBanner: {
-      body: "当前设备、对话、打印页均为演示内容，具体使用请登录后继续。",
-      action: "去登录",
-    },
   },
   login: {
     form: {
@@ -689,6 +685,8 @@ const zhCN = {
     },
     pending: {
       title: "待处理打印",
+      awaitingConfirmation: "待确认",
+      queued: "排队中",
       emptyTitle: "当前没有待处理打印",
       emptyAuthenticated: "绑定设备后可以先在对话页生成内容，再回到这里确认是否出纸。",
       emptyAnonymous: "当前未登录时显示的是演示数据流，登录后会切到各账号自己的真实打印记录。",

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
@@ -41,20 +41,31 @@ const syncErrors = computed(() =>
     { key: "extensions", message: workspaceStore.pluginError },
   ].filter((error) => error.message),
 );
-const anonymousDemoRouteNames = new Set(["conversations", "prints"]);
 const loginTarget = computed(() => ({
   path: "/login",
   query: route.fullPath === DEFAULT_LOGIN_REDIRECT ? undefined : { redirect: route.fullPath },
 }));
-const showAnonymousDemoBanner = computed(
-  () => !workspaceStore.isAuthenticated && anonymousDemoRouteNames.has(String(route.name ?? "")),
-);
 const visibleNavigationItems = computed(() =>
   navigationItems.map((item) => ({
     ...item,
     label: t(item.labelKey),
     navHint: t(item.navHintKey),
   })),
+);
+const designs = ["paper", "studio", "quiet"] as const;
+const design = ref(
+  designs.includes(route.query.design as (typeof designs)[number])
+    ? (route.query.design as (typeof designs)[number])
+    : "paper",
+);
+
+watch(
+  () => route.query.design,
+  (value) => {
+    if (designs.includes(value as (typeof designs)[number])) {
+      design.value = value as (typeof designs)[number];
+    }
+  },
 );
 
 function isNavigationItemActive(path: string) {
@@ -86,7 +97,7 @@ async function recoverSynchronization() {
 </script>
 
 <template>
-  <div class="flex min-h-[100dvh] flex-col bg-stone-50 text-stone-900">
+  <div :data-design="design" class="ink-page flex min-h-[100dvh] flex-col text-stone-900">
     <AppDialog
       :open="workspaceStore.postLoginTutorialOpen"
       :title="t('shell.postLoginTutorial.title')"
@@ -126,22 +137,12 @@ async function recoverSynchronization() {
     </AppDialog>
 
     <header
-      class="sticky top-0 z-40 border-b border-stone-200 bg-stone-50/95 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur sm:px-5 lg:px-8 lg:py-3"
+      class="ink-rule sticky top-0 z-40 border-b bg-[color:var(--app-surface-floating)] px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur sm:px-5 lg:px-8 lg:py-3"
     >
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 lg:hidden">
         <div class="flex items-center gap-3">
-          <img src="/icon.jpg" alt="Ink Icon" class="h-8 w-8 rounded-lg object-contain" />
-          <div class="flex items-center gap-2">
-            <p class="text-sm font-semibold text-stone-950">Ink</p>
-            <a
-              href="https://github.com/ruhuang2001"
-              target="_blank"
-              rel="noreferrer"
-              class="text-xs text-stone-400 transition-colors hover:text-stone-700"
-            >
-              Powered by ruhuang2001
-            </a>
-          </div>
+          <img src="/icon.png" alt="" class="h-8 w-8 rounded-md object-contain" />
+          <p class="text-sm font-semibold text-stone-950">Ink</p>
           <div class="hidden sm:block">
             <p class="text-xs text-stone-500">
               {{
@@ -175,16 +176,8 @@ async function recoverSynchronization() {
       <div class="mx-auto hidden max-w-7xl items-center justify-between lg:flex">
         <div class="flex items-center gap-8">
           <div class="flex items-center gap-3">
-            <img src="/icon.jpg" alt="Ink Icon" class="h-8 w-8 rounded-lg object-contain" />
+            <img src="/icon.png" alt="" class="h-8 w-8 rounded-md object-contain" />
             <p class="text-sm font-semibold text-stone-950">Ink</p>
-            <a
-              href="https://github.com/ruhuang2001"
-              target="_blank"
-              rel="noreferrer"
-              class="text-xs text-stone-400 transition-colors hover:text-stone-700"
-            >
-              Powered by ruhuang2001
-            </a>
           </div>
 
           <nav class="flex items-center gap-1">
@@ -291,25 +284,8 @@ async function recoverSynchronization() {
       </div>
     </div>
 
-    <div
-      v-if="showAnonymousDemoBanner"
-      class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 lg:px-8"
-    >
-      <div
-        class="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <p class="leading-6">{{ t("shell.demoBanner.body") }}</p>
-        <RouterLink
-          :to="loginTarget"
-          class="inline-flex items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 transition-colors hover:border-amber-400 hover:bg-amber-100"
-        >
-          {{ t("shell.demoBanner.action") }}
-        </RouterLink>
-      </div>
-    </div>
-
     <main
-      class="mx-auto w-full max-w-7xl flex-1 px-4 pt-5 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-7 lg:px-8 lg:py-10"
+      class="mx-auto w-full max-w-7xl flex-1 px-4 pt-6 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-8 lg:px-8 lg:py-12"
     >
       <fieldset
         class="m-0 min-w-0 border-0 p-0"
@@ -325,7 +301,7 @@ async function recoverSynchronization() {
     </main>
 
     <nav
-      class="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-stone-50/95 px-3 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] backdrop-blur lg:hidden"
+      class="ink-rule fixed inset-x-0 bottom-0 z-30 border-t bg-[color:var(--app-surface-floating)] px-3 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] backdrop-blur lg:hidden"
     >
       <div
         class="mx-auto grid max-w-lg gap-1"
