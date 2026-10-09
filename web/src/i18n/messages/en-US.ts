@@ -316,10 +316,6 @@ const enUS = {
         },
       },
     },
-    demoBanner: {
-      body: "Devices, conversations, and prints are demo content right now. Sign in to continue with real data.",
-      action: "Log in",
-    },
   },
   login: {
     form: {
@@ -705,6 +701,8 @@ const enUS = {
     },
     pending: {
       title: "Pending prints",
+      awaitingConfirmation: "Needs confirmation",
+      queued: "Queued",
       emptyTitle: "No pending prints",
       emptyAuthenticated:
         "After you bind a device, generate content in conversations first and come back here to confirm whether it should print.",

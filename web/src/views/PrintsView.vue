@@ -7,7 +7,7 @@ import AppDialog from "@/components/AppDialog.vue";
 import PrintPreview from "@/components/PrintPreview.vue";
 import { renderPrintPreview } from "@/services/printers";
 import { useWorkspaceStore } from "@/stores/workspace";
-import { getPrintStatusBadgeClass, getSourceStatusBadgeClass } from "@/utils/workspace";
+import { getPrintStatusBadgeClass } from "@/utils/workspace";
 
 const workspaceStore = useWorkspaceStore();
 const { t } = useI18n();
@@ -25,12 +25,25 @@ const weekdayOptions = computed(
     ] as const,
 );
 
-const defaultSettings = computed(() => [
-  {
-    label: t("prints.defaultSettings.defaultDevice"),
-    value: workspaceStore.activeDeviceLabel || t("prints.defaultSettings.notSet"),
-  },
-]);
+const activePrintGroups = computed(() =>
+  [
+    {
+      status: "pending",
+      title: t("prints.pending.awaitingConfirmation"),
+      jobs: workspaceStore.pendingPrintJobs.filter((job) => job.status === "pending"),
+    },
+    {
+      status: "queued",
+      title: t("prints.pending.queued"),
+      jobs: workspaceStore.pendingPrintJobs.filter((job) => job.status === "queued"),
+    },
+  ].filter((group) => group.jobs.length > 0),
+);
+const historyPrintJobs = computed(() =>
+  workspaceStore.printHistoryJobs.filter(
+    (job) => job.status !== "pending" && job.status !== "queued",
+  ),
+);
 
 const printDialogOpen = ref(false);
 const scheduleDialogOpen = ref(false);
@@ -278,361 +291,303 @@ async function submitScheduleDialog() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-6xl space-y-7 pt-3 sm:space-y-9">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+  <section class="print-page mx-auto max-w-6xl space-y-8 pt-2 sm:space-y-10">
+    <header
+      class="ink-rule flex flex-col gap-5 border-b pb-6 sm:flex-row sm:items-end sm:justify-between sm:pb-7"
+    >
       <div>
-        <p class="text-xs font-semibold tracking-[0.16em] text-amber-700 uppercase">Ink</p>
-        <h2 class="mt-2 text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
+        <h1 class="text-3xl font-semibold tracking-tight text-stone-950 sm:text-[2.7rem]">
           {{ t("navigation.prints.label") }}
-        </h2>
+        </h1>
+        <p class="mt-2 text-sm text-stone-500">
+          {{ t("prints.defaultSettings.defaultDevice") }} ·
+          {{ workspaceStore.activeDeviceLabel || t("prints.defaultSettings.notSet") }}
+        </p>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <RouterLink to="/settings/guide" class="ui-btn-secondary px-3 py-1.5 text-sm">
-          {{ t("prints.actions.bindingTutorial") }}
-        </RouterLink>
-        <button class="ui-btn-primary px-3 py-1.5 text-sm" @click="openPrintDialog">
+      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <button class="ui-btn-primary flex-1 px-4 sm:flex-none" @click="openPrintDialog">
           {{ t("prints.actions.newPrint") }}
         </button>
-        <button class="ui-btn-secondary px-3 py-1.5 text-sm" @click="openScheduleDialog">
-          {{ t("prints.actions.newSchedule") }}
-        </button>
+        <RouterLink
+          to="/settings/guide"
+          class="min-h-11 w-full px-1 py-2 text-center text-sm font-medium text-stone-500 transition-colors hover:text-stone-900 sm:min-h-0 sm:w-auto sm:text-left"
+        >
+          {{ t("prints.actions.bindingTutorial") }}
+        </RouterLink>
       </div>
-    </div>
+    </header>
 
-    <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div class="space-y-8">
-        <section>
-          <div class="mb-4">
-            <h3 class="text-base leading-6 font-semibold text-stone-900">
-              {{ t("prints.pending.title") }}
+    <div class="space-y-14">
+      <section class="print-pending">
+        <div class="mb-4 flex items-center justify-between gap-4">
+          <h2 class="text-xl font-semibold tracking-tight text-stone-900">
+            {{ t("prints.pending.title") }}
+          </h2>
+          <span class="text-sm text-stone-500 tabular-nums">
+            {{ workspaceStore.pendingPrintJobs.length }}
+          </span>
+        </div>
+
+        <div
+          v-if="workspaceStore.pendingPrintJobs.length === 0"
+          class="border-y border-stone-200 px-6 py-10 text-center"
+        >
+          <h4 class="text-base font-semibold text-stone-900">
+            {{ t("prints.pending.emptyTitle") }}
+          </h4>
+          <p class="mt-2 text-sm text-stone-500">
+            {{
+              workspaceStore.isAuthenticated
+                ? t("prints.pending.emptyAuthenticated")
+                : t("prints.pending.emptyAnonymous")
+            }}
+          </p>
+        </div>
+
+        <div v-else class="space-y-8">
+          <section v-for="group in activePrintGroups" :key="group.status">
+            <h3 class="mb-2 text-sm font-medium text-stone-500">
+              {{ group.title }} · {{ group.jobs.length }}
             </h3>
-          </div>
-
-          <div
-            v-if="workspaceStore.pendingPrintJobs.length === 0"
-            class="border-y border-stone-200 px-6 py-10 text-center"
-          >
-            <h4 class="text-base font-semibold text-stone-900">
-              {{ t("prints.pending.emptyTitle") }}
-            </h4>
-            <p class="mt-2 text-sm text-stone-500">
-              {{
-                workspaceStore.isAuthenticated
-                  ? t("prints.pending.emptyAuthenticated")
-                  : t("prints.pending.emptyAnonymous")
-              }}
-            </p>
-          </div>
-
-          <div v-else class="ui-list-card">
-            <article
-              v-for="item in workspaceStore.pendingPrintJobs"
-              :key="item.id"
-              class="ui-list-row flex flex-col gap-4"
-            >
-              <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div class="min-w-0">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <p class="text-sm font-medium text-stone-900">{{ item.title }}</p>
-                    <span class="ui-status-badge" :class="getPrintStatusBadgeClass(item.status)">
-                      {{ workspaceStore.getPrintStatusLabel(item.status) }}
-                    </span>
-                  </div>
+            <div class="print-queue">
+              <article v-for="item in group.jobs" :key="item.id" class="print-ticket">
+                <div class="min-w-0 flex-1">
+                  <p class="text-base font-medium text-stone-900">{{ item.title }}</p>
                   <p class="mt-1 text-sm text-stone-500">
                     {{ item.source }} · {{ workspaceStore.getDeviceName(item.deviceId) }} ·
                     {{ workspaceStore.formatPrintTime(item.updatedAt) }}
                   </p>
                   <p
                     v-if="!workspaceStore.isAuthenticated && 'content' in item"
-                    class="mt-2 rounded-lg bg-stone-50 px-3 py-2 text-sm leading-relaxed text-stone-600"
+                    class="mt-3 max-w-2xl text-sm leading-6 text-stone-700"
                   >
-                    {{ item.content }}
+                    “{{ item.content }}”
+                  </p>
+
+                  <div
+                    class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <label class="flex min-w-0 items-center gap-2 text-sm text-stone-600">
+                      <span class="shrink-0">{{ t("prints.pending.targetDevice") }}</span>
+                      <select
+                        :value="item.deviceId"
+                        :disabled="workspaceStore.isAuthenticated && item.status === 'queued'"
+                        class="min-w-0 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
+                        @change="handlePrintDeviceChange(item.id, $event)"
+                      >
+                        <option
+                          v-for="device in workspaceStore.devices.filter(
+                            (device) => device.status !== 'offline',
+                          )"
+                          :key="device.id"
+                          :value="device.id"
+                        >
+                          {{ device.name }}
+                        </option>
+                      </select>
+                    </label>
+
+                    <div class="print-ticket-actions flex items-center justify-end gap-4">
+                      <button
+                        class="text-sm font-medium text-stone-600 transition-colors hover:text-stone-950"
+                        @click="openPreview(item)"
+                      >
+                        {{ t("prints.actions.preview") }}
+                      </button>
+                      <button
+                        v-if="!workspaceStore.isAuthenticated || item.status === 'pending'"
+                        class="text-sm text-stone-500 transition-colors hover:text-rose-700"
+                        @click="workspaceStore.cancelPrint(item.id)"
+                      >
+                        {{ t("prints.actions.cancelPrint") }}
+                      </button>
+                      <button
+                        v-if="item.status === 'pending'"
+                        class="ui-btn-primary px-4"
+                        @click="workspaceStore.confirmPrint(item.id)"
+                      >
+                        {{ t("prints.actions.confirmPrint") }}
+                      </button>
+                    </div>
+                  </div>
+                  <p
+                    v-if="workspaceStore.isAuthenticated && item.status === 'queued'"
+                    class="mt-3 text-xs leading-5 text-stone-400"
+                  >
+                    {{ t("prints.pending.queuedHint") }}
                   </p>
                 </div>
+              </article>
+            </div>
+          </section>
+        </div>
+        <button
+          v-if="workspaceStore.isAuthenticated && workspaceStore.activePrintJobsCursor"
+          class="ui-btn-secondary mt-4 px-3 py-1.5 text-sm"
+          :disabled="workspaceStore.activePrintJobsLoading || workspaceStore.printJobsLoading"
+          @click="workspaceStore.loadMorePrintJobs('active')"
+        >
+          {{ t(workspaceStore.activePrintJobsLoading ? "prints.loading" : "prints.loadMore") }}
+        </button>
+      </section>
 
-                <div
-                  class="flex w-full flex-wrap items-start gap-2 self-stretch sm:w-auto sm:self-start"
+      <section>
+        <div class="mb-4 flex items-center justify-between gap-4">
+          <h2 class="text-xl font-semibold tracking-tight text-stone-900">
+            {{ t("prints.schedules.title") }}
+          </h2>
+          <button
+            class="text-sm font-medium text-stone-600 hover:text-stone-950"
+            @click="openScheduleDialog"
+          >
+            {{ t("prints.actions.newSchedule") }}
+          </button>
+        </div>
+
+        <div
+          v-if="workspaceStore.activeSchedules.length === 0"
+          class="border-y border-stone-200 px-6 py-10 text-center"
+        >
+          <h4 class="text-base font-semibold text-stone-900">
+            {{ t("prints.schedules.emptyTitle") }}
+          </h4>
+        </div>
+
+        <div v-else class="ui-list-card">
+          <article
+            v-for="task in workspaceStore.activeSchedules"
+            :key="task.id"
+            class="ui-list-row flex flex-col gap-4"
+          >
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-stone-900">{{ task.title }}</p>
+                <p class="mt-1 text-sm text-stone-500">
+                  {{ task.source }} · {{ task.timeLabel }} ·
+                  {{
+                    t("prints.schedules.sendToDevice", {
+                      device: workspaceStore.getDeviceName(task.deviceId),
+                    })
+                  }}
+                </p>
+                <p v-if="task.nextRunAt" class="mt-1 text-xs text-stone-500">
+                  {{
+                    t("prints.schedules.nextRunAt", {
+                      time: workspaceStore.formatPrintTime(task.nextRunAt),
+                    })
+                  }}
+                </p>
+                <p
+                  v-if="workspaceStore.isAuthenticated && task.printPolicy?.batchSize"
+                  class="mt-1 text-xs text-stone-500"
                 >
+                  {{
+                    t("prints.schedules.batchSizeHint", {
+                      count: task.printPolicy.batchSize,
+                    })
+                  }}
+                </p>
+                <p
+                  v-if="task.lastError"
+                  class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+                >
+                  {{ task.lastError }}
+                </p>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="px-2 py-2 text-sm text-stone-400 transition-colors hover:text-rose-700"
+                  @click="handleScheduleDelete(task.id)"
+                >
+                  {{ t("common.actions.delete") }}
+                </button>
+                <button
+                  type="button"
+                  class="ui-toggle"
+                  :class="{ 'is-on': task.enabled }"
+                  :aria-label="
+                    t(
+                      task.enabled ? 'prints.schedules.disableTask' : 'prints.schedules.enableTask',
+                      { title: task.title },
+                    )
+                  "
+                  :aria-pressed="task.enabled"
+                  @click="workspaceStore.toggleSchedule(task.id)"
+                >
+                  <span class="ui-toggle-thumb" />
+                </button>
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-2 md:flex-row md:items-center">
+              <label class="text-sm font-medium text-stone-700">
+                {{ t("prints.schedules.deviceLabel") }}
+              </label>
+              <select
+                :value="task.deviceId"
+                class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 md:w-auto"
+                @change="handleScheduleDeviceChange(task.id, $event)"
+              >
+                <option
+                  v-for="device in workspaceStore.devices.filter(
+                    (device) => device.status !== 'offline',
+                  )"
+                  :key="device.id"
+                  :value="device.id"
+                >
+                  {{ device.name }}
+                </option>
+              </select>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <div class="mb-4">
+          <h2 class="text-xl font-semibold tracking-tight text-stone-900">
+            {{ t("prints.recentPrints") }}
+          </h2>
+        </div>
+
+        <div class="ui-list-card p-4">
+          <div class="ui-timeline">
+            <article v-for="item in historyPrintJobs" :key="item.id" class="ui-timeline-item">
+              <div class="ui-timeline-row">
+                <div class="ui-timeline-copy">
+                  <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
+                  <p class="mt-0.5 text-sm text-stone-500">
+                    {{ workspaceStore.getDeviceName(item.deviceId) }} ·
+                    {{ workspaceStore.formatPrintTime(item.updatedAt) }}
+                  </p>
                   <button
-                    class="ui-btn-secondary px-3 py-1.5 text-sm whitespace-nowrap"
+                    class="mt-2 text-sm text-stone-600 hover:text-stone-900"
                     @click="openPreview(item)"
                   >
                     {{ t("prints.actions.preview") }}
                   </button>
-                  <button
-                    v-if="item.status === 'pending'"
-                    class="ui-btn-primary px-3 py-1.5 text-sm whitespace-nowrap"
-                    @click="workspaceStore.confirmPrint(item.id)"
-                  >
-                    {{ t("prints.actions.confirmPrint") }}
-                  </button>
-                  <button
-                    v-if="!workspaceStore.isAuthenticated || item.status === 'pending'"
-                    class="ui-btn-secondary px-3 py-1.5 text-sm whitespace-nowrap"
-                    @click="workspaceStore.cancelPrint(item.id)"
-                  >
-                    {{ t("prints.actions.cancelPrint") }}
-                  </button>
                 </div>
-              </div>
-
-              <div class="flex flex-col gap-2 md:flex-row md:items-center">
-                <label class="text-sm font-medium text-stone-700">
-                  {{ t("prints.pending.targetDevice") }}
-                </label>
-                <select
-                  :value="item.deviceId"
-                  :disabled="workspaceStore.isAuthenticated && item.status === 'queued'"
-                  class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 md:w-auto"
-                  @change="handlePrintDeviceChange(item.id, $event)"
+                <span
+                  class="ui-status-badge sm:self-center"
+                  :class="getPrintStatusBadgeClass(item.status)"
                 >
-                  <option
-                    v-for="device in workspaceStore.devices.filter(
-                      (device) => device.status !== 'offline',
-                    )"
-                    :key="device.id"
-                    :value="device.id"
-                  >
-                    {{ device.name }}
-                  </option>
-                </select>
-                <p
-                  v-if="workspaceStore.isAuthenticated && item.status === 'queued'"
-                  class="text-sm text-stone-500"
-                >
-                  {{ t("prints.pending.queuedHint") }}
-                </p>
-              </div>
-            </article>
-          </div>
-          <button
-            v-if="workspaceStore.isAuthenticated && workspaceStore.activePrintJobsCursor"
-            class="ui-btn-secondary mt-4 px-3 py-1.5 text-sm"
-            :disabled="workspaceStore.activePrintJobsLoading || workspaceStore.printJobsLoading"
-            @click="workspaceStore.loadMorePrintJobs('active')"
-          >
-            {{ t(workspaceStore.activePrintJobsLoading ? "prints.loading" : "prints.loadMore") }}
-          </button>
-        </section>
-
-        <section>
-          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 class="text-base leading-6 font-semibold text-stone-900">
-              {{ t("prints.schedules.title") }}
-            </h3>
-          </div>
-
-          <div
-            v-if="workspaceStore.activeSchedules.length === 0"
-            class="border-y border-stone-200 px-6 py-10 text-center"
-          >
-            <h4 class="text-base font-semibold text-stone-900">
-              {{ t("prints.schedules.emptyTitle") }}
-            </h4>
-          </div>
-
-          <div v-else class="ui-list-card">
-            <article
-              v-for="task in workspaceStore.activeSchedules"
-              :key="task.id"
-              class="ui-list-row flex flex-col gap-4"
-            >
-              <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div class="min-w-0">
-                  <p class="text-sm font-medium text-stone-900">{{ task.title }}</p>
-                  <p class="mt-1 text-sm text-stone-500">
-                    {{ task.source }} · {{ task.timeLabel }} ·
-                    {{
-                      t("prints.schedules.sendToDevice", {
-                        device: workspaceStore.getDeviceName(task.deviceId),
-                      })
-                    }}
-                  </p>
-                  <p v-if="task.nextRunAt" class="mt-1 text-xs text-stone-500">
-                    {{
-                      t("prints.schedules.nextRunAt", {
-                        time: workspaceStore.formatPrintTime(task.nextRunAt),
-                      })
-                    }}
-                  </p>
-                  <p
-                    v-if="workspaceStore.isAuthenticated && task.printPolicy?.batchSize"
-                    class="mt-1 text-xs text-stone-500"
-                  >
-                    {{
-                      t("prints.schedules.batchSizeHint", {
-                        count: task.printPolicy.batchSize,
-                      })
-                    }}
-                  </p>
-                  <p
-                    v-if="task.lastError"
-                    class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
-                  >
-                    {{ task.lastError }}
-                  </p>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <button
-                    type="button"
-                    class="ui-btn-secondary px-3 py-1.5 text-sm whitespace-nowrap"
-                    @click="handleScheduleDelete(task.id)"
-                  >
-                    {{ t("common.actions.delete") }}
-                  </button>
-                  <button
-                    type="button"
-                    class="ui-toggle"
-                    :class="{ 'is-on': task.enabled }"
-                    :aria-label="
-                      t(
-                        task.enabled
-                          ? 'prints.schedules.disableTask'
-                          : 'prints.schedules.enableTask',
-                        { title: task.title },
-                      )
-                    "
-                    :aria-pressed="task.enabled"
-                    @click="workspaceStore.toggleSchedule(task.id)"
-                  >
-                    <span class="ui-toggle-thumb" />
-                  </button>
-                </div>
-              </div>
-
-              <div class="flex flex-col gap-2 md:flex-row md:items-center">
-                <label class="text-sm font-medium text-stone-700">
-                  {{ t("prints.schedules.deviceLabel") }}
-                </label>
-                <select
-                  :value="task.deviceId"
-                  class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 md:w-auto"
-                  @change="handleScheduleDeviceChange(task.id, $event)"
-                >
-                  <option
-                    v-for="device in workspaceStore.devices.filter(
-                      (device) => device.status !== 'offline',
-                    )"
-                    :key="device.id"
-                    :value="device.id"
-                  >
-                    {{ device.name }}
-                  </option>
-                </select>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <section>
-          <div class="mb-4">
-            <h3 class="text-base leading-6 font-semibold text-stone-900">
-              {{ t("prints.recentPrints") }}
-            </h3>
-          </div>
-
-          <div class="ui-list-card p-4">
-            <div class="ui-timeline">
-              <article
-                v-for="item in workspaceStore.printHistoryJobs"
-                :key="item.id"
-                class="ui-timeline-item"
-              >
-                <div class="ui-timeline-row">
-                  <div class="ui-timeline-copy">
-                    <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
-                    <p class="mt-0.5 text-sm text-stone-500">
-                      {{ workspaceStore.getDeviceName(item.deviceId) }} ·
-                      {{ workspaceStore.formatPrintTime(item.updatedAt) }}
-                    </p>
-                    <button
-                      class="mt-2 text-sm text-stone-600 hover:text-stone-900"
-                      @click="openPreview(item)"
-                    >
-                      {{ t("prints.actions.preview") }}
-                    </button>
-                  </div>
-                  <span
-                    class="ui-status-badge sm:self-center"
-                    :class="getPrintStatusBadgeClass(item.status)"
-                  >
-                    {{ workspaceStore.getPrintStatusLabel(item.status) }}
-                  </span>
-                </div>
-              </article>
-            </div>
-          </div>
-          <button
-            v-if="workspaceStore.isAuthenticated && workspaceStore.historyPrintJobsCursor"
-            class="ui-btn-secondary mt-4 px-3 py-1.5 text-sm"
-            :disabled="workspaceStore.historyPrintJobsLoading || workspaceStore.printJobsLoading"
-            @click="workspaceStore.loadMorePrintJobs('history')"
-          >
-            {{ t(workspaceStore.historyPrintJobsLoading ? "prints.loading" : "prints.loadMore") }}
-          </button>
-        </section>
-      </div>
-
-      <aside class="space-y-8">
-        <section>
-          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 class="text-base leading-6 font-semibold text-stone-900">
-                {{ t("prints.defaultSettings.title") }}
-              </h3>
-            </div>
-            <RouterLink to="/settings" class="ui-btn-secondary px-3 py-1.5 text-sm">
-              {{ t("prints.defaultSettings.adjust") }}
-            </RouterLink>
-          </div>
-
-          <div class="ui-list-card">
-            <div v-for="item in defaultSettings" :key="item.label" class="ui-list-row">
-              <p class="text-sm font-medium text-stone-900">{{ item.label }}</p>
-              <p class="mt-1 text-sm text-stone-500">{{ item.value }}</p>
-            </div>
-          </div>
-          <p class="mt-3 text-sm text-stone-500">
-            {{ t("prints.defaultSettings.hint") }}
-          </p>
-        </section>
-
-        <section>
-          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 class="text-base leading-6 font-semibold text-stone-900">
-              {{ t("prints.connectedPlugins") }}
-            </h3>
-            <RouterLink to="/settings" class="ui-btn-secondary px-3 py-1.5 text-sm">{{
-              t("prints.moreSettings")
-            }}</RouterLink>
-          </div>
-
-          <div class="ui-list-card">
-            <p
-              v-if="workspaceStore.activeSources.length === 0"
-              class="ui-list-row text-sm leading-6 text-stone-500"
-            >
-              {{ t("prints.noConnectedPlugins") }}
-            </p>
-            <article
-              v-for="source in workspaceStore.activeSources"
-              :key="source.id"
-              class="ui-list-row"
-            >
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <p class="text-sm font-medium text-stone-900">{{ source.name }}</p>
-                  <p class="mt-0.5 text-sm text-stone-500">{{ source.type }} · {{ source.note }}</p>
-                </div>
-                <span class="ui-status-badge" :class="getSourceStatusBadgeClass(source.status)">
-                  {{ workspaceStore.getSourceStatusLabel(source.status) }}
+                  {{ workspaceStore.getPrintStatusLabel(item.status) }}
                 </span>
               </div>
             </article>
           </div>
-        </section>
-      </aside>
+        </div>
+        <button
+          v-if="workspaceStore.isAuthenticated && workspaceStore.historyPrintJobsCursor"
+          class="ui-btn-secondary mt-4 px-3 py-1.5 text-sm"
+          :disabled="workspaceStore.historyPrintJobsLoading || workspaceStore.printJobsLoading"
+          @click="workspaceStore.loadMorePrintJobs('history')"
+        >
+          {{ t(workspaceStore.historyPrintJobsLoading ? "prints.loading" : "prints.loadMore") }}
+        </button>
+      </section>
     </div>
 
     <AppDialog

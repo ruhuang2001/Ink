@@ -22,14 +22,10 @@ function isSectionActive(name: string) {
 
 <template>
   <section class="mx-auto max-w-6xl pt-3 sm:pt-5">
-    <header class="max-w-2xl">
-      <p class="text-xs font-semibold tracking-[0.16em] text-amber-700 uppercase">Ink</p>
-      <h1 class="mt-2 text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
+    <header>
+      <h1 class="text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
         {{ t("navigation.settings.label") }}
       </h1>
-      <p class="mt-3 text-sm leading-6 text-stone-500 sm:text-base">
-        {{ t("navigation.settings.description") }}
-      </p>
     </header>
 
     <nav

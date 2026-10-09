@@ -71,14 +71,12 @@ describe("AppShell", () => {
     expect(wrapper.text()).toContain("退出");
   });
 
-  it("shows the author credit link next to the product name", async () => {
+  it("keeps the product header free of promotional copy", async () => {
     const { wrapper } = await mountShellAt("/settings/devices");
 
-    const creditLink = wrapper
-      .findAll("a")
-      .find((link) => link.text().includes("Powered by ruhuang2001"));
-
-    expect(creditLink?.attributes("href")).toBe("https://github.com/ruhuang2001");
+    expect(wrapper.text()).toContain("Ink");
+    expect(wrapper.text()).not.toContain("Powered by");
+    expect(wrapper.text()).not.toContain("Paper workspace");
   });
 
   it("keeps synchronization failures visible until the affected data recovers", async () => {
@@ -153,7 +151,7 @@ describe("AppShell", () => {
     const { wrapper } = await mountShellAt("/conversations", false);
 
     expect(wrapper.text()).toContain("登录");
-    expect(wrapper.text()).toContain("当前设备、对话、打印页均为演示内容");
+    expect(wrapper.text()).not.toContain("当前设备、对话、打印页均为演示内容");
     expect(wrapper.text()).not.toContain("name@example.com");
     expect(wrapper.text()).not.toContain("退出");
   });
@@ -181,10 +179,10 @@ describe("AppShell", () => {
     expect(wrapper.text()).not.toContain("下载本地草稿 JSON");
   });
 
-  it("shows the demo banner on public workspace pages", async () => {
+  it("keeps public workspace pages free of a redundant demo banner", async () => {
     const { wrapper } = await mountShellAt("/conversations", false);
 
-    expect(wrapper.text()).toContain("具体使用请登录后继续");
+    expect(wrapper.text()).not.toContain("具体使用请登录后继续");
   });
 
   it("routes anonymous visitors to login from the header action", async () => {
