@@ -11,6 +11,11 @@ updates:
     labels:
       - "dependencies"
       - "web"
+    # vue-tsc 3.3.x requires the TypeScript 6 compiler internals.
+    # Revisit this exception when vue-tsc supports TypeScript 7.
+    ignore:
+      - dependency-name: "typescript"
+        versions: ["7.x"]
     groups:
       web-runtime:
         dependency-type: "production"
@@ -52,3 +57,8 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    # CodeQL steps share versioned state and must be upgraded together.
+    groups:
+      codeql:
+        patterns:
+          - "github/codeql-action/*"
