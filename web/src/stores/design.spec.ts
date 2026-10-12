@@ -46,4 +46,26 @@ describe("design preference", () => {
     expect(read).not.toHaveBeenCalled();
     read.mockRestore();
   });
+  it("restores the saved choice when preview parameters disappear or become invalid", () => {
+    localStorage.setItem("ink.design.v1", "paper");
+    window.history.replaceState({}, "", "/?design=structured");
+    const store = useDesignStore();
+    expect(store.selectedDesign).toBe("structured");
+    store.previewDesign(undefined);
+    expect(store.selectedDesign).toBe("paper");
+    store.previewDesign("structured");
+    store.previewDesign("unknown");
+    expect(store.selectedDesign).toBe("paper");
+  });
+  it("restores in-memory selections after previews when storage cannot be written", () => {
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const store = useDesignStore();
+    store.setDesign("paper");
+    store.previewDesign("structured");
+    store.previewDesign(null);
+    expect(store.selectedDesign).toBe("paper");
+    write.mockRestore();
+  });
 });

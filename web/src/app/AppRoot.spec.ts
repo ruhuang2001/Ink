@@ -236,6 +236,8 @@ describe("AppRoot", () => {
     expect(useDesignStore().selectedDesign).toBe("paper");
     await router.push("/prints?design=structured");
     expect(useDesignStore().selectedDesign).toBe("structured");
+    await router.push("/prints");
+    expect(useDesignStore().selectedDesign).toBe("structured");
     await router.push("/settings?design=paper&keep=1");
     expect(useDesignStore().selectedDesign).toBe("paper");
     expect(localStorage.getItem("ink.design.v1")).toBeNull();

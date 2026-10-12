@@ -9,23 +9,26 @@ function isDesign(value: unknown): value is Design {
 
 export const useDesignStore = defineStore("design", () => {
   const selectedDesign = ref<Design>("structured");
-  const query = new URLSearchParams(window.location.search).get("design");
-  if (isDesign(query)) {
-    selectedDesign.value = query;
-  } else {
+  let explicitDesign: Design | undefined;
+  function readExplicitDesign(): Design {
+    if (explicitDesign !== undefined) return explicitDesign;
+    explicitDesign = "structured";
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (isDesign(saved)) selectedDesign.value = saved;
+      if (isDesign(saved)) explicitDesign = saved;
     } catch {
       // Keep the default when browser storage is unavailable.
     }
+    return explicitDesign;
   }
 
   function previewDesign(value: unknown) {
-    if (isDesign(value)) selectedDesign.value = value;
+    selectedDesign.value = isDesign(value) ? value : readExplicitDesign();
   }
+  previewDesign(new URLSearchParams(window.location.search).get("design"));
 
   function setDesign(design: Design) {
+    explicitDesign = design;
     selectedDesign.value = design;
     try {
       window.localStorage.setItem(STORAGE_KEY, design);
