@@ -34,18 +34,7 @@ updates:
       - "dependencies"
       - "server"
 
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "03:20"
-      timezone: "Asia/Shanghai"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "docker"
-
+  # No Dockerfile or Kubernetes manifests exist; Compose-only Docker scans fail.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
