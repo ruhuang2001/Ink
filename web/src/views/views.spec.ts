@@ -237,6 +237,7 @@ describe("workspace views", () => {
     const { pinia, router } = await createWorkspaceContext("/status");
     const wrapper = mount(StatusView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -250,6 +251,7 @@ describe("workspace views", () => {
     const { pinia, router, store } = await createWorkspaceContext("/status");
     const wrapper = mount(StatusView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -284,6 +286,7 @@ describe("workspace views", () => {
     const { pinia, router, store } = await createWorkspaceContext("/conversations");
     const wrapper = mount(ConversationsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -317,6 +320,7 @@ describe("workspace views", () => {
     const { pinia, router } = await createWorkspaceContext("/conversations");
     const wrapper = mount(ConversationsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -355,6 +359,7 @@ describe("workspace views", () => {
     const { pinia, router, store } = await createWorkspaceContext("/conversations", false);
     const wrapper = mount(ConversationsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -374,6 +379,7 @@ describe("workspace views", () => {
     const { pinia, router, store } = await createWorkspaceContext("/conversations");
     const wrapper = mount(ConversationsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -399,6 +405,7 @@ describe("workspace views", () => {
     const { pinia, router, store } = await createWorkspaceContext("/conversations");
     const wrapper = mount(ConversationsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -417,6 +424,7 @@ describe("workspace views", () => {
     const { pinia, router } = await createWorkspaceContext("/login", false);
     const wrapper = mount(LoginView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -439,6 +447,7 @@ describe("workspace views", () => {
     const { pinia, router } = await createWorkspaceContext("/login", false);
     const wrapper = mount(LoginView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -454,6 +463,7 @@ describe("workspace views", () => {
     const { pinia, router } = await createWorkspaceContext("/login?notice=password-updated", false);
     const wrapper = mount(LoginView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -472,6 +482,7 @@ describe("workspace views", () => {
     const { pinia, router } = await createWorkspaceContext("/login?redirect=/settings", false);
     const wrapper = mount(LoginView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -488,6 +499,7 @@ describe("workspace views", () => {
     const { pinia, router } = await createWorkspaceContext("/settings/guide");
     const wrapper = mount(TutorialView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -505,6 +517,7 @@ describe("workspace views", () => {
     const { pinia, router, store } = await createWorkspaceContext("/prints");
     const wrapper = mount(PrintsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -523,6 +536,7 @@ describe("workspace views", () => {
     const { pinia, router, store } = await createWorkspaceContext("/prints");
     const wrapper = mount(PrintsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -543,6 +557,7 @@ describe("workspace views", () => {
     const { pinia, router } = await createWorkspaceContext("/prints");
     const wrapper = mount(PrintsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -562,6 +577,7 @@ describe("workspace views", () => {
     const { pinia, router, store } = await createWorkspaceContext("/settings");
     const wrapper = mount(SettingsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -587,6 +603,7 @@ describe("workspace views", () => {
 
     const wrapper = mount(SettingsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -615,6 +632,7 @@ describe("workspace views", () => {
     const { pinia, router } = await createWorkspaceContext("/settings");
     const wrapper = mount(SettingsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -628,6 +646,7 @@ describe("workspace views", () => {
     const { pinia, router, store } = await createWorkspaceContext("/settings");
     const wrapper = mount(SettingsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -664,6 +683,7 @@ describe("workspace views", () => {
 
     const wrapper = mount(SettingsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -700,7 +720,12 @@ describe("workspace views", () => {
     vi.mocked(printerService.fetchPrintJob)
       .mockReturnValueOnce(firstDetail)
       .mockReturnValueOnce(secondDetail);
-    const wrapper = mount(PrintsView, { global: { plugins: [pinia, router] } });
+    const wrapper = mount(PrintsView, {
+      global: {
+        stubs: { teleport: true },
+        plugins: [pinia, router],
+      },
+    });
     expect(printerService.fetchPrintJob).not.toHaveBeenCalled();
     const previewButtons = wrapper
       .findAll("button")
@@ -709,9 +734,20 @@ describe("workspace views", () => {
     expect(wrapper.find('[role="status"]').text()).toBe("正在加载…");
     await wrapper.find('[role="dialog"] button').trigger("click");
     await previewButtons[1]!.trigger("click");
+    let resolveImage!: (image: string) => void;
+    vi.mocked(printerService.renderPrintPreview).mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        resolveImage = resolve;
+      }),
+    );
     resolveSecond({ ...second, content: "second body" });
     await flushPromises();
     expect(wrapper.findComponent(PrintPreview).props("content")).toBe("second body");
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
+    expect(wrapper.find(".print-preview-content").text()).toBe("second body");
+    resolveImage("rendered-image");
+    await flushPromises();
+    expect(wrapper.findComponent(PrintPreview).props("image")).toBe("rendered-image");
     resolveFirst({ ...first, content: "old private body" });
     await flushPromises();
     expect(wrapper.findComponent(PrintPreview).props("content")).toBe("second body");

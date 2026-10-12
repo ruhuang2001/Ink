@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
@@ -331,6 +331,7 @@ describe("plugin ui flows", () => {
 
     const wrapper = mount(SettingsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -407,6 +408,7 @@ describe("plugin ui flows", () => {
 
     const wrapper = mount(SettingsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -431,6 +433,7 @@ describe("plugin ui flows", () => {
 
     const wrapper = mount(SettingsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });
@@ -443,7 +446,8 @@ describe("plugin ui flows", () => {
     }
     await secretInput.setValue(buildToken("draft"));
     await findFormByText(wrapper, "保存配置")?.trigger("submit");
-    await nextTick();
+    await flushPromises();
+    await openPluginConfigDialog(wrapper, "Demo Source");
 
     expect(findInputByPlaceholder(wrapper, buildExampleUrl("feed"))).toBeUndefined();
     expect(findInputByPlaceholder(wrapper, buildExampleUrl("api"))).toBeDefined();
@@ -475,6 +479,7 @@ describe("plugin ui flows", () => {
 
     const wrapper = mount(PrintsView, {
       global: {
+        stubs: { teleport: true },
         plugins: [pinia, router],
       },
     });

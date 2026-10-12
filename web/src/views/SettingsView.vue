@@ -5,6 +5,7 @@ import { useRouter } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
 import { DEFAULT_LOGIN_REDIRECT } from "@/router/authRedirect";
+import { useDesignStore } from "@/stores/design";
 import { storeToRefs } from "@/stores/pinia";
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { PluginDetails, PluginFieldSpec } from "@/types/plugins";
@@ -19,7 +20,14 @@ import {
   getUserRoleLabel,
 } from "@/utils/workspace";
 
+const designStore = useDesignStore();
 const router = useRouter();
+function selectDesign(design: "paper" | "structured") {
+  designStore.setDesign(design);
+  const { design: _preview, ...query } = router.currentRoute.value.query;
+  if (_preview !== undefined) void router.replace({ query });
+}
+
 const workspaceStore = useWorkspaceStore();
 const { adminPlugins, aiConfigSummary, availablePlugins } = storeToRefs(workspaceStore);
 const { t } = useI18n();
@@ -880,7 +888,20 @@ void closeAccountCreationDialog;
           </h3>
         </div>
         <div class="min-w-0">
-          <div class="ui-settings-choice-grid">
+          <div class="mb-4 grid grid-cols-2 gap-2" role="group" :aria-label="t('design.label')">
+            <button
+              v-for="design in ['paper', 'structured'] as const"
+              :key="design"
+              type="button"
+              class="ui-btn-secondary"
+              :aria-pressed="designStore.selectedDesign === design"
+              :class="{ 'ring-2 ring-stone-400': designStore.selectedDesign === design }"
+              @click="selectDesign(design)"
+            >
+              {{ t(`design.${design}`) }}
+            </button>
+          </div>
+          <div v-if="designStore.selectedDesign === 'paper'" class="ui-settings-choice-grid">
             <button
               v-for="theme in themes"
               :key="theme.value"

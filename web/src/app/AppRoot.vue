@@ -1,18 +1,25 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
 import { useRoute } from "vue-router";
 
 import { translate } from "@/i18n";
 import { retryRouteLoad, routeLoadFailure } from "@/router/chunkRecovery";
+import { useDesignStore } from "@/stores/design";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { resolveThemeMode } from "@/utils/workspace";
 
 const route = useRoute();
 const workspaceStore = useWorkspaceStore();
+const designStore = useDesignStore();
 const themeColors = {
   light: "#f3f3f0",
   dark: "#14110f",
 } as const;
+watch(
+  () => route.query.design,
+  (value) => designStore.previewDesign(value),
+  { immediate: true },
+);
 const prefersDark = ref(false);
 let colorSchemeMediaQuery: MediaQueryList | null = null;
 
@@ -63,7 +70,10 @@ watchEffect(() => {
 
   document.documentElement.lang = workspaceStore.effectiveLocale;
 
-  const resolvedTheme = resolveThemeMode(workspaceStore.selectedTheme, prefersDark.value);
+  const resolvedTheme =
+    designStore.selectedDesign === "structured"
+      ? "light"
+      : resolveThemeMode(workspaceStore.selectedTheme, prefersDark.value);
   const root = document.documentElement;
 
   root.dataset.theme = workspaceStore.selectedTheme;
@@ -74,7 +84,10 @@ watchEffect(() => {
     : translate("app.name");
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", themeColors[resolvedTheme] ?? themeColors.light);
+    ?.setAttribute(
+      "content",
+      designStore.selectedDesign === "structured" ? "#f2f0ea" : themeColors[resolvedTheme],
+    );
 });
 </script>
 

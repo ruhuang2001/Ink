@@ -39,6 +39,7 @@ async function mountShellAt(path: string, authenticated = true) {
 
   const wrapper = mount(AppShell, {
     global: {
+      stubs: { teleport: true },
       plugins: [pinia, router],
     },
   });

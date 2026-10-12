@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { RouterLink } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
+import InkIcon from "@/components/InkIcon.vue";
 import PrintPreview from "@/components/PrintPreview.vue";
 import { renderPrintPreview } from "@/services/printers";
 import { useWorkspaceStore } from "@/stores/workspace";
@@ -131,7 +132,7 @@ async function openPreview(item: { id?: string; title: string; content?: string 
   const requestVersion = ++previewRequestVersion;
   previewJob.value = { title: item.title, content: item.content ?? "" };
   previewError.value = "";
-  previewLoading.value = !!item.id && workspaceStore.isAuthenticated;
+  previewLoading.value = workspaceStore.isAuthenticated;
   try {
     const detail = item.id ? await workspaceStore.loadPrintJobDetail(item.id) : item;
     if (requestVersion !== previewRequestVersion || !detail) return;
@@ -293,7 +294,7 @@ async function submitScheduleDialog() {
 <template>
   <section class="print-page mx-auto max-w-6xl space-y-8 pt-2 sm:space-y-10">
     <header
-      class="ink-rule flex flex-col gap-5 border-b pb-6 sm:flex-row sm:items-end sm:justify-between sm:pb-7"
+      class="ink-print-hero ink-rule flex flex-col gap-5 border-b pb-6 sm:flex-row sm:items-end sm:justify-between sm:pb-7"
     >
       <div>
         <h1 class="text-3xl font-semibold tracking-tight text-stone-950 sm:text-[2.7rem]">
@@ -306,7 +307,7 @@ async function submitScheduleDialog() {
       </div>
       <div class="flex flex-wrap items-center gap-2 sm:justify-end">
         <button class="ui-btn-primary flex-1 px-4 sm:flex-none" @click="openPrintDialog">
-          {{ t("prints.actions.newPrint") }}
+          <InkIcon name="plus" />{{ t("prints.actions.newPrint") }}
         </button>
         <RouterLink
           to="/settings/guide"
@@ -330,7 +331,7 @@ async function submitScheduleDialog() {
 
         <div
           v-if="workspaceStore.pendingPrintJobs.length === 0"
-          class="border-y border-stone-200 px-6 py-10 text-center"
+          class="ink-print-empty border-y border-stone-200 px-6 py-10 text-center"
         >
           <h4 class="text-base font-semibold text-stone-900">
             {{ t("prints.pending.emptyTitle") }}
@@ -446,7 +447,7 @@ async function submitScheduleDialog() {
 
         <div
           v-if="workspaceStore.activeSchedules.length === 0"
-          class="border-y border-stone-200 px-6 py-10 text-center"
+          class="ink-print-empty border-y border-stone-200 px-6 py-10 text-center"
         >
           <h4 class="text-base font-semibold text-stone-900">
             {{ t("prints.schedules.emptyTitle") }}
@@ -942,9 +943,10 @@ async function submitScheduleDialog() {
       v-if="previewJob"
       :open="true"
       :title="t('prints.preview.title')"
+      size="wide"
       @close="closePreview"
     >
-      <p class="mb-4 text-sm text-stone-500">{{ t("prints.preview.hint") }}</p>
+      <p class="px-6 pt-14 text-sm text-stone-500">{{ t("prints.preview.hint") }}</p>
       <p v-if="previewLoading" role="status" class="py-8 text-center text-sm text-stone-500">
         {{ t("prints.loading") }}
       </p>
