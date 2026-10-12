@@ -37,3 +37,20 @@ it("places nested dialogs outside the animated page and closes only the top dial
   preview.unmount();
   editor.unmount();
 });
+
+it("teleports to body without a shell and restores focus after closing", async () => {
+  const host = document.createElement("div");
+  host.style.transform = "translateY(0)";
+  const trigger = document.createElement("button");
+  host.append(trigger);
+  document.body.append(host);
+  trigger.focus();
+  const wrapper = mount(AppDialog, { attachTo: host, props: { open: true, title: "Fallback" } });
+  await nextTick();
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.body.querySelector('[aria-label="Fallback"]')).not.toBeNull();
+  await wrapper.setProps({ open: false });
+  expect(document.activeElement).toBe(trigger);
+  wrapper.unmount();
+  host.remove();
+});

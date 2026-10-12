@@ -122,7 +122,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Teleport :to="portalTarget ?? 'body'" :disabled="!portalTarget">
+  <Teleport :to="portalTarget ?? 'body'">
     <Transition name="dialog-fade">
       <div
         v-if="open"
@@ -178,7 +178,7 @@ onBeforeUnmount(() => {
 .preview-dialog {
   position: relative;
   padding: 0;
-  overflow: hidden;
+  overflow-y: auto;
   border-radius: 20px;
   background: var(--app-surface-soft);
 }

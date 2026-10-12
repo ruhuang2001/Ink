@@ -22,6 +22,12 @@ import {
 
 const designStore = useDesignStore();
 const router = useRouter();
+function selectDesign(design: "paper" | "structured") {
+  designStore.setDesign(design);
+  const { design: _preview, ...query } = router.currentRoute.value.query;
+  if (_preview !== undefined) void router.replace({ query });
+}
+
 const workspaceStore = useWorkspaceStore();
 const { adminPlugins, aiConfigSummary, availablePlugins } = storeToRefs(workspaceStore);
 const { t } = useI18n();
@@ -890,12 +896,12 @@ void closeAccountCreationDialog;
               class="ui-btn-secondary"
               :aria-pressed="designStore.selectedDesign === design"
               :class="{ 'ring-2 ring-stone-400': designStore.selectedDesign === design }"
-              @click="designStore.setDesign(design)"
+              @click="selectDesign(design)"
             >
               {{ t(`design.${design}`) }}
             </button>
           </div>
-          <div class="ui-settings-choice-grid">
+          <div v-if="designStore.selectedDesign === 'paper'" class="ui-settings-choice-grid">
             <button
               v-for="theme in themes"
               :key="theme.value"

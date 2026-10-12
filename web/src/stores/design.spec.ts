@@ -8,12 +8,12 @@ describe("design preference", () => {
     window.history.replaceState({}, "", "/");
     setActivePinia(createPinia());
   });
-  it("defaults to the original design and persists the second design", () => {
+  it("defaults to structured and persists an explicit original design", () => {
     const store = useDesignStore();
-    expect(store.selectedDesign).toBe("paper");
-    store.setDesign("structured");
+    expect(store.selectedDesign).toBe("structured");
+    store.setDesign("paper");
     setActivePinia(createPinia());
-    expect(useDesignStore().selectedDesign).toBe("structured");
+    expect(useDesignStore().selectedDesign).toBe("paper");
   });
   it("allows previewing a design without overwriting the saved preference", () => {
     window.history.replaceState({}, "", "/?design=structured");
@@ -21,7 +21,6 @@ describe("design preference", () => {
     expect(store.selectedDesign).toBe("structured");
     expect(localStorage.getItem("ink.design.v1")).toBeNull();
     store.setDesign("paper");
-    expect(window.location.search).toBe("");
     expect(localStorage.getItem("ink.design.v1")).toBe("paper");
   });
   it("ignores an invalid preview value and retains the saved preference", () => {
@@ -37,5 +36,14 @@ describe("design preference", () => {
     store.setDesign("structured");
     expect(store.selectedDesign).toBe("structured");
     write.mockRestore();
+  });
+  it("previews the original design without accessing blocked storage", () => {
+    window.history.replaceState({}, "", "/?design=paper");
+    const read = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(useDesignStore().selectedDesign).toBe("paper");
+    expect(read).not.toHaveBeenCalled();
+    read.mockRestore();
   });
 });

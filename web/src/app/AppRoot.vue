@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
 import { useRoute } from "vue-router";
 
 import { translate } from "@/i18n";
@@ -15,7 +15,11 @@ const themeColors = {
   light: "#f3f3f0",
   dark: "#14110f",
 } as const;
-const structuredThemeColors = { light: "#f2f0ea", dark: "#211a30" } as const;
+watch(
+  () => route.query.design,
+  (value) => designStore.previewDesign(value),
+  { immediate: true },
+);
 const prefersDark = ref(false);
 let colorSchemeMediaQuery: MediaQueryList | null = null;
 
@@ -66,7 +70,10 @@ watchEffect(() => {
 
   document.documentElement.lang = workspaceStore.effectiveLocale;
 
-  const resolvedTheme = resolveThemeMode(workspaceStore.selectedTheme, prefersDark.value);
+  const resolvedTheme =
+    designStore.selectedDesign === "structured"
+      ? "light"
+      : resolveThemeMode(workspaceStore.selectedTheme, prefersDark.value);
   const root = document.documentElement;
 
   root.dataset.theme = workspaceStore.selectedTheme;
@@ -79,9 +86,7 @@ watchEffect(() => {
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute(
       "content",
-      (designStore.selectedDesign === "structured" ? structuredThemeColors : themeColors)[
-        resolvedTheme
-      ],
+      designStore.selectedDesign === "structured" ? "#f2f0ea" : themeColors[resolvedTheme],
     );
 });
 </script>

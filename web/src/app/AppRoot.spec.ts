@@ -5,6 +5,7 @@ import { nextTick } from "vue";
 
 import AppRoot from "@/app/AppRoot.vue";
 import { createTestRouter } from "@/router";
+import { useDesignStore } from "@/stores/design";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 type MatchMediaEventHandler = (
@@ -161,7 +162,8 @@ describe("AppRoot", () => {
     expect(wrapper.find("nav.fixed").exists()).toBe(false);
   });
 
-  it("syncs the selected theme to the document and theme-color meta", async () => {
+  it("syncs the original design color mode to the document and metadata", async () => {
+    localStorage.setItem("ink.design.v1", "paper");
     let themeMeta = document.querySelector('meta[name="theme-color"]');
     if (!themeMeta) {
       themeMeta = document.createElement("meta");
@@ -180,7 +182,7 @@ describe("AppRoot", () => {
     expect(themeMeta.getAttribute("content")).toBe("#14110f");
   });
 
-  it("switches designs in settings without changing color mode and keeps the Ink logo", async () => {
+  it("keeps structured light and restores the original color preference", async () => {
     if (!document.querySelector('meta[name="theme-color"]')) {
       const meta = document.createElement("meta");
       meta.name = "theme-color";
@@ -195,9 +197,11 @@ describe("AppRoot", () => {
     await structured.trigger("click");
     expect(wrapper.find(".ink-page").attributes("data-design")).toBe("structured");
     expect(structured.attributes("aria-pressed")).toBe("true");
-    expect(document.documentElement.dataset.colorMode).toBe("dark");
+    expect(document.documentElement.dataset.colorMode).toBe("light");
+    expect(store.selectedTheme).toBe("dark");
+    expect(wrapper.findAll("button").some((button) => button.text() === "深色")).toBe(false);
     expect(document.querySelector('meta[name="theme-color"]')?.getAttribute("content")).toBe(
-      "#211a30",
+      "#f2f0ea",
     );
     expect(wrapper.find("header img").attributes("src")).toBe("/icon.png");
     await router.push("/prints");
@@ -213,6 +217,7 @@ describe("AppRoot", () => {
   });
 
   it("reacts to system color-scheme changes when the theme follows the system", async () => {
+    localStorage.setItem("ink.design.v1", "paper");
     const { store } = await mountAt("/conversations");
     store.selectedTheme = "system";
     await nextTick();
@@ -225,5 +230,21 @@ describe("AppRoot", () => {
 
     expect(document.documentElement.dataset.colorMode).toBe("dark");
     expect(document.documentElement.style.colorScheme).toBe("dark");
+  });
+  it("updates route previews without persisting and clears preview through the router on selection", async () => {
+    const { wrapper, router } = await mountAt("/settings?design=paper");
+    expect(useDesignStore().selectedDesign).toBe("paper");
+    await router.push("/prints?design=structured");
+    expect(useDesignStore().selectedDesign).toBe("structured");
+    await router.push("/settings?design=paper&keep=1");
+    expect(useDesignStore().selectedDesign).toBe("paper");
+    expect(localStorage.getItem("ink.design.v1")).toBeNull();
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "Structured Liquidity")!
+      .trigger("click");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(router.currentRoute.value.query).toEqual({ keep: "1" });
+    expect(localStorage.getItem("ink.design.v1")).toBe("structured");
   });
 });
