@@ -10,7 +10,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/ruhuang2001/memobird-go v0.0.0-20260409150855-96aef2c49999
 	golang.org/x/crypto v0.57.0
-	golang.org/x/image v0.45.0
+	golang.org/x/image v0.46.0
 )
 
 require (
