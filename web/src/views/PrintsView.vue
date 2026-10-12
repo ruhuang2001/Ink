@@ -138,6 +138,7 @@ async function openPreview(item: { id?: string; title: string; content?: string 
     if (requestVersion !== previewRequestVersion || !detail) return;
     const payload = { title: detail.title, content: detail.content ?? "" };
     previewJob.value = payload;
+    previewLoading.value = false;
     const token = workspaceStore.authSession?.accessToken;
     if (!token) return;
     try {

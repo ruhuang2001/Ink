@@ -242,6 +242,8 @@
     padding-right: 0.4rem;
     padding-left: 0.4rem;
     letter-spacing: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .ink-page[data-design="structured"] .ink-chat-panel {
     min-height: 520px;

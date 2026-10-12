@@ -95,10 +95,10 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 /* The rendered PNG already includes the printer's margins. */
 .print-preview-paper-fallback {
   min-height: 180px;
-  padding: 24px 22px 28px;
+  padding: 18px;
   font-family: var(--font-cjk);
-  font-size: 20px;
-  line-height: 1.6;
+  font-size: 22px;
+  line-height: 1.55;
   overflow-wrap: anywhere;
 }
 
@@ -106,7 +106,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
   margin: 0 0 20px;
   padding-bottom: 14px;
   border-bottom: 1px dashed #d6d3d1;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
   white-space: pre-wrap;
 }

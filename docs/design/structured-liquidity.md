@@ -19,7 +19,7 @@ Verify with `pnpm --dir web check`. Inspect desktop and narrow layouts, select c
 
 Visual design is a browser-local Pinia preference (`ink.design.v1`) shared by the shell and login page. It is stored separately from the existing synchronized light/dark/system preference and requires no API schema migration. Invalid preview values fall back to the saved design. Valid preview query changes also apply during client-side navigation without persisting. Selecting a design clears the preview query through Vue Router, even if storage is blocked. Both designs retain `/icon.png` for desktop and mobile branding. Theme-color metadata follows the selected design and color mode.
 
-Dialogs teleport to the shell so animated page sections do not constrain their fixed positioning, while inheriting the selected design, falling back to body when there is no shell. The existing print-preview changes are included: a 384px paper canvas scales down on narrow screens, keeps the original explanatory copy, and falls back to text if its image fails.
+Dialogs teleport to the shell so animated page sections do not constrain their fixed positioning, while inheriting the selected design, falling back to body when there is no shell. The existing print-preview changes are included: a 384px paper canvas scales down on narrow screens, keeps the original explanatory copy, and displays printer-sized text while its image is pending or fails. Mobile action labels wrap in both languages.
 
 ## Runtime screenshots
 
@@ -39,6 +39,7 @@ Captured against the local Vite app and development API. Desktop viewport: 1440Ã
 | Original conversations | [Original conversations](screenshots/original-conversations.png) |
 | Mobile settings | [Mobile settings](screenshots/structured-mobile-settings.png) |
 | Mobile conversations | [Mobile conversations](screenshots/structured-mobile-conversations.png) |
+| Mobile English | [Mobile English](screenshots/structured-mobile-english.png) |
 | Mobile prints | [Mobile prints](screenshots/structured-mobile-prints.png) |
 
 Runtime checks: switch both designs from Settings, retain selection after reload and navigation, retain the original logo, toggle light/dark modes and Chinese/English, open and dismiss a rendered print preview, and verify no horizontal overflow at 390px.

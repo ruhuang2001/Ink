@@ -734,9 +734,20 @@ describe("workspace views", () => {
     expect(wrapper.find('[role="status"]').text()).toBe("正在加载…");
     await wrapper.find('[role="dialog"] button').trigger("click");
     await previewButtons[1]!.trigger("click");
+    let resolveImage!: (image: string) => void;
+    vi.mocked(printerService.renderPrintPreview).mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        resolveImage = resolve;
+      }),
+    );
     resolveSecond({ ...second, content: "second body" });
     await flushPromises();
     expect(wrapper.findComponent(PrintPreview).props("content")).toBe("second body");
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
+    expect(wrapper.find(".print-preview-content").text()).toBe("second body");
+    resolveImage("rendered-image");
+    await flushPromises();
+    expect(wrapper.findComponent(PrintPreview).props("image")).toBe("rendered-image");
     resolveFirst({ ...first, content: "old private body" });
     await flushPromises();
     expect(wrapper.findComponent(PrintPreview).props("content")).toBe("second body");
