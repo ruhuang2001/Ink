@@ -683,6 +683,8 @@ const zhCN = {
       error: "无法加载打印内容，请稍后重试。",
       title: "打印预览",
       hint: "预览按咕咕机约 384px 宽、22px 字号的黑白图片效果展示，实际出纸可能因设备略有差异。",
+      canvas: "纸条预览，可滚动查看完整内容",
+      imageAlt: "打印预览：{title}",
     },
     pending: {
       title: "待处理打印",
@@ -837,6 +839,11 @@ const zhCN = {
       admin: "管理员",
       member: "成员",
     },
+  },
+  design: {
+    label: "视觉主题",
+    paper: "原版",
+    structured: "Structured Liquidity",
   },
   theme: {
     light: "浅色",

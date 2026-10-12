@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
+import InkIcon from "@/components/InkIcon.vue";
 import { navigationItems } from "@/router";
 import { DEFAULT_LOGIN_REDIRECT } from "@/router/authRedirect";
+import { useDesignStore } from "@/stores/design";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const route = useRoute();
@@ -52,21 +54,8 @@ const visibleNavigationItems = computed(() =>
     navHint: t(item.navHintKey),
   })),
 );
-const designs = ["paper", "studio", "quiet"] as const;
-const design = ref(
-  designs.includes(route.query.design as (typeof designs)[number])
-    ? (route.query.design as (typeof designs)[number])
-    : "paper",
-);
-
-watch(
-  () => route.query.design,
-  (value) => {
-    if (designs.includes(value as (typeof designs)[number])) {
-      design.value = value as (typeof designs)[number];
-    }
-  },
-);
+const designStore = useDesignStore();
+const design = computed(() => designStore.selectedDesign);
 
 function isNavigationItemActive(path: string) {
   return path === "/settings" ? route.path.startsWith("/settings") : route.path === path;
@@ -137,12 +126,12 @@ async function recoverSynchronization() {
     </AppDialog>
 
     <header
-      class="ink-rule sticky top-0 z-40 border-b bg-[color:var(--app-surface-floating)] px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur sm:px-5 lg:px-8 lg:py-3"
+      class="ink-topbar ink-rule sticky top-0 z-40 border-b bg-[color:var(--app-surface-floating)] px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur sm:px-5 lg:px-8 lg:py-3"
     >
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 lg:hidden">
         <div class="flex items-center gap-3">
           <img src="/icon.png" alt="" class="h-8 w-8 rounded-md object-contain" />
-          <p class="text-sm font-semibold text-stone-950">Ink</p>
+          <p class="ink-wordmark text-sm font-semibold text-stone-950">Ink</p>
           <div class="hidden sm:block">
             <p class="text-xs text-stone-500">
               {{
@@ -177,7 +166,7 @@ async function recoverSynchronization() {
         <div class="flex items-center gap-8">
           <div class="flex items-center gap-3">
             <img src="/icon.png" alt="" class="h-8 w-8 rounded-md object-contain" />
-            <p class="text-sm font-semibold text-stone-950">Ink</p>
+            <p class="ink-wordmark text-sm font-semibold text-stone-950">Ink</p>
           </div>
 
           <nav class="flex items-center gap-1">
@@ -185,6 +174,7 @@ async function recoverSynchronization() {
               v-for="item in visibleNavigationItems"
               :key="item.name"
               :to="item.path"
+              :aria-current="isNavigationItemActive(item.path) ? 'page' : undefined"
               class="relative px-2 py-2 text-sm font-medium transition-colors after:absolute after:inset-x-2 after:-bottom-[0.8rem] after:h-0.5 after:origin-center after:scale-x-0 after:bg-amber-600 after:transition-transform"
               :class="
                 isNavigationItemActive(item.path)
@@ -192,7 +182,12 @@ async function recoverSynchronization() {
                   : 'text-stone-500 hover:text-stone-900'
               "
             >
-              <span>{{ item.label }}</span>
+              <InkIcon
+                v-if="design === 'structured'"
+                :name="
+                  item.name === 'prints' ? 'print' : item.name === 'settings' ? 'settings' : 'chat'
+                "
+              /><span>{{ item.label }}</span>
               <span
                 v-if="item.name === 'prints' && pendingBadge"
                 class="ml-2 inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-stone-900 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-white"
@@ -311,6 +306,7 @@ async function recoverSynchronization() {
           v-for="item in visibleNavigationItems"
           :key="item.name"
           :to="item.path"
+          :aria-current="isNavigationItemActive(item.path) ? 'page' : undefined"
           class="relative flex min-h-12 flex-col items-center justify-center px-2 py-2.5 text-center transition-colors after:absolute after:top-0 after:left-1/2 after:h-0.5 after:w-8 after:-translate-x-1/2 after:scale-x-0 after:bg-amber-600 after:transition-transform"
           :class="
             isNavigationItemActive(item.path)
@@ -318,6 +314,12 @@ async function recoverSynchronization() {
               : 'text-stone-500 hover:text-stone-900'
           "
         >
+          <InkIcon
+            v-if="design === 'structured'"
+            :name="
+              item.name === 'prints' ? 'print' : item.name === 'settings' ? 'settings' : 'chat'
+            "
+          />
           <span class="block text-xs leading-tight font-medium">
             {{ item.label }}
             <span v-if="item.name === 'prints' && pendingBadge">· {{ pendingBadge }}</span>

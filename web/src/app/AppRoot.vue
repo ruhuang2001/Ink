@@ -4,15 +4,18 @@ import { useRoute } from "vue-router";
 
 import { translate } from "@/i18n";
 import { retryRouteLoad, routeLoadFailure } from "@/router/chunkRecovery";
+import { useDesignStore } from "@/stores/design";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { resolveThemeMode } from "@/utils/workspace";
 
 const route = useRoute();
 const workspaceStore = useWorkspaceStore();
+const designStore = useDesignStore();
 const themeColors = {
   light: "#f3f3f0",
   dark: "#14110f",
 } as const;
+const structuredThemeColors = { light: "#f2f0ea", dark: "#211a30" } as const;
 const prefersDark = ref(false);
 let colorSchemeMediaQuery: MediaQueryList | null = null;
 
@@ -74,7 +77,12 @@ watchEffect(() => {
     : translate("app.name");
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", themeColors[resolvedTheme] ?? themeColors.light);
+    ?.setAttribute(
+      "content",
+      (designStore.selectedDesign === "structured" ? structuredThemeColors : themeColors)[
+        resolvedTheme
+      ],
+    );
 });
 </script>
 

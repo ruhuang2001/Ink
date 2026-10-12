@@ -4,8 +4,10 @@ import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 
 import { DEFAULT_LOGIN_REDIRECT, resolveLoginRedirect } from "@/router/authRedirect";
+import { useDesignStore } from "@/stores/design";
 import { useWorkspaceStore } from "@/stores/workspace";
 
+const designStore = useDesignStore();
 const router = useRouter();
 const route = useRoute();
 const workspaceStore = useWorkspaceStore();
@@ -53,7 +55,8 @@ async function handleSubmit() {
 
 <template>
   <div
-    class="relative flex min-h-[100dvh] bg-[color:var(--app-bg)] px-5 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] text-stone-900 sm:px-8 sm:py-8"
+    :data-design="designStore.selectedDesign"
+    class="ink-page ink-login relative flex min-h-[100dvh] bg-[color:var(--app-bg)] px-5 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] text-stone-900 sm:px-8 sm:py-8"
   >
     <button
       type="button"
@@ -66,14 +69,16 @@ async function handleSubmit() {
 
     <main class="mx-auto flex w-full max-w-2xl flex-1 items-center py-20 sm:py-16">
       <div
-        class="grid w-full lg:grid-cols-[15rem_minmax(0,1fr)] lg:overflow-hidden lg:border lg:border-stone-200 lg:bg-[color:var(--app-surface-raised)] lg:shadow-[0_18px_50px_rgba(28,25,23,0.06)]"
+        class="ink-login-card grid w-full lg:grid-cols-[15rem_minmax(0,1fr)] lg:overflow-hidden lg:border lg:border-stone-200 lg:bg-[color:var(--app-surface-raised)] lg:shadow-[0_18px_50px_rgba(28,25,23,0.06)]"
       >
         <section
           class="hidden min-h-[28rem] items-center justify-center border-r border-stone-200 bg-[color:var(--app-surface-soft)] lg:flex"
         >
           <div class="text-center">
             <img src="/icon.png" alt="" class="mx-auto h-16 w-16 rounded-lg object-contain" />
-            <p class="mt-5 text-xl font-semibold tracking-tight text-stone-950">Ink</p>
+            <p class="ink-login-wordmark mt-5 text-xl font-semibold tracking-tight text-stone-950">
+              Ink
+            </p>
           </div>
         </section>
 

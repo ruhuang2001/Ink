@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { RouterLink } from "vue-router";
 
+import InkIcon from "@/components/InkIcon.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspaceStore = useWorkspaceStore();
@@ -47,8 +48,10 @@ function handleDeleteCurrentConversation() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-6xl space-y-8 pt-2 sm:space-y-10">
-    <div class="ink-rule flex items-center justify-between gap-4 border-b pb-5 sm:pb-6">
+  <section class="conversation-page mx-auto max-w-6xl space-y-8 pt-2 sm:space-y-10">
+    <div
+      class="ink-workspace-heading ink-rule flex items-center justify-between gap-4 border-b pb-5 sm:pb-6"
+    >
       <h1 class="text-3xl font-semibold tracking-tight text-stone-950 sm:text-[2.7rem]">
         {{ t("navigation.conversations.label") }}
       </h1>
@@ -76,8 +79,8 @@ function handleDeleteCurrentConversation() {
       </select>
     </label>
 
-    <div class="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-12">
-      <aside class="hidden min-w-0 space-y-4 lg:block">
+    <div class="ink-conversation-grid grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-12">
+      <aside class="ink-conversation-sidebar hidden min-w-0 space-y-4 lg:block">
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-base leading-6 font-semibold text-stone-900">
@@ -88,7 +91,7 @@ function handleDeleteCurrentConversation() {
             class="ui-btn-secondary px-3 py-1.5 text-sm"
             @click="workspaceStore.createConversation"
           >
-            {{ t("common.actions.new") }}
+            <InkIcon name="plus" />{{ t("common.actions.new") }}
           </button>
         </div>
 
@@ -134,10 +137,10 @@ function handleDeleteCurrentConversation() {
       </aside>
 
       <div
-        class="ink-paper flex min-h-[24rem] min-w-0 flex-col p-4 sm:min-h-[28rem] sm:p-6 lg:h-[calc(100dvh-17rem)] lg:min-h-[500px]"
+        class="ink-chat-panel ink-paper flex min-h-[24rem] min-w-0 flex-col p-4 sm:min-h-[28rem] sm:p-6 lg:h-[calc(100dvh-17rem)] lg:min-h-[500px]"
       >
         <div
-          class="mb-4 flex shrink-0 flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between"
+          class="ink-chat-heading mb-4 flex shrink-0 flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between"
         >
           <div>
             <h3 class="text-base leading-6 font-semibold text-stone-900">
@@ -178,11 +181,11 @@ function handleDeleteCurrentConversation() {
           </div>
         </div>
 
-        <div v-else class="space-y-4 lg:flex-1 lg:overflow-y-auto lg:pr-2">
+        <div v-else class="ink-messages space-y-4 lg:flex-1 lg:overflow-y-auto lg:pr-2">
           <article
             v-for="message in workspaceStore.activeConversation?.messages"
             :key="message.id"
-            class="space-y-2"
+            class="ink-message space-y-2"
           >
             <div
               class="flex items-center gap-3"
@@ -221,14 +224,14 @@ function handleDeleteCurrentConversation() {
           </article>
         </div>
 
-        <div class="mt-6 shrink-0 space-y-4 border-t border-stone-200 pt-4">
+        <div class="ink-chat-tools mt-6 shrink-0 space-y-4 border-t border-stone-200 pt-4">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex flex-wrap gap-2">
               <button
                 class="ui-btn-secondary whitespace-nowrap"
                 @click="workspaceStore.createPrintFromSelectedMessages"
               >
-                {{ t("conversations.actions.printSelected") }}
+                <InkIcon name="print" />{{ t("conversations.actions.printSelected") }}
               </button>
               <button
                 class="ui-btn-secondary whitespace-nowrap"
@@ -242,7 +245,7 @@ function handleDeleteCurrentConversation() {
                 class="ui-btn-secondary whitespace-nowrap"
                 @click="workspaceStore.saveCurrentDraft"
               >
-                {{ t("conversations.actions.saveDraft") }}
+                <InkIcon name="save" />{{ t("conversations.actions.saveDraft") }}
               </button>
               <RouterLink to="/prints" class="ui-btn-secondary whitespace-nowrap">
                 {{ t("conversations.actions.viewPrintQueue") }}
@@ -298,6 +301,7 @@ function handleDeleteCurrentConversation() {
                   :disabled="workspaceStore.isGenerating"
                   @click="workspaceStore.sendCurrentDraft"
                 >
+                  <InkIcon name="arrow" />
                   {{
                     workspaceStore.isGenerating
                       ? t("conversations.sending")

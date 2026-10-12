@@ -699,6 +699,8 @@ const enUS = {
       error: "Unable to load print content. Please try again.",
       title: "Print preview",
       hint: "This preview approximates the Memobird's 384px-wide black-and-white image output at 22px text size. The physical print may vary slightly by device.",
+      canvas: "Paper preview. Scroll to see all content.",
+      imageAlt: "Print preview: {title}",
     },
     pending: {
       title: "Pending prints",
@@ -857,6 +859,11 @@ const enUS = {
       admin: "Admin",
       member: "Member",
     },
+  },
+  design: {
+    label: "Visual theme",
+    paper: "Original",
+    structured: "Structured Liquidity",
   },
   theme: {
     light: "Light",

@@ -180,6 +180,38 @@ describe("AppRoot", () => {
     expect(themeMeta.getAttribute("content")).toBe("#14110f");
   });
 
+  it("switches designs in settings without changing color mode and keeps the Ink logo", async () => {
+    if (!document.querySelector('meta[name="theme-color"]')) {
+      const meta = document.createElement("meta");
+      meta.name = "theme-color";
+      document.head.appendChild(meta);
+    }
+    const { wrapper, router, store } = await mountAt("/settings");
+    store.selectedTheme = "dark";
+    await nextTick();
+    const structured = wrapper
+      .findAll("button")
+      .find((button) => button.text() === "Structured Liquidity")!;
+    await structured.trigger("click");
+    expect(wrapper.find(".ink-page").attributes("data-design")).toBe("structured");
+    expect(structured.attributes("aria-pressed")).toBe("true");
+    expect(document.documentElement.dataset.colorMode).toBe("dark");
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute("content")).toBe(
+      "#211a30",
+    );
+    expect(wrapper.find("header img").attributes("src")).toBe("/icon.png");
+    await router.push("/prints");
+    expect(wrapper.find(".ink-page").attributes("data-design")).toBe("structured");
+    await router.push("/settings");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "原版")!
+      .trigger("click");
+    expect(wrapper.find(".ink-page").attributes("data-design")).toBe("paper");
+    expect(document.documentElement.dataset.colorMode).toBe("dark");
+    wrapper.unmount();
+  });
+
   it("reacts to system color-scheme changes when the theme follows the system", async () => {
     const { store } = await mountAt("/conversations");
     store.selectedTheme = "system";

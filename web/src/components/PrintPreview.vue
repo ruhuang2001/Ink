@@ -1,64 +1,120 @@
 <script setup lang="ts">
-defineProps<{
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+
+const props = defineProps<{
   title: string;
   content: string;
   image?: string;
 }>();
+
+const { t } = useI18n();
+const stage = ref<HTMLElement | null>(null);
+const availableWidth = ref(384);
+const imageFailed = ref(false);
+const hasImage = computed(() => !!props.image && !imageFailed.value);
+const scale = computed(() => Math.min(1, availableWidth.value / 384));
+let resizeObserver: ResizeObserver | undefined;
+
+watch(
+  () => props.image,
+  () => {
+    imageFailed.value = false;
+  },
+);
+
+onMounted(() => {
+  if (!stage.value) return;
+  const updateWidth = () => {
+    availableWidth.value = Math.max(1, stage.value!.clientWidth - 48);
+  };
+  updateWidth();
+  if (typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(stage.value);
+  }
+});
+
+onBeforeUnmount(() => resizeObserver?.disconnect());
 </script>
 
 <template>
-  <div class="print-preview-shell">
-    <div class="print-preview-paper" role="img" :aria-label="`打印预览：${title}`">
-      <img
-        v-if="image"
-        class="print-preview-image"
-        :src="`data:image/png;base64,${image}`"
-        :alt="`打印预览：${title}`"
-      />
-      <template v-else>
-        <h4 class="print-preview-title">{{ title }}</h4>
-        <div class="print-preview-content">{{ content }}</div>
-      </template>
+  <div
+    ref="stage"
+    class="print-preview"
+    tabindex="0"
+    role="region"
+    :aria-label="t('prints.preview.canvas')"
+  >
+    <div class="print-preview-sheet" :style="{ zoom: scale }">
+      <div class="print-preview-paper" :class="{ 'print-preview-paper-fallback': !hasImage }">
+        <img
+          v-if="hasImage"
+          class="print-preview-image"
+          :src="`data:image/png;base64,${image}`"
+          :alt="t('prints.preview.imageAlt', { title })"
+          @error="imageFailed = true"
+        />
+        <div v-else role="img" :aria-label="t('prints.preview.imageAlt', { title })">
+          <h4 class="print-preview-title">{{ title }}</h4>
+          <div class="print-preview-content">{{ content }}</div>
+        </div>
+      </div>
       <div class="print-preview-tear" aria-hidden="true" />
     </div>
   </div>
 </template>
 
 <style scoped>
-.print-preview-shell {
-  display: flex;
-  justify-content: center;
-  padding: 1rem;
-  border-radius: 1rem;
-  background: #e7e5e4;
+.print-preview {
+  max-height: min(70dvh, 680px);
+  overflow: auto;
+  padding: 28px 24px 36px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border-strong) transparent;
+}
+
+.print-preview:focus-visible {
+  outline: 2px solid var(--app-ring);
+  outline-offset: -2px;
+}
+
+.print-preview-sheet {
+  width: 384px;
+  margin-inline: auto;
+  filter: drop-shadow(0 2px 3px rgb(28 25 23 / 8%)) drop-shadow(0 18px 32px rgb(28 25 23 / 14%));
 }
 
 .print-preview-paper {
-  width: 384px;
-  max-width: 100%;
-  min-height: 180px;
-  padding: 18px;
   color: #1c1917;
   background: #fff;
-  box-shadow: 0 8px 24px rgb(28 25 23 / 12%);
+  color-scheme: light;
+}
+
+/* The rendered PNG already includes the printer's margins. */
+.print-preview-paper-fallback {
+  min-height: 180px;
+  padding: 24px 22px 28px;
   font-family: var(--font-cjk);
-  font-size: 22px;
-  line-height: 1.55;
-  white-space: pre-wrap;
+  font-size: 20px;
+  line-height: 1.6;
   overflow-wrap: anywhere;
 }
 
 .print-preview-title {
-  margin: 0 0 1.25rem;
-  font-size: 22px;
+  margin: 0 0 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed #d6d3d1;
+  font-size: 20px;
   font-weight: 600;
+  white-space: pre-wrap;
 }
 
 .print-preview-image {
   display: block;
-  width: 100%;
+  width: 384px;
   height: auto;
-  image-rendering: auto;
 }
 
 .print-preview-content {
@@ -66,8 +122,8 @@ defineProps<{
 }
 
 .print-preview-tear {
-  height: 8px;
-  margin: 1.25rem -18px -18px;
-  background: repeating-linear-gradient(135deg, transparent 0 8px, #e7e5e4 8px 12px);
+  height: 6px;
+  background: #fff;
+  mask: conic-gradient(from -45deg at 50% 100%, #000 90deg, transparent 0) 0 0 / 10px 6px;
 }
 </style>
