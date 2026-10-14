@@ -294,13 +294,13 @@ async function submitScheduleDialog() {
 <template>
   <section class="print-page mx-auto max-w-6xl space-y-8 pt-2 sm:space-y-10">
     <header
-      class="ink-print-hero ink-rule flex flex-col gap-5 border-b pb-6 sm:flex-row sm:items-end sm:justify-between sm:pb-7"
+      class="ink-rule flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center sm:justify-between"
     >
       <div>
-        <h1 class="text-3xl font-semibold tracking-tight text-stone-950 sm:text-[2.7rem]">
+        <h1 class="sr-only">
           {{ t("navigation.prints.label") }}
         </h1>
-        <p class="mt-2 text-sm text-stone-500">
+        <p class="text-sm text-stone-500">
           {{ t("prints.defaultSettings.defaultDevice") }} ·
           {{ workspaceStore.activeDeviceLabel || t("prints.defaultSettings.notSet") }}
         </p>
@@ -336,7 +336,7 @@ async function submitScheduleDialog() {
           <h4 class="text-base font-semibold text-stone-900">
             {{ t("prints.pending.emptyTitle") }}
           </h4>
-          <p class="mt-2 text-sm text-stone-500">
+          <p class="text-sm text-stone-500">
             {{
               workspaceStore.isAuthenticated
                 ? t("prints.pending.emptyAuthenticated")

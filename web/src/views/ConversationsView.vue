@@ -49,26 +49,21 @@ function handleDeleteCurrentConversation() {
 
 <template>
   <section class="conversation-page mx-auto max-w-6xl space-y-8 pt-2 sm:space-y-10">
-    <div
-      class="ink-workspace-heading ink-rule flex items-center justify-between gap-4 border-b pb-5 sm:pb-6"
-    >
-      <h1 class="text-3xl font-semibold tracking-tight text-stone-950 sm:text-[2.7rem]">
-        {{ t("navigation.conversations.label") }}
-      </h1>
-      <button
-        type="button"
-        class="ui-btn-secondary shrink-0 lg:hidden"
-        @click="workspaceStore.createConversation"
-      >
-        {{ t("common.actions.new") }}
-      </button>
-    </div>
-
-    <label class="block lg:hidden">
-      <span class="mb-2 block text-sm font-medium text-stone-600">
-        {{ t("conversations.recent") }}
-      </span>
+    <div class="space-y-3 lg:hidden">
+      <div class="flex items-center justify-between gap-4">
+        <label for="recent-conversation" class="text-sm font-medium text-stone-600">
+          {{ t("conversations.recent") }}
+        </label>
+        <button
+          type="button"
+          class="ui-btn-secondary shrink-0"
+          @click="workspaceStore.createConversation"
+        >
+          <InkIcon name="plus" />{{ t("common.actions.new") }}
+        </button>
+      </div>
       <select
+        id="recent-conversation"
         :value="workspaceStore.activeConversationId"
         class="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-stone-900"
         @change="handleConversationChange"
@@ -77,15 +72,16 @@ function handleDeleteCurrentConversation() {
           {{ chat.title }} · {{ workspaceStore.formatPrintTime(chat.updatedAt) }}
         </option>
       </select>
-    </label>
+    </div>
 
     <div class="ink-conversation-grid grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-12">
+      <h1 class="sr-only">{{ t("navigation.conversations.label") }}</h1>
       <aside class="ink-conversation-sidebar hidden min-w-0 space-y-4 lg:block">
         <div class="flex items-center justify-between">
           <div>
-            <h3 class="text-base leading-6 font-semibold text-stone-900">
+            <h2 class="text-base leading-6 font-semibold text-stone-900">
               {{ t("conversations.recent") }}
-            </h3>
+            </h2>
           </div>
           <button
             class="ui-btn-secondary px-3 py-1.5 text-sm"
@@ -97,7 +93,7 @@ function handleDeleteCurrentConversation() {
 
         <div
           v-if="workspaceStore.conversations.length"
-          class="ui-list-card max-h-[calc(100dvh-19rem)] overflow-y-auto"
+          class="ui-list-card max-h-[calc(100dvh-13rem)] overflow-y-auto"
         >
           <button
             v-for="chat in workspaceStore.conversations"
@@ -122,14 +118,14 @@ function handleDeleteCurrentConversation() {
                 class="text-xs"
                 :class="
                   workspaceStore.activeConversationId === chat.id
-                    ? 'text-stone-500'
-                    : 'text-stone-400'
+                    ? 'text-stone-600'
+                    : 'text-stone-600'
                 "
               >
                 {{ workspaceStore.formatPrintTime(chat.updatedAt) }}
               </span>
             </div>
-            <p class="mt-1 line-clamp-2 text-sm text-stone-500">
+            <p class="mt-1 line-clamp-2 text-sm text-stone-600">
               {{ chat.preview }}
             </p>
           </button>
@@ -137,18 +133,18 @@ function handleDeleteCurrentConversation() {
       </aside>
 
       <div
-        class="ink-chat-panel ink-paper flex min-h-[24rem] min-w-0 flex-col p-4 sm:min-h-[28rem] sm:p-6 lg:h-[calc(100dvh-17rem)] lg:min-h-[500px]"
+        class="ink-chat-panel ink-paper flex min-h-[24rem] min-w-0 flex-col p-4 sm:min-h-[28rem] sm:p-6 lg:h-[calc(100dvh-11rem)] lg:min-h-[500px]"
       >
         <div
           class="ink-chat-heading mb-4 flex shrink-0 flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between"
         >
           <div>
-            <h3 class="text-base leading-6 font-semibold text-stone-900">
+            <h2 class="text-base leading-6 font-semibold text-stone-900">
               {{
                 workspaceStore.activeConversation?.title ?? t("conversations.currentConversation")
               }}
-            </h3>
-            <p class="mt-1 text-sm text-stone-500">
+            </h2>
+            <p class="mt-1 text-sm text-stone-600">
               {{
                 t("conversations.defaultDevice", {
                   value: workspaceStore.activeDeviceLabel || t("common.labels.notSet"),
@@ -172,10 +168,10 @@ function handleDeleteCurrentConversation() {
           class="flex flex-1 items-center justify-center border-y border-stone-200 px-6 text-center"
         >
           <div class="space-y-2">
-            <h4 class="text-base font-semibold text-stone-900">
+            <h3 class="text-base font-semibold text-stone-900">
               {{ t("conversations.emptyState.title") }}
-            </h4>
-            <p class="text-sm leading-6 text-stone-500">
+            </h3>
+            <p class="text-sm leading-6 text-stone-600">
               {{ emptyStateHint }}
             </p>
           </div>
@@ -218,7 +214,7 @@ function handleDeleteCurrentConversation() {
 
           <article
             v-if="workspaceStore.isGenerating"
-            class="max-w-[85%] rounded-xl rounded-bl-sm border border-stone-200 bg-white px-5 py-3.5 text-[15px] leading-relaxed text-stone-500"
+            class="max-w-[85%] rounded-xl rounded-bl-sm border border-stone-200 bg-white px-5 py-3.5 text-[15px] leading-relaxed text-stone-600"
           >
             {{ t("conversations.generating") }}
           </article>
@@ -265,13 +261,13 @@ function handleDeleteCurrentConversation() {
               :value="workspaceStore.activeConversation?.draft ?? ''"
               rows="4"
               :placeholder="t('conversations.draftPlaceholder')"
-              class="w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-relaxed text-stone-900 placeholder:text-stone-400 focus:ring-0 focus:outline-none"
+              class="w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-relaxed text-stone-900 placeholder:text-stone-600 focus:ring-0 focus:outline-none"
               @input="handleDraftInput"
             />
             <div
               class="flex flex-col gap-3 rounded-b-md border-t border-stone-200 bg-stone-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div class="flex flex-wrap items-center gap-2 text-xs text-stone-500">
+              <div class="flex flex-wrap items-center gap-2 text-xs text-stone-600">
                 <span>
                   {{
                     t("conversations.selectedCount", {
@@ -282,7 +278,7 @@ function handleDeleteCurrentConversation() {
               </div>
               <div class="flex gap-2">
                 <button
-                  class="rounded-md p-1.5 text-stone-500 transition-colors hover:bg-stone-200/50 hover:text-stone-900"
+                  class="rounded-md p-1.5 text-stone-600 transition-colors hover:bg-stone-200/50 hover:text-stone-900"
                   :title="t('conversations.actions.regenerate')"
                   :disabled="workspaceStore.isGenerating"
                   @click="workspaceStore.regenerateLatestReply"
