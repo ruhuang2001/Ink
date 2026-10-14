@@ -695,6 +695,95 @@ describe("workspace store", () => {
     },
   );
 
+  it("persists an account print latch across relogin and requires a fresh acknowledgement for new outcomes", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic");
+    await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+    vi.mocked(printerService.createPrintJob).mockRejectedValueOnce(
+      new AuthApiError(0, "network_error", "unknown"),
+    );
+    await store.createManualPrint({ title: "unknown", content: "body" });
+    await store.logout();
+    await store.login("a@example.invalid", "synthetic");
+    expect(store.printSubmissionUnknown).toBe(true);
+    const reloaded = useWorkspaceStore(createPinia());
+    await reloaded.login("a@example.invalid", "synthetic");
+    expect(reloaded.printSubmissionUnknown).toBe(true);
+    expect(reloaded.acknowledgePrintOutcome()).toBe(true);
+    await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+    vi.mocked(printerService.createPrintJob).mockRejectedValueOnce(
+      new AuthApiError(0, "network_error", "new unknown"),
+    );
+    await store.createManualPrint({ title: "new unknown", content: "body" });
+    expect(store.printSubmissionUnknown).toBe(true);
+    expect(reloaded.acknowledgePrintOutcome()).toBe(false);
+    expect(reloaded.printSubmissionUnknown).toBe(true);
+    const calls = vi.mocked(printerService.createPrintJob).mock.calls.length;
+    await reloaded.createManualPrint({ title: "blind retry", content: "body" });
+    expect(printerService.createPrintJob).toHaveBeenCalledTimes(calls);
+    await store.logout();
+    vi.mocked(authService.loginWithApi).mockResolvedValueOnce({
+      user: { id: "user-b", email: "b@example.invalid", name: "B", role: "member" },
+      session: {
+        accessToken: "b",
+        refreshToken: "b-refresh",
+        accessTokenExpiresAt: new Date(Date.now() + 900000).toISOString(),
+      },
+    });
+    await store.login("b@example.invalid", "synthetic");
+    expect(store.printSubmissionUnknown).toBe(false);
+    store.$dispose();
+    reloaded.$dispose();
+  });
+
+  it("keeps the current live default when a recovered draft points at a removed device", async () => {
+    const state = await fetchWorkspaceStateWithApi("synthetic");
+    localStorage.setItem(
+      "ink.workspace.draft.v1.user-1.old-tab",
+      JSON.stringify({
+        ...state,
+        preferences: { ...state.preferences, defaultDeviceId: "removed" },
+      }),
+    );
+    vi.mocked(fetchWorkspaceStateWithApi).mockResolvedValueOnce({
+      ...state,
+      preferences: { ...state.preferences, defaultDeviceId: "live" },
+    });
+    vi.mocked(printerService.fetchPrinters).mockResolvedValueOnce({
+      devices: [{ id: "live", name: "Live device", note: "", status: "connected" }],
+    });
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic");
+    expect(store.restoreRecoveredWorkspaceDraft()).toBe(true);
+    expect(store.defaultDeviceId).toBe("live");
+    expect(store.devices.map((device) => device.id)).toEqual(["live"]);
+    store.$dispose();
+  });
+
+  it("retains an in-session unknown print latch when browser storage is unavailable", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic");
+    await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+    const setItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key.startsWith("ink.print.outcome.v1."))
+        throw new DOMException("full", "QuotaExceededError");
+      return setItem.call(this, key, value);
+    });
+    vi.mocked(printerService.createPrintJob).mockRejectedValueOnce(
+      new AuthApiError(0, "network_error", "unknown"),
+    );
+    await store.createManualPrint({ title: "unknown", content: "body" });
+    expect(store.printOutcomeStorageError).toBe(translate("store.errors.printOutcomeStorage"));
+    await store.createManualPrint({ title: "blind retry", content: "body" });
+    expect(printerService.createPrintJob).toHaveBeenCalledOnce();
+    expect(store.printOutcomeStorageError).toBe(translate("store.errors.printOutcomeStorage"));
+    await store.logout();
+    await store.login("a@example.invalid", "synthetic");
+    expect(store.printSubmissionUnknown).toBe(true);
+    store.$dispose();
+  });
+
   it("exposes stable defaults and derived summaries", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 3, 7, 12, 0, 0));

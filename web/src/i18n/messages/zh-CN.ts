@@ -158,6 +158,8 @@ const zhCN = {
     },
     errors: {
       syncPrintStatus: "加载打印状态失败，请稍后重试。",
+      printOutcomeStorage:
+        "浏览器无法保存打印核对提示。请核对设备后明确确认；刷新或清理站点数据可能丢失提示。",
       localDraftStorage: "浏览器无法保留未同步草稿。请下载草稿后再离开。",
       syncWorkspace: "保存数据失败，请稍后重试。",
       loadAccountData: "加载账号数据失败，请稍后重试。",

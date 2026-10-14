@@ -160,6 +160,8 @@ const enUS = {
     },
     errors: {
       syncPrintStatus: "Unable to load print status. Please try again later.",
+      printOutcomeStorage:
+        "This browser cannot save the print check reminder. Check the device and explicitly acknowledge it; reloading or clearing site data may lose the reminder.",
       localDraftStorage:
         "This browser could not preserve your unsynced draft. Download it before leaving.",
       syncWorkspace: "Unable to save data. Please try again later.",

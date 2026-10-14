@@ -68,6 +68,7 @@ import {
 const STORAGE_KEY = "ink.workspace.v1";
 const AUTH_SESSION_STORAGE_KEY = "ink.auth.session.v1";
 const ACCOUNT_DRAFT_STORAGE_PREFIX = "ink.workspace.draft.v1.";
+const PRINT_OUTCOME_STORAGE_PREFIX = "ink.print.outcome.v1.";
 const REMOTE_SAVE_DEBOUNCE_MS = 750;
 const REMOTE_PRINT_STATUS_POLL_MS = 5000;
 const REMOTE_PRINT_STATUS_INITIAL_POLL_MS = 1500;
@@ -453,6 +454,7 @@ function buildAIReplyMessages(messages: ConversationMessage[]) {
 }
 
 export const useWorkspaceStore = defineStore("workspace", () => {
+  const pendingPrintOutcomes = new Map<string, string>();
   const persisted = readPersistedWorkspaceState();
   const persistedAuthSession = readPersistedAuthSession();
 
@@ -521,6 +523,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const selectedConversationMessageIds = ref<string[]>([]);
   const isCreatingPrint = ref(false);
   const printSubmissionUnknown = ref(false);
+  const printOutcomeStorageError = ref("");
   const flashMessage = ref("");
   const flashTone = ref<"success" | "error" | "info">("info");
   const postLoginTutorialOpen = ref(false);
@@ -536,6 +539,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   let remotePrintStatusPromise: Promise<void> | null = null;
   let remotePrintStatusBackoffMs = REMOTE_PRINT_STATUS_POLL_MS;
   let disposed = false;
+  let displayedPrintOutcomeMarker: string | null = null;
   const anonymousPrintCompletionTimers = new Set<number>();
   let remotePrintAccountVersion = 0;
   let remotePrintPageVersion = 0;
@@ -771,6 +775,83 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     return `${accountDraftPrefix(userId)}${draftTabId}`;
   }
 
+  function loadPrintOutcome() {
+    const userId = authUser.value?.id;
+    printSubmissionUnknown.value = false;
+    printOutcomeStorageError.value = "";
+    displayedPrintOutcomeMarker = null;
+    if (!userId || !authSession.value) return;
+    const key = `${PRINT_OUTCOME_STORAGE_PREFIX}${encodeURIComponent(userId)}`;
+    let marker: string | null = null;
+    try {
+      marker = window.localStorage.getItem(key);
+    } catch {
+      marker = pendingPrintOutcomes.get(userId) ?? null;
+      printOutcomeStorageError.value = translate("store.errors.printOutcomeStorage");
+    }
+    try {
+      marker = marker ?? window.sessionStorage.getItem(key);
+    } catch {
+      marker = marker ?? pendingPrintOutcomes.get(userId) ?? null;
+      printOutcomeStorageError.value = translate("store.errors.printOutcomeStorage");
+    }
+    if (!marker && pendingPrintOutcomes.has(userId)) {
+      marker = pendingPrintOutcomes.get(userId)!;
+      printOutcomeStorageError.value = translate("store.errors.printOutcomeStorage");
+    }
+    displayedPrintOutcomeMarker = marker;
+    printSubmissionUnknown.value = !!marker;
+  }
+
+  function markPrintOutcomeUnknown() {
+    const userId = authUser.value?.id;
+    if (!userId) return;
+    const marker = createId("outcome");
+    pendingPrintOutcomes.set(userId, marker);
+    displayedPrintOutcomeMarker = marker;
+    printSubmissionUnknown.value = true;
+    const key = `${PRINT_OUTCOME_STORAGE_PREFIX}${encodeURIComponent(userId)}`;
+    try {
+      window.localStorage.setItem(key, marker);
+      pendingPrintOutcomes.delete(userId);
+      window.sessionStorage.removeItem(key);
+      printOutcomeStorageError.value = "";
+    } catch {
+      printOutcomeStorageError.value = translate("store.errors.printOutcomeStorage");
+      try {
+        window.sessionStorage.setItem(key, marker);
+      } catch {
+        /* Keep the current-session latch. */
+      }
+    }
+  }
+
+  function acknowledgePrintOutcome() {
+    const userId = authUser.value?.id;
+    if (!userId || !authSession.value) return false;
+    const key = `${PRINT_OUTCOME_STORAGE_PREFIX}${encodeURIComponent(userId)}`;
+    try {
+      const latest =
+        window.localStorage.getItem(key) ??
+        window.sessionStorage.getItem(key) ??
+        pendingPrintOutcomes.get(userId);
+      if (latest && latest !== displayedPrintOutcomeMarker) {
+        loadPrintOutcome();
+        return false;
+      }
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
+      pendingPrintOutcomes.delete(userId);
+      displayedPrintOutcomeMarker = null;
+      printSubmissionUnknown.value = false;
+      printOutcomeStorageError.value = "";
+      return true;
+    } catch {
+      printOutcomeStorageError.value = translate("store.errors.printOutcomeStorage");
+      return false;
+    }
+  }
+
   function preservePendingWorkspaceDraft() {
     const userId = authUser.value?.id;
     if (!userId || workspaceOwnerId.value !== userId || !remoteWorkspaceDirty) return true;
@@ -832,6 +913,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
   }
 
+  function connectedDevice(id: string) {
+    return devices.value.some((device) => device.id === id && device.status === "connected");
+  }
+
   function restoreRecoveredWorkspaceDraft() {
     const recovered = recoveredWorkspaceDraft.value;
     if (
@@ -845,11 +930,17 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       return false;
     // Integration records remain authoritative; recovery restores the user's
     // conversations and preferences against the latest loaded revision.
+    const recoveredDefault = recovered.preferences.defaultDeviceId;
+    const liveDefault = connectedDevice(recoveredDefault)
+      ? recoveredDefault
+      : connectedDevice(defaultDeviceId.value)
+        ? defaultDeviceId.value
+        : "";
     applyWorkspaceState({
       ...workspaceState.value,
       conversations: recovered.conversations,
       activeConversationId: recovered.activeConversationId,
-      preferences: recovered.preferences,
+      preferences: { ...recovered.preferences, defaultDeviceId: liveDefault },
     });
     const recoveredKey = recoveredDraftStorageKey;
     const recoveredValue = recoveredDraftStoredValue;
@@ -905,7 +996,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       workspaceDraftStorageError.value = "";
       isGenerating.value = false;
       isCreatingPrint.value = false;
-      printSubmissionUnknown.value = false;
+      loadPrintOutcome();
       passwordChangeLoading.value = false;
       feedbackSubmitting.value = false;
       accountCreationLoading.value = false;
@@ -1883,6 +1974,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function addPrintJob(title: string, content: string, source: string) {
+    if (isAuthenticated.value) loadPrintOutcome();
     if (printSubmissionUnknown.value) {
       showFlashKey("errors.api.print_submission_unknown", "error");
       return null;
@@ -1924,7 +2016,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     } catch (error) {
       if (!isCurrentAccount(accountVersion)) return null;
       if (isPrintSubmissionUnknown(error)) {
-        printSubmissionUnknown.value = true;
+        markPrintOutcomeUnknown();
         try {
           await refreshRemotePrintJobs();
         } catch {
@@ -2000,6 +2092,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function confirmPrint(jobId: string) {
+    if (isAuthenticated.value) loadPrintOutcome();
     if (printSubmissionUnknown.value) {
       showFlashKey("errors.api.print_submission_unknown", "error");
       return false;
@@ -2023,7 +2116,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       } catch (error) {
         if (!isCurrentAccount(accountVersion)) return false;
         if (isPrintSubmissionUnknown(error)) {
-          printSubmissionUnknown.value = true;
+          markPrintOutcomeUnknown();
           try {
             await refreshRemotePrintJobs();
           } catch {
@@ -2688,6 +2781,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     selectedConversationMessageIds,
     isCreatingPrint,
     printSubmissionUnknown,
+    printOutcomeStorageError,
+    acknowledgePrintOutcome,
     flashMessage,
     flashTone,
     postLoginTutorialOpen,

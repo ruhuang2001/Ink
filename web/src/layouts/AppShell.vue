@@ -71,8 +71,7 @@ function discardRecoveredDraft() {
 }
 
 function acknowledgePrintOutcome() {
-  if (window.confirm(t("shell.printOutcome.confirm")))
-    workspaceStore.printSubmissionUnknown = false;
+  if (window.confirm(t("shell.printOutcome.confirm"))) workspaceStore.acknowledgePrintOutcome();
 }
 
 function closePostLoginTutorial() {
@@ -351,6 +350,9 @@ async function recoverSynchronization() {
     >
       <div class="mx-auto max-w-7xl space-y-2">
         <p>{{ t("errors.api.print_submission_unknown") }}</p>
+        <p v-if="workspaceStore.printOutcomeStorageError">
+          {{ workspaceStore.printOutcomeStorageError }}
+        </p>
         <button type="button" class="ui-btn-secondary" @click="acknowledgePrintOutcome">
           {{ t("shell.printOutcome.checked") }}
         </button>
