@@ -110,6 +110,18 @@ cd server
 ../bin/ink-api
 ```
 
+The migration command uses a database advisory lock to serialize upgrades and
+checks the SHA-256 of each applied SQL file before running new migrations. An
+edited or missing recorded file stops the upgrade. Never edit a released
+migration; add a new forward migration instead.
+
+Older databases have no stored checksums. Their first upgrade records a baseline
+from the current checkout without replaying applied SQL. This cannot establish
+whether those files were modified in the past. Before that first upgrade, back
+up the database and verify the migration files against the trusted original
+release. Keep the recorded baseline and use the same immutable source files for
+later upgrades and recovery.
+
 The print-status migration adds persisted check times and pagination indexes,
 and schedules previously queued provider jobs for background reconciliation.
 Deploy the frontend and API from the same revision because print lists now

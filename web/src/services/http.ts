@@ -72,9 +72,11 @@ export async function request<T>(input: string, init: HttpRequestInit = {}): Pro
       try {
         errorPayload = (await attempt.readJSON()) as ApiErrorResponse;
       } catch (error) {
-        // The HTTP response already rejected this request. Keep that status
-        // when its optional error body is truncated or malformed.
-        if (error instanceof AuthApiError && error.status !== 0) throw error;
+        // A 5xx can follow an accepted mutation; an unreadable error body
+        // cannot establish whether it completed. Preserve that uncertainty.
+        // Explicit 4xx rejection statuses remain authoritative.
+        if (error instanceof AuthApiError && (response.status >= 500 || error.status !== 0))
+          throw error;
         errorPayload = null;
       }
 

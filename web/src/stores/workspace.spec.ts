@@ -663,31 +663,37 @@ describe("workspace store", () => {
     store.$dispose();
   });
 
-  it("does not resend a print whose accepted response body disconnects", async () => {
-    const store = useWorkspaceStore();
-    await store.login("a@example.invalid", "synthetic-password");
-    await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
-    const response = new Response(null, { status: 201 });
-    vi.spyOn(response, "json").mockRejectedValueOnce(
-      new TypeError("connection lost after headers"),
-    );
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
-    vi.mocked(printerService.createPrintJob).mockImplementationOnce(async () =>
-      request("/api/v1/print-jobs", { method: "POST", body: "{}" }),
-    );
-    await expect(
-      store.createManualPrint({ title: "Accepted before disconnect", content: "Original content" }),
-    ).resolves.toBeNull();
-    expect(store.printSubmissionUnknown).toBe(true);
-    expect(store.flashMessage).toBe(translate("errors.api.print_submission_unknown"));
-    await store.createManualPrint({
-      title: "Accepted before disconnect",
-      content: "Original content",
-    });
-    expect(fetchMock).toHaveBeenCalledOnce();
-    expect(printerService.createPrintJob).toHaveBeenCalledOnce();
-    store.$dispose();
-  });
+  it.each([201, 502])(
+    "does not resend a print whose HTTP %s response body disconnects",
+    async (status) => {
+      const store = useWorkspaceStore();
+      await store.login("a@example.invalid", "synthetic-password");
+      await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+      const response = new Response(null, { status });
+      vi.spyOn(response, "json").mockRejectedValueOnce(
+        new TypeError("connection lost after headers"),
+      );
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+      vi.mocked(printerService.createPrintJob).mockImplementationOnce(async () =>
+        request("/api/v1/print-jobs", { method: "POST", body: "{}" }),
+      );
+      await expect(
+        store.createManualPrint({
+          title: "Accepted before disconnect",
+          content: "Original content",
+        }),
+      ).resolves.toBeNull();
+      expect(store.printSubmissionUnknown).toBe(true);
+      expect(store.flashMessage).toBe(translate("errors.api.print_submission_unknown"));
+      await store.createManualPrint({
+        title: "Accepted before disconnect",
+        content: "Original content",
+      });
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(printerService.createPrintJob).toHaveBeenCalledOnce();
+      store.$dispose();
+    },
+  );
 
   it("exposes stable defaults and derived summaries", () => {
     vi.useFakeTimers();

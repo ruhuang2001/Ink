@@ -153,14 +153,45 @@ describe("http client", () => {
     },
   );
 
-  it("preserves a rejected HTTP status when its error body cannot be read", async () => {
-    const response = new Response(null, { status: 400 });
-    vi.spyOn(response, "json").mockRejectedValueOnce(new TypeError("response body disconnected"));
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
-    await expect(request("/api/rejected", { method: "POST", body: "{}" })).rejects.toMatchObject({
-      status: 400,
-      code: "request_failed",
-    });
+  it.each([400, 404, 429])(
+    "preserves rejected HTTP %s when its error body cannot be read",
+    async (status) => {
+      const response = new Response(null, { status });
+      vi.spyOn(response, "json").mockRejectedValueOnce(new TypeError("response body disconnected"));
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+      await expect(request("/api/rejected", { method: "POST", body: "{}" })).rejects.toMatchObject({
+        status,
+        code: "request_failed",
+      });
+    },
+  );
+
+  it.each([502, 503, 504])(
+    "normalizes unreadable HTTP %s error bodies as an uncertain network result",
+    async (status) => {
+      for (const failure of [
+        new TypeError("response body disconnected"),
+        new SyntaxError("invalid JSON"),
+      ]) {
+        const response = new Response(null, { status });
+        vi.spyOn(response, "json").mockRejectedValueOnce(failure);
+        vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+        await expect(
+          request("/api/uncertain", { method: "POST", body: "{}" }),
+        ).rejects.toMatchObject({ status: 0, code: "network_error" });
+      }
+    },
+  );
+
+  it.each([502, 503, 504])("preserves a complete HTTP %s business error", async (status) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "printer_not_configured", message: "unconfigured" }), {
+        status,
+      }),
+    );
+    await expect(
+      request("/api/configuration", { method: "POST", body: "{}" }),
+    ).rejects.toMatchObject({ status, code: "printer_not_configured" });
   });
 
   it("preserves explicit HTTP business errors", async () => {
