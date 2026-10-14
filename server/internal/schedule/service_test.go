@@ -3,11 +3,14 @@ package schedule
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/dispatch"
+	"github.com/ruhuang/ink/server/internal/platform/observability"
 	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/workspace"
@@ -370,6 +373,42 @@ func TestRunNowDispatchesWithoutFetching(t *testing.T) {
 		t.Fatalf("expected one dispatch call, got %d", len(dispatcher.calls))
 	}
 	assertDispatchInput(t, dispatcher.calls[0].input, "schedule-1", "device-1", 3)
+}
+
+func TestRunNowObservesSuccessAndFailures(t *testing.T) {
+	for _, test := range []struct {
+		name, outcome string
+		failed        int
+		dispatchErr   error
+		missing       bool
+	}{
+		{"success", "success", 0, nil, false},
+		{"partial delivery failure", "error", 1, nil, false},
+		{"dispatch failure", "error", 0, errors.New("private-dispatch-error"), false},
+		{"missing schedule", "error", 0, nil, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo := newScheduleRepo()
+			if !test.missing {
+				repo.schedules["schedule-1"] = PrintSchedule{ID: "schedule-1", UserID: "member-user", PluginInstallationID: "plugin-1", DeviceID: "device-1"}
+			}
+			dispatcher := &fakeDispatcher{result: dispatch.ScheduleRunResult{Failed: test.failed}, err: test.dispatchErr}
+			service := newScheduleService(time.Now(), repo, dispatcher)
+			metrics := observability.NewMetrics()
+			service.Observer = metrics.Operation("schedule")
+			result, err := service.RunNow(t.Context(), "member-token", "schedule-1")
+			if test.missing && !errors.Is(err, ErrNotFound) || test.dispatchErr != nil && !errors.Is(err, test.dispatchErr) ||
+				!test.missing && test.dispatchErr == nil && (err != nil || result.FailedCount != test.failed) {
+				t.Fatalf("manual run contract changed: %+v, %v", result, err)
+			}
+			w := httptest.NewRecorder()
+			metrics.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/metrics", nil))
+			want := `ink_operations_total{operation="schedule",result="` + test.outcome + `"} 1`
+			if !strings.Contains(w.Body.String(), want) || !strings.Contains(w.Body.String(), `ink_operation_duration_seconds_count{operation="schedule"} 1`) || strings.Contains(w.Body.String(), "private-dispatch-error") {
+				t.Fatalf("manual schedule observation failed: %s", w.Body)
+			}
+		})
+	}
 }
 
 func TestNextRunAtWeekly(t *testing.T) {

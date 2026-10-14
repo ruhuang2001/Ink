@@ -12,6 +12,7 @@ type FetchProcessor interface {
 }
 
 type FetchRunner struct {
+	Observer  ScanObserver
 	processor FetchProcessor
 	logger    *slog.Logger
 	interval  time.Duration
@@ -56,7 +57,9 @@ func (r *FetchRunner) Start(ctx context.Context) <-chan struct{} {
 }
 
 func (r *FetchRunner) runOnce(ctx context.Context) {
+	finish := startScan(r.Observer)
 	processed, err := r.processor.ProcessDue(ctx, r.limit)
+	finish(err)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return

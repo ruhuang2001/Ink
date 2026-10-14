@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ruhuang/ink/server/internal/inbox"
+	"github.com/ruhuang/ink/server/internal/platform/observability"
 	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/workspace"
@@ -85,6 +86,7 @@ type Clock interface {
 }
 
 type Service struct {
+	Observer  *observability.Operation
 	repo      Repository
 	printer   PrinterJobCreator
 	workspace WorkspaceRepository
@@ -173,7 +175,7 @@ func (s *Service) dispatchOne(
 	input ScheduleRunInput,
 	current DeliveryItem,
 	sendConfirmation bool,
-) (DeliveryStatus, string, error) {
+) (status DeliveryStatus, jobID string, dispatchErr error) {
 	delivery, err := s.buildDelivery(current, input.ScheduleID)
 	if err != nil {
 		return "", "", err
@@ -185,6 +187,14 @@ func (s *Service) dispatchOne(
 	if !claimed {
 		return "", "", nil
 	}
+	ctx, finish := s.Observer.Start(ctx)
+	defer func() {
+		outcomeErr := dispatchErr
+		if status == DeliveryStatusFailed && outcomeErr == nil {
+			outcomeErr = fmt.Errorf("delivery failed")
+		}
+		finish(outcomeErr)
+	}()
 	current.Delivery = delivery
 	if input.BeforePrint != nil {
 		if err := input.BeforePrint(ctx); err != nil {

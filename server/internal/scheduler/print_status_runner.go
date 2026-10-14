@@ -12,6 +12,7 @@ type PrintStatusProcessor interface {
 }
 
 type PrintStatusRunner struct {
+	Observer  ScanObserver
 	processor PrintStatusProcessor
 	logger    *slog.Logger
 	interval  time.Duration
@@ -50,7 +51,9 @@ func (r *PrintStatusRunner) Start(ctx context.Context) <-chan struct{} {
 
 func (r *PrintStatusRunner) runOnce(ctx context.Context) {
 	started := time.Now()
+	finish := startScan(r.Observer)
 	processed, err := r.processor.SyncDue(ctx, r.limit)
+	finish(err)
 	if cancellationOnly(err) {
 		return
 	}

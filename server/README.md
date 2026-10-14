@@ -2,6 +2,10 @@
 
 The Go service owns authentication, PostgreSQL persistence, printer integration, trusted plugin execution, content collection, scheduling, PNG rendering, and background cleanup.
 
+Ordinary self-hosting uses the lightweight default: JSON request logs, request
+IDs, `/healthz`, and `/readyz`, with no monitoring services required. Metrics and
+trace export are disabled until explicitly configured.
+
 For deployment instructions, see [Self-hosting Ink](../docs/SELF_HOSTING.md). For component and data-flow details, see [Architecture](../docs/ARCHITECTURE.md).
 
 ## Local development
@@ -60,3 +64,15 @@ Default smoke runs use an isolated temporary PostgreSQL container and remove it,
 - preview: server-side 384px PNG rendering without creating a print job
 
 > **Plugin operator warning:** Plugins, dependency installers/build hooks, and entrypoints execute as trusted server-side code with the API process's privileges. Admin-only installation is not a sandbox; install only plugins and dependencies you trust. See [`docs/PLUGIN_SPEC.md`](../docs/PLUGIN_SPEC.md#security-model).
+
+## Observability
+
+Leave `METRICS_ADDR` empty to disable the Prometheus registry, HTTP/worker/
+business/pool metrics, and periodic database backlog sampling. Keep both
+`OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` empty to
+disable trace export. Tracing can be enabled independently of metrics.
+
+See [Observability](../docs/OBSERVABILITY.md) for the signal contracts and
+[Monitoring](../docs/MONITORING.md) for the optional Compose package. Ordinary
+deployments do not need that package, its logging/tracing profiles, or a Grafana
+password.

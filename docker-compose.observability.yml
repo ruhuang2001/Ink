@@ -1,0 +1,86 @@
+# Standalone opt-in stack: do not merge with the application Compose project.
+name: ink-observability
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports: ["127.0.0.1:19090:9090"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager"]
+    ports: ["127.0.0.1:19093:9093"]
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+  blackbox:
+    image: prom/blackbox-exporter:v0.27.0
+    restart: unless-stopped
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes: ["./monitoring/blackbox.yml:/etc/blackbox/blackbox.yml:ro"]
+  grafana:
+    image: grafana/grafana:12.1.1
+    restart: unless-stopped
+    ports: ["127.0.0.1:13000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${INK_GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${INK_GRAFANA_ADMIN_PASSWORD:?Set INK_GRAFANA_ADMIN_PASSWORD before starting the stack}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    profiles: [tracing]
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yml"]
+    ports: ["127.0.0.1:14318:4318"]
+    mem_limit: 256m
+    volumes: ["./monitoring/otel-collector.yml:/etc/otel/config.yml:ro"]
+  tempo:
+    image: grafana/tempo:2.8.2
+    profiles: [tracing]
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/config.yml"]
+    ports: ["127.0.0.1:13200:3200"]
+    volumes:
+      - ./monitoring/tempo.yml:/etc/tempo/config.yml:ro
+      - tempo-data:/var/tempo
+  loki:
+    image: grafana/loki:3.5.5
+    profiles: [logging]
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/config.yml"]
+    ports: ["127.0.0.1:13100:3100"]
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+  alloy:
+    image: grafana/alloy:v1.10.2
+    profiles: [logging]
+    restart: unless-stopped
+    command: ["run", "--storage.path=/var/lib/alloy", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./monitoring/alloy.alloy:/etc/alloy/config.alloy:ro
+      - ${INK_LOG_DIR:-./.amp/in/logs}:/var/log/ink:ro
+      - alloy-data:/var/lib/alloy
+volumes:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
+  tempo-data:
+  loki-data:
+  alloy-data:

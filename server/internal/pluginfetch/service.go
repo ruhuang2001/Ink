@@ -7,6 +7,7 @@ import (
 
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/inbox"
+	"github.com/ruhuang/ink/server/internal/platform/observability"
 	"github.com/ruhuang/ink/server/internal/plugins"
 )
 
@@ -49,10 +50,11 @@ type resolvedBinding struct {
 }
 
 type Service struct {
-	auth    Authenticator
-	plugins PluginRuntime
-	inbox   InboxService
-	clock   Clock
+	Observer *observability.Operation
+	auth     Authenticator
+	plugins  PluginRuntime
+	inbox    InboxService
+	clock    Clock
 }
 
 func NewService(
@@ -82,7 +84,9 @@ func (s *Service) ProcessDue(ctx context.Context, limit int) (int, error) {
 	return len(claimed), nil
 }
 
-func (s *Service) RunManual(ctx context.Context, accessToken string, installationID string) (ManualRunResult, error) {
+func (s *Service) RunManual(ctx context.Context, accessToken string, installationID string) (result ManualRunResult, runErr error) {
+	ctx, finish := s.Observer.Start(ctx)
+	defer func() { finish(runErr) }()
 	currentUser, err := s.auth.GetCurrentUser(ctx, accessToken)
 	if err != nil {
 		return ManualRunResult{}, err
@@ -109,8 +113,12 @@ func (s *Service) RunManual(ctx context.Context, accessToken string, installatio
 }
 
 func (s *Service) processBinding(ctx context.Context, claimed plugins.Binding, now time.Time) {
+	ctx, finish := s.Observer.Start(ctx)
+	var runErr error
+	defer func() { finish(runErr) }()
 	resolved, nextAttempt, err := s.resolveAutomaticRunBinding(ctx, claimed, now)
 	if err != nil {
+		runErr = err
 		_ = s.plugins.RecordFetchFailure(ctx, claimed.ID, err.Error(), now, nextAttempt)
 		return
 	}
@@ -122,14 +130,16 @@ func (s *Service) processBinding(ctx context.Context, claimed plugins.Binding, n
 		automaticFetchTrigger(claimed, now),
 	)
 	if err != nil {
+		runErr = err
 		_ = s.plugins.RecordFetchFailure(ctx, claimed.ID, err.Error(), now, nextAttempt)
 		return
 	}
 	if _, err := s.ingestOutput(ctx, resolved.binding.UserID, resolved.installation, resolved.binding, output); err != nil {
+		runErr = err
 		_ = s.plugins.RecordFetchFailure(ctx, claimed.ID, err.Error(), now, nextAttempt)
 		return
 	}
-	_ = s.plugins.RecordFetchSuccess(ctx, resolved.binding.ID, output.Cursor, now, nextAttempt)
+	runErr = s.plugins.RecordFetchSuccess(ctx, resolved.binding.ID, output.Cursor, now, nextAttempt)
 }
 
 func nextFetchAt(manifest plugins.Manifest, from time.Time) time.Time {

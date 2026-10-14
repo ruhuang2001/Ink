@@ -11,6 +11,7 @@ import (
 
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/dispatch"
+	"github.com/ruhuang/ink/server/internal/platform/observability"
 	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/workspace"
@@ -63,6 +64,7 @@ type ManualPrintResult struct {
 }
 
 type Service struct {
+	Observer    *observability.Operation
 	repo        Repository
 	auth        Authenticator
 	plugins     PluginRuntime
@@ -236,7 +238,15 @@ func (s *Service) Delete(ctx context.Context, accessToken string, scheduleID str
 	return s.repo.Delete(ctx, currentUser.ID, scheduleID)
 }
 
-func (s *Service) RunNow(ctx context.Context, accessToken string, scheduleID string) (ManualPrintResult, error) {
+func (s *Service) RunNow(ctx context.Context, accessToken string, scheduleID string) (result ManualPrintResult, runErr error) {
+	ctx, finish := s.Observer.Start(ctx)
+	defer func() {
+		observedErr := runErr
+		if observedErr == nil && result.FailedCount > 0 {
+			observedErr = errors.New("schedule contains failed deliveries")
+		}
+		finish(observedErr)
+	}()
 	currentUser, err := s.auth.GetCurrentUser(ctx, accessToken)
 	if err != nil {
 		return ManualPrintResult{}, err
@@ -255,7 +265,7 @@ func (s *Service) RunNow(ctx context.Context, accessToken string, scheduleID str
 		return ManualPrintResult{}, fmt.Errorf("%w: %s", ErrInvalidInput, reason)
 	}
 
-	result, err := s.dispatcher.RunSchedule(ctx, dispatch.ScheduleRunInput{
+	dispatched, err := s.dispatcher.RunSchedule(ctx, dispatch.ScheduleRunInput{
 		ScheduleID:   current.ID,
 		Binding:      binding,
 		Installation: installation,
@@ -265,7 +275,7 @@ func (s *Service) RunNow(ctx context.Context, accessToken string, scheduleID str
 	if err != nil {
 		return ManualPrintResult{}, err
 	}
-	return mapRunResult(result), nil
+	return mapRunResult(dispatched), nil
 }
 
 func (s *Service) ProcessDue(ctx context.Context, limit int) (int, error) {
@@ -325,6 +335,9 @@ func advanceScheduleTimings(current *PrintSchedule, now time.Time) {
 }
 
 func (s *Service) processSchedule(ctx context.Context, current PrintSchedule, now time.Time) {
+	ctx, finish := s.Observer.Start(ctx)
+	var runErr error
+	defer func() { finish(runErr) }()
 	claim := current
 	validate := func(ctx context.Context) error {
 		latest, err := s.repo.FindByID(ctx, claim.UserID, claim.ID)
@@ -339,27 +352,34 @@ func (s *Service) processSchedule(ctx context.Context, current PrintSchedule, no
 		return nil
 	}
 	if err := validate(ctx); err != nil {
+		runErr = err
 		return
 	}
 	advanceScheduleTimings(&current, now)
 
-	installation, binding, _, ok := s.resolveScheduleRun(ctx, current)
+	installation, binding, reason, ok := s.resolveScheduleRun(ctx, current)
 	if !ok {
+		runErr = errors.New(reason)
 		return
 	}
-	if _, err := s.dispatcher.RunSchedule(ctx, dispatch.ScheduleRunInput{
+	result, err := s.dispatcher.RunSchedule(ctx, dispatch.ScheduleRunInput{
 		ScheduleID:   current.ID,
 		Binding:      binding,
 		Installation: installation,
 		DeviceID:     current.DeviceID,
 		BatchSize:    current.PrintPolicy.BatchSize,
 		BeforePrint:  validate,
-	}); err != nil {
+	})
+	if err != nil {
+		runErr = err
 		s.failSchedule(ctx, current, err.Error())
 		return
 	}
 	current.LastError = nil
-	_ = s.repo.Save(ctx, current)
+	runErr = s.repo.Save(ctx, current)
+	if result.Failed > 0 {
+		runErr = errors.Join(runErr, errors.New("schedule contains failed deliveries"))
+	}
 }
 
 func (s *Service) prepareSchedule(ctx context.Context, current PrintSchedule, now time.Time) (PrintSchedule, error) {

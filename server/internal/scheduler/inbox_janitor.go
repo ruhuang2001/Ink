@@ -24,6 +24,7 @@ type InboxPurger interface {
 
 // InboxJanitor purges collected items older than Retention on a fixed cadence.
 type InboxJanitor struct {
+	Observer  ScanObserver
 	purger    InboxPurger
 	clock     Clock
 	logger    *slog.Logger
@@ -73,8 +74,10 @@ func (j *InboxJanitor) Start(ctx context.Context) <-chan struct{} {
 }
 
 func (j *InboxJanitor) runOnce(ctx context.Context) {
+	finish := startScan(j.Observer)
 	cutoff := j.clock.Now().Add(-j.retention)
 	removed, err := j.purger.PurgeOlderThan(ctx, cutoff)
+	finish(err)
 	if err != nil {
 		j.logger.Error("inbox janitor failed", "error", err)
 		return

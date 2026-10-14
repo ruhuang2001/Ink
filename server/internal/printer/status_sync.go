@@ -113,8 +113,10 @@ func (s *StatusSynchronizer) SyncDue(ctx context.Context, limit int) (int, error
 		}
 		// Each started check gets its full configured timeout. Yield between
 		// checks instead of counting an exhausted batch budget as provider failure.
-		completed, providerErr := s.check(ctx, job, s.timeout)
+		checkCtx, finish := s.service.StatusObserver.Start(ctx)
+		completed, providerErr := s.check(checkCtx, job, s.timeout)
 		if ctx.Err() != nil {
+			finish(ctx.Err())
 			return processed, syncError(ctx.Err())
 		}
 		now := s.service.clock.Now()
@@ -135,6 +137,11 @@ func (s *StatusSynchronizer) SyncDue(ctx context.Context, limit int) (int, error
 			failures = append(failures, fmt.Errorf("print job %s status: %w", job.ID, providerErr))
 		}
 		updated, err := s.service.repo.SaveStatusCheck(ctx, job, result)
+		outcomeErr := errors.Join(providerErr, err)
+		if result.Failed {
+			outcomeErr = errors.Join(outcomeErr, errors.New("print status attempts exhausted"))
+		}
+		finish(outcomeErr)
 		if err != nil {
 			if providerErr == nil {
 				failedJobs++
