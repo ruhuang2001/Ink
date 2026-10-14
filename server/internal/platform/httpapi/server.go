@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/feedback"
+	"github.com/ruhuang/ink/server/internal/platform/observability"
 	"github.com/ruhuang/ink/server/internal/pluginfetch"
 	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
@@ -75,6 +75,8 @@ type Server struct {
 	trustedProxyCIDRs    []netip.Prefix
 	trustedProxyHeader   string
 	pluginUploadMaxBytes int64
+	metrics              *observability.Metrics
+	ready                func(context.Context) error
 }
 
 // NewServer wires the auth service, logger, and login rate limiter into an HTTP server.
@@ -94,8 +96,9 @@ func NewServer(
 	trustedProxyCIDRs []netip.Prefix,
 	trustedProxyHeader string,
 	pluginUploadMaxBytes int64,
+	options ...func(*Server),
 ) *Server {
-	return &Server{
+	s := &Server{
 		auth:                 authService,
 		workspace:            workspaceService,
 		ai:                   aiService,
@@ -110,12 +113,20 @@ func NewServer(
 		trustedProxyHeader:   trustedProxyHeader,
 		pluginUploadMaxBytes: pluginUploadMaxBytes,
 	}
+	for _, option := range options {
+		option(s)
+	}
+	if s.logger == nil {
+		s.logger = slog.Default()
+	}
+	return s
 }
 
 // Handler builds the HTTP handler tree for the auth API.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
+	mux.HandleFunc("GET /readyz", s.handleReadyz)
 	mux.HandleFunc("POST /api/v1/auth/login", s.wrap(s.handleLogin))
 	mux.HandleFunc("POST /api/v1/auth/refresh", s.wrap(s.handleRefresh))
 	mux.HandleFunc("POST /api/v1/auth/logout", s.wrap(s.handleLogout))
@@ -154,7 +165,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/print-schedules/{scheduleID}/run", s.wrap(s.handleRunPrintSchedule))
 	mux.HandleFunc("POST /api/v1/print-schedules/{scheduleID}/toggle", s.wrap(s.handleTogglePrintSchedule))
 	mux.HandleFunc("DELETE /api/v1/print-schedules/{scheduleID}", s.wrap(s.handleDeletePrintSchedule))
-	return mux
+	return s.observeHTTP(mux)
 }
 
 type responseEnvelope struct {
@@ -255,8 +266,7 @@ type errorEnvelope struct {
 
 func (s *Server) wrap(next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		requestID := fmt.Sprintf("req_%d", time.Now().UnixNano())
-		w.Header().Set("X-Request-ID", requestID)
+		requestID, _ := r.Context().Value(requestIDKey).(string)
 		w.Header().Set("Content-Type", "application/json")
 		next(w, r, requestID)
 	}

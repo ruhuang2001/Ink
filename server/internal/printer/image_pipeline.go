@@ -18,10 +18,12 @@ type imagePrintPipeline interface {
 //go:embed assets/NotoSansSC-Regular.otf
 var printerFontData []byte
 
-type textImagePrintPipeline struct{}
+type textImagePrintPipeline struct {
+	render func(context.Context, string, string) (string, error)
+}
 
 func (p textImagePrintPipeline) PrintJob(ctx context.Context, client *memobirdapi.Client, job Job) (*memobirdapi.PrintResponse, error) {
-	imageBase64, err := renderPrintImage(job.Title, job.Content)
+	imageBase64, err := p.render(ctx, job.Title, job.Content)
 	if err != nil {
 		return nil, err
 	}

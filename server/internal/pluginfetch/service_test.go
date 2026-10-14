@@ -3,11 +3,14 @@ package pluginfetch
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/inbox"
+	"github.com/ruhuang/ink/server/internal/platform/observability"
 	"github.com/ruhuang/ink/server/internal/plugins"
 )
 
@@ -274,6 +277,8 @@ func TestProcessDueRecordsFailureWhenFetchFails(t *testing.T) {
 	runtime.executeErr = errors.New("upstream unavailable")
 	inboxCapture := &capturedInbox{}
 	service := NewService(fakeAuthenticator{}, runtime, inboxCapture, fixedClock{now: now})
+	metrics := observability.NewMetrics()
+	service.Observer = metrics.Operation("plugin_fetch")
 
 	processed, err := service.ProcessDue(context.Background(), 10)
 	if err != nil {
@@ -291,5 +296,11 @@ func TestProcessDueRecordsFailureWhenFetchFails(t *testing.T) {
 	}
 	if len(runtime.failureCalls) != 1 {
 		t.Fatalf("expected one failure record, got %+v", runtime.failureCalls)
+	}
+	w := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/metrics", nil))
+	if !strings.Contains(w.Body.String(), `ink_operations_total{operation="plugin_fetch",result="error"} 1`) ||
+		!strings.Contains(w.Body.String(), `ink_operations_total{operation="plugin_fetch",result="success"} 0`) {
+		t.Fatalf("successful batch hid individual fetch failure: %s", w.Body.String())
 	}
 }

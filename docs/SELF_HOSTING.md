@@ -2,6 +2,13 @@
 
 This guide covers a single-instance Ink deployment. Ink currently ships source code and development infrastructure rather than a production container image, so operators build the web application and Go API from the repository.
 
+Use the default lightweight setup for ordinary self-hosting: the API and PostgreSQL
+need no monitoring services. JSON request logs, request IDs, and health checks are
+always available. Leave `METRICS_ADDR` and the OTLP endpoint settings empty to keep
+metrics collection, database backlog sampling, and trace export disabled. The
+[monitoring stack](MONITORING.md) is an optional operations package; you do not
+need to start its four or eight services or set a Grafana password to run Ink.
+
 ## Requirements
 
 - Node.js 22
@@ -184,11 +191,24 @@ The repository does not yet provide automated production backup or restore tooli
 ## Health and operations
 
 - `GET /healthz` reports process liveness.
+- `GET /readyz` checks PostgreSQL and enabled worker lifecycle, and returns 503 during dependency failure or shutdown.
 - Structured API logs are written to stdout.
 - Database migrations are explicit and should run once before an application rollout.
 - A single API process runs plugin fetching, schedule polling, and inbox cleanup workers.
 
-There is currently no separate readiness endpoint or built-in metrics endpoint.
+Optional Prometheus metrics are enabled only when `METRICS_ADDR` is set (for
+example, `127.0.0.1:9090`). Leaving it empty disables the registry, HTTP/worker/
+business/pool metrics, and the 30-second database backlog sampler. Health checks
+and request logs continue to work. Keep the unauthenticated metrics listener on
+the host or private monitoring network and do not publish it through the public
+reverse proxy. The public API has no `/metrics` route.
+
+If you need historical graphs and alerts, opt into the four-service
+[monitoring stack](MONITORING.md). Its `logging` and `tracing` profiles add log
+search and trace storage separately, for eight services when both are enabled.
+OTLP trace export can also be enabled independently of metrics using an existing
+Collector. See [Observability](OBSERVABILITY.md) for configuration, log fields,
+and worker-progress limitations.
 
 ## Upgrade checklist
 
@@ -197,7 +217,7 @@ There is currently no separate readiness endpoint or built-in metrics endpoint.
 3. Build the new frontend and API.
 4. Run migrations once.
 5. Restart the API and publish the new frontend assets.
-6. Verify `/healthz`, login, printer listing, plugin listing, and PNG preview generation.
+6. Verify `/healthz`, `/readyz`, login, printer listing, plugin listing, and PNG preview generation.
 
 ## Verification
 

@@ -1,0 +1,274 @@
+{
+  "uid": "ink-operations",
+  "title": "Ink · Operations",
+  "description": "Runtime signals are process-local. Backlog gauges describe the shared database: use max, never sum across replicas. Missing data is not health. Alerts are local-only until a real receiver is configured.",
+  "tags": ["ink", "operations"],
+  "schemaVersion": 41,
+  "version": 1,
+  "editable": false,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Reading this desk",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+      "options": {
+        "mode": "markdown",
+        "content": "**Ink operations** — health, work, and waiting. No data means unknown, not healthy. Backlog is a shared-database snapshot (replica **max**). Pending confirmation and submitted prints are context, not actionable overdue queues. Notifications are **local-only** until you configure a real Alertmanager receiver."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "API metrics scrape · 1 = up",
+      "gridPos": { "x": 0, "y": 3, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [{ "refId": "A", "expr": "up{job=\"ink-api\"}", "legendFormat": "{{instance}}", "instant": true, "range": false }],
+      "options": { "reduceOptions": { "calcs": ["last"], "fields": "", "values": false } },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "noValue": "No data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Health & readiness · 1 = HTTP 200",
+      "gridPos": { "x": 6, "y": 3, "w": 10, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "probe_success{job=\"ink-probe\"}", "legendFormat": "{{endpoint}}", "instant": true, "range": false }
+      ],
+      "options": { "reduceOptions": { "calcs": ["last"], "fields": "", "values": false } },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "noValue": "No data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Firing alerts · inspect Prometheus",
+      "gridPos": { "x": 16, "y": 3, "w": 8, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [{ "refId": "A", "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)", "instant": true, "range": false }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Business API traffic",
+      "gridPos": { "x": 0, "y": 7, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(ink_http_requests_total{job=\"ink-api\",route=~\"/api/.*\"}[$__rate_interval]))",
+          "legendFormat": "HTTP {{status}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "HTTP p95 · streaming routes include stream lifetime",
+      "gridPos": { "x": 12, "y": 7, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (route, le) (rate(ink_http_request_duration_seconds_bucket{job=\"ink-api\"}[$__rate_interval])))",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Worker scans · 1 = running",
+      "gridPos": { "x": 0, "y": 14, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ink_worker_scan_in_progress{job=\"ink-api\"}",
+          "legendFormat": "{{worker}} · {{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Worker idle age / allowed interval · >1 is late",
+      "gridPos": { "x": 8, "y": 14, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((time() - ink_worker_last_scan_completed_timestamp_seconds{job=\"ink-api\"}) / (2 * ink_worker_poll_interval_seconds{job=\"ink-api\"} + 300)) and ink_worker_scan_in_progress{job=\"ink-api\"} == 0",
+          "legendFormat": "{{worker}} · {{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Database pool pressure",
+      "gridPos": { "x": 16, "y": 14, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ink_db_pool_acquired_connections{job=\"ink-api\"} / ink_db_pool_max_connections{job=\"ink-api\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Operations · attempts by result",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "width": 240,
+          "calcs": []
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (operation, result) (rate(ink_operations_total{job=\"ink-api\"}[$__rate_interval]))",
+          "legendFormat": "{{operation}} · {{result}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Operation duration · p95",
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (operation, le) (rate(ink_operation_duration_seconds_bucket{job=\"ink-api\"}[$__rate_interval])))",
+          "legendFormat": "{{operation}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Backlog · shared DB max across replicas",
+      "gridPos": { "x": 0, "y": 28, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ink:backlog_items:max{queue=~\"plugin_fetch|schedule|print_status|pending_confirmation|submitted_print\"}",
+          "legendFormat": "{{queue}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Queue age · confirmation/device waits are informational",
+      "gridPos": { "x": 12, "y": 28, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "ink:backlog_due_age_seconds:max", "legendFormat": "{{queue}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "min": 0 }, "overrides": [] }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Backlog snapshot freshness · latest successful replica",
+      "gridPos": { "x": 0, "y": 35, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - max(ink_backlog_last_success_timestamp_seconds{job=\"ink-api\"})",
+          "legendFormat": "Sample age"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Backlog sample errors · per process",
+      "gridPos": { "x": 8, "y": 35, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(ink_backlog_sample_errors_total{job=\"ink-api\"}[10m])",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "HTTP panics · last five minutes",
+      "gridPos": { "x": 16, "y": 35, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "ink-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(ink_http_panics_total{job=\"ink-api\"}[5m])",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    }
+  ]
+}

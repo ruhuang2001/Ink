@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/platform/observability"
 	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/workspace"
 	memobirdapi "github.com/ruhuang2001/memobird-go/memobird"
@@ -81,14 +82,17 @@ type Clock interface {
 }
 
 type Service struct {
-	repo         Repository
-	auth         Authenticator
-	ids          IDGenerator
-	clock        Clock
-	accessKey    string
-	baseURL      string
-	timeout      time.Duration
-	imagePrinter imagePrintPipeline
+	SubmissionObserver *observability.Operation
+	StatusObserver     *observability.Operation
+	RenderObserver     *observability.Operation
+	repo               Repository
+	auth               Authenticator
+	ids                IDGenerator
+	clock              Clock
+	accessKey          string
+	baseURL            string
+	timeout            time.Duration
+	imagePrinter       imagePrintPipeline
 }
 
 type PrinterService interface {
@@ -138,16 +142,17 @@ func NewService(
 	baseURL string,
 	timeout time.Duration,
 ) *Service {
-	return &Service{
-		repo:         repo,
-		auth:         authenticator,
-		ids:          ids,
-		clock:        clock,
-		accessKey:    strings.TrimSpace(accessKey),
-		baseURL:      strings.TrimSpace(baseURL),
-		timeout:      timeout,
-		imagePrinter: textImagePrintPipeline{},
+	s := &Service{
+		repo:      repo,
+		auth:      authenticator,
+		ids:       ids,
+		clock:     clock,
+		accessKey: strings.TrimSpace(accessKey),
+		baseURL:   strings.TrimSpace(baseURL),
+		timeout:   timeout,
 	}
+	s.imagePrinter = textImagePrintPipeline{render: s.renderImage}
+	return s
 }
 
 func (s *Service) ListDevices(ctx context.Context, accessToken string) ([]workspace.Device, error) {
@@ -285,12 +290,18 @@ func (s *Service) CreatePrintJob(ctx context.Context, accessToken string, input 
 
 // RenderPreview renders the exact PNG payload used by the Memobird image
 // pipeline, without creating a print job or contacting the device.
-func (s *Service) RenderPreview(_ context.Context, title string, content string) (string, error) {
+func (s *Service) RenderPreview(ctx context.Context, title string, content string) (string, error) {
 	title = strings.TrimSpace(title)
 	content = strings.TrimSpace(content)
 	if title == "" || content == "" {
 		return "", ErrInvalidInput
 	}
+	return s.renderImage(ctx, title, content)
+}
+
+func (s *Service) renderImage(ctx context.Context, title, content string) (image string, renderErr error) {
+	_, finish := s.RenderObserver.Start(ctx)
+	defer func() { finish(renderErr) }()
 	return renderPrintImage(title, content)
 }
 
@@ -539,7 +550,9 @@ func nextVersionTime(now time.Time, previous time.Time) time.Time {
 	return now
 }
 
-func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (Job, error) {
+func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (submitted Job, submitErr error) {
+	ctx, finish := s.SubmissionObserver.Start(ctx)
+	defer func() { finish(submitErr) }()
 	if s.accessKey == "" {
 		return Job{}, ErrNotConfigured
 	}

@@ -55,3 +55,7 @@ check-api:
 
 smoke-api:
 	./server/scripts/smoke_api.sh
+
+.PHONY: check-observability
+check-observability:
+	bash ./scripts/check-observability.sh

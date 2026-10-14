@@ -16,6 +16,7 @@ import (
 type Config struct {
 	AppName                       string
 	Port                          int
+	MetricsAddr                   string
 	DatabaseURL                   string
 	JWTSecret                     string
 	AccessTokenTTL                time.Duration
@@ -188,6 +189,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		AppName:                       envString("APP_NAME", "ink-auth"),
 		Port:                          port,
+		MetricsAddr:                   strings.TrimSpace(os.Getenv("METRICS_ADDR")),
 		DatabaseURL:                   os.Getenv("DATABASE_URL"),
 		JWTSecret:                     os.Getenv("JWT_SECRET"),
 		AccessTokenTTL:                accessTokenTTL,

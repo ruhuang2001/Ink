@@ -156,7 +156,7 @@ See [Security Policy](../SECURITY.md) and [Plugin Security Model](PLUGIN_SPEC.md
 
 - No enforceable plugin sandbox or public untrusted plugin marketplace.
 - No built-in production backup/restore workflow.
-- No readiness or metrics endpoint.
+- Worker progress, business backlog metrics, and distributed tracing remain unimplemented; see [Observability](OBSERVABILITY.md) for the implemented health, HTTP metrics, and logging foundation and the next steps.
 - Login rate limiting is not global across multiple API instances.
 - Refresh credentials remain accessible to browser JavaScript.
 - The release workflow does not currently publish a complete production deployment image.

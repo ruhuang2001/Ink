@@ -1,0 +1,30 @@
+local.file_match "ink" {
+  path_targets = [{"__path__" = "/var/log/ink/*.log", "service" = "ink-api"}]
+}
+loki.source.file "ink" {
+  targets = local.file_match.ink.targets
+  forward_to = [loki.process.ink.receiver]
+}
+loki.process "ink" {
+  // Ship only the sanitized middleware record, never legacy business logs.
+  stage.json {
+    expressions = {message = "msg"}
+  }
+  stage.labels {
+    values = {message = ""}
+  }
+  stage.match {
+    selector = "{message!=\"http request completed\"}"
+    action = "drop"
+    drop_counter_reason = "not_request_completion"
+  }
+  stage.label_drop {
+    values = ["message", "filename"]
+  }
+  forward_to = [loki.write.local.receiver]
+}
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

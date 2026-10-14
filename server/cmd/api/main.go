@@ -21,6 +21,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/platform/config"
 	"github.com/ruhuang/ink/server/internal/platform/httpapi"
 	"github.com/ruhuang/ink/server/internal/platform/idgen"
+	"github.com/ruhuang/ink/server/internal/platform/observability"
 	"github.com/ruhuang/ink/server/internal/platform/password"
 	"github.com/ruhuang/ink/server/internal/platform/secret"
 	"github.com/ruhuang/ink/server/internal/platform/store/postgres"
@@ -56,6 +57,17 @@ func main() {
 
 	ctx, cancelRoot := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancelRoot()
+	shutdownTracing, err := observability.ConfigureTracing(ctx, cfg.AppName, logger)
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownTracing(flushCtx); err != nil {
+			logger.Error("trace shutdown failed")
+		}
+	}()
 
 	db, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -155,10 +167,28 @@ func main() {
 		idgen.Generator{},
 		clock.SystemClock{},
 	)
+	var metrics *observability.Metrics
+	var backlogDone <-chan struct{}
+	if cfg.MetricsAddr != "" {
+		metrics = observability.NewMetrics()
+		metrics.RegisterPool(db)
+		backlogDone = metrics.StartBacklog(ctx, store)
+	}
+	if metrics != nil || observability.TracingEnabled() {
+		pluginFetchService.Observer = metrics.Operation("plugin_fetch")
+		scheduleService.Observer = metrics.Operation("schedule")
+		dispatchService.Observer = metrics.Operation("delivery")
+		printerService.SubmissionObserver = metrics.Operation("print_submit")
+		printerService.StatusObserver = metrics.Operation("print_status")
+		printerService.RenderObserver = metrics.Operation("png_render")
+	}
 	var statusDone <-chan struct{}
 	if cfg.PrintStatusSyncEnabled {
 		statusSync := printer.NewStatusSynchronizerWithPollingAndAttempts(printerService, cfg.PrintStatusTimeout, cfg.PrintStatusRecheckInterval, cfg.PrintStatusMaxRecheckInterval, cfg.PrintStatusMaxAttempts)
 		statusRunner := scheduler.NewPrintStatusRunner(statusSync, logger, cfg.PrintStatusPollInterval, cfg.PrintStatusBatchSize)
+		if metrics != nil {
+			statusRunner.Observer = metrics.Worker("print_status_sync", cfg.PrintStatusPollInterval)
+		}
 		statusDone = statusRunner.Start(ctx)
 	} else {
 		done := make(chan struct{})
@@ -167,13 +197,31 @@ func main() {
 	}
 
 	fetchRunner := scheduler.NewFetchRunner(pluginFetchService, logger, cfg.SchedulerPollInterval, 10)
+	if metrics != nil {
+		fetchRunner.Observer = metrics.Worker("plugin_fetch", cfg.SchedulerPollInterval)
+	}
 	fetchDone := fetchRunner.Start(ctx)
 
 	schedulerRunner := scheduler.NewRunner(scheduleService, logger, cfg.SchedulerPollInterval, 10)
+	if metrics != nil {
+		schedulerRunner.Observer = metrics.Worker("schedule", cfg.SchedulerPollInterval)
+	}
 	schedulerDone := schedulerRunner.Start(ctx)
 
 	inboxJanitor := scheduler.NewInboxJanitor(inboxService, clock.SystemClock{}, logger, cfg.InboxJanitorInterval, cfg.InboxRetention)
+	if metrics != nil {
+		inboxJanitor.Observer = metrics.Worker("inbox_janitor", cfg.InboxJanitorInterval)
+	}
 	janitorDone := inboxJanitor.Start(ctx)
+	workerDone := map[string]<-chan struct{}{
+		"plugin_fetch":  fetchDone,
+		"schedule":      schedulerDone,
+		"inbox_janitor": janitorDone,
+	}
+	if cfg.PrintStatusSyncEnabled {
+		workerDone["print_status_sync"] = statusDone
+	}
+	readiness := observability.NewReadiness(ctx, db.Ping, workerDone)
 
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
@@ -193,6 +241,7 @@ func main() {
 			cfg.TrustedProxyCIDRs,
 			cfg.TrustedProxyHeader,
 			cfg.PluginUploadMaxBytes,
+			httpapi.WithObservability(metrics, readiness.Check),
 		).Handler(),
 		ReadHeaderTimeout: httpReadHeaderTimeout,
 		ReadTimeout:       httpReadTimeout,
@@ -200,11 +249,24 @@ func main() {
 		IdleTimeout:       httpIdleTimeout,
 		MaxHeaderBytes:    httpMaxHeaderBytes,
 	}
+	var metricsServer *http.Server
+	if cfg.MetricsAddr != "" {
+		metricsServer = &http.Server{
+			Addr: cfg.MetricsAddr, Handler: metrics.Handler(),
+			ReadHeaderTimeout: httpReadHeaderTimeout, ReadTimeout: httpReadTimeout,
+			WriteTimeout: 10 * time.Second, IdleTimeout: httpIdleTimeout,
+			MaxHeaderBytes: httpMaxHeaderBytes,
+		}
+	}
 
 	logger.Info("starting auth api", "port", cfg.Port)
 
 	serverErrors := make(chan error, 1)
 	go func() { serverErrors <- server.ListenAndServe() }()
+	metricsErrors := make(chan error, 1)
+	if metricsServer != nil {
+		go func() { metricsErrors <- metricsServer.ListenAndServe() }()
+	}
 
 	var serveErr error
 	select {
@@ -213,6 +275,12 @@ func main() {
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serveErr = err
 			logger.Error("server stopped unexpectedly", "error", err)
+		}
+		cancelRoot()
+	case err := <-metricsErrors:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErr = err
+			logger.Error("metrics server stopped unexpectedly", "error", err)
 		}
 		cancelRoot()
 	}
@@ -225,8 +293,20 @@ func main() {
 			serveErr = err
 		}
 	}
+	if metricsServer != nil {
+		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+			logger.Error("metrics server shutdown failed", "error", err)
+			if serveErr == nil {
+				serveErr = err
+			}
+		}
+	}
 
-	for _, worker := range []<-chan struct{}{fetchDone, schedulerDone, janitorDone, statusDone} {
+	workers := []<-chan struct{}{fetchDone, schedulerDone, janitorDone, statusDone}
+	if backlogDone != nil {
+		workers = append(workers, backlogDone)
+	}
+	for _, worker := range workers {
 		select {
 		case <-worker:
 		case <-shutdownCtx.Done():

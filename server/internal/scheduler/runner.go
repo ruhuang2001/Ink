@@ -11,6 +11,7 @@ type Processor interface {
 }
 
 type Runner struct {
+	Observer  ScanObserver
 	processor Processor
 	logger    *slog.Logger
 	interval  time.Duration
@@ -56,7 +57,9 @@ func (r *Runner) Start(ctx context.Context) <-chan struct{} {
 }
 
 func (r *Runner) runOnce(ctx context.Context) {
+	finish := startScan(r.Observer)
 	processed, err := r.processor.ProcessDue(ctx, r.limit)
+	finish(err)
 	if err != nil {
 		r.logger.Error("schedule processor failed", "error", err)
 		return
