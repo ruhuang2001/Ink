@@ -158,6 +158,25 @@ func TestSaveStateRejectsMissingAndStaleRevision(t *testing.T) {
 
 type fakeAuthenticator struct{}
 
+func TestSaveStateRetainsArchivedFieldsInResponse(t *testing.T) {
+	state := EmptyState()
+	state.Revision = 1
+	state.Schedules = []Schedule{{ID: "retained-plan", Enabled: true}}
+	state.Sources = []SourceConnection{{ID: "retained-source", Name: "Archived"}}
+	repo := &fakeRepository{current: &state}
+	service := NewService(repo, fakeAuthenticator{}, fakeClock{now: time.Now()})
+	incoming := EmptyState()
+	incoming.Revision = 1
+	incoming.Conversations = []Conversation{{ID: "core", Draft: "edited"}}
+	saved, err := service.SaveState(t.Context(), "token", incoming)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.Schedules) != 1 || saved.Schedules[0].ID != "retained-plan" || len(saved.Sources) != 1 || saved.Sources[0].ID != "retained-source" || saved.Conversations[0].Draft != "edited" {
+		t.Fatalf("archival data changed: %+v", saved)
+	}
+}
+
 func (fakeAuthenticator) GetCurrentUser(_ context.Context, _ string) (auth.UserDTO, error) {
 	return auth.UserDTO{
 		ID:    "user-1",

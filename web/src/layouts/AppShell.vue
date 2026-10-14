@@ -40,7 +40,6 @@ const syncErrors = computed(() =>
     { key: "workspace", message: workspaceStore.workspaceSyncError },
     { key: "printers", message: workspaceStore.printerSyncError },
     { key: "ai", message: workspaceStore.aiConfigError },
-    { key: "extensions", message: workspaceStore.pluginError },
   ].filter((error) => error.message),
 );
 const loginTarget = computed(() => ({
@@ -59,6 +58,21 @@ const design = computed(() => designStore.selectedDesign);
 
 function isNavigationItemActive(path: string) {
   return path === "/settings" ? route.path.startsWith("/settings") : route.path === path;
+}
+
+function restoreRecoveredDraft() {
+  if (window.confirm(t("shell.draftRecovery.confirmRestore")))
+    workspaceStore.restoreRecoveredWorkspaceDraft();
+}
+
+function discardRecoveredDraft() {
+  if (window.confirm(t("shell.draftRecovery.confirmDiscard")))
+    workspaceStore.discardRecoveredWorkspaceDraft();
+}
+
+function acknowledgePrintOutcome() {
+  if (window.confirm(t("shell.printOutcome.confirm")))
+    workspaceStore.printSubmissionUnknown = false;
 }
 
 function closePostLoginTutorial() {
@@ -237,6 +251,57 @@ async function recoverSynchronization() {
     </div>
 
     <div
+      v-if="
+        workspaceStore.isAuthenticated &&
+        (workspaceStore.recoveredWorkspaceDraft || workspaceStore.workspaceDraftStorageError)
+      "
+      role="alert"
+      class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 lg:px-8"
+    >
+      <div class="mx-auto max-w-7xl space-y-2">
+        <p v-if="workspaceStore.workspaceDraftStorageError">
+          {{ workspaceStore.workspaceDraftStorageError }}
+        </p>
+        <template v-if="workspaceStore.recoveredWorkspaceDraft">
+          <p class="font-medium">{{ t("shell.draftRecovery.title") }}</p>
+          <p>{{ t("shell.draftRecovery.description") }}</p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="ui-btn-secondary"
+              :disabled="
+                workspaceStore.workspaceLoading ||
+                workspaceStore.isGenerating ||
+                workspaceStore.workspaceSyncing
+              "
+              @click="restoreRecoveredDraft"
+            >
+              {{ t("shell.draftRecovery.restore") }}
+            </button>
+            <button
+              type="button"
+              class="ui-btn-secondary"
+              @click="workspaceStore.downloadRecoveredWorkspaceDraft"
+            >
+              {{ t("shell.draftRecovery.download") }}
+            </button>
+            <button type="button" class="ui-btn-secondary" @click="discardRecoveredDraft">
+              {{ t("shell.draftRecovery.discard") }}
+            </button>
+          </div>
+        </template>
+        <button
+          v-else
+          type="button"
+          class="ui-btn-secondary"
+          @click="workspaceStore.downloadWorkspaceDraft"
+        >
+          {{ t("shell.syncErrors.download") }}
+        </button>
+      </div>
+    </div>
+
+    <div
       v-if="workspaceStore.isAuthenticated && syncErrors.length"
       role="alert"
       class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 lg:px-8"
@@ -279,13 +344,26 @@ async function recoverSynchronization() {
       </div>
     </div>
 
+    <div
+      v-if="workspaceStore.isAuthenticated && workspaceStore.printSubmissionUnknown"
+      role="alert"
+      class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 lg:px-8"
+    >
+      <div class="mx-auto max-w-7xl space-y-2">
+        <p>{{ t("errors.api.print_submission_unknown") }}</p>
+        <button type="button" class="ui-btn-secondary" @click="acknowledgePrintOutcome">
+          {{ t("shell.printOutcome.checked") }}
+        </button>
+      </div>
+    </div>
+
     <main
       class="mx-auto w-full max-w-7xl flex-1 px-4 pt-6 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-8 lg:px-8 lg:py-12"
     >
       <fieldset
         class="m-0 min-w-0 border-0 p-0"
-        :disabled="workspaceStore.workspaceLoading"
-        :inert="workspaceStore.workspaceLoading"
+        :disabled="workspaceStore.workspaceLoading || !!workspaceStore.recoveredWorkspaceDraft"
+        :inert="workspaceStore.workspaceLoading || !!workspaceStore.recoveredWorkspaceDraft"
       >
         <RouterView v-slot="{ Component, route: currentRoute }">
           <Transition name="page-swap" mode="out-in">

@@ -243,7 +243,7 @@ describe("workspace views", () => {
     });
 
     expect(wrapper.text()).toContain("已绑定设备");
-    expect(wrapper.text()).toContain("自动打印");
+    expect(wrapper.text()).not.toContain("自动打印");
     expect(wrapper.findAll(".ui-list-card article")).not.toHaveLength(0);
   });
 
@@ -505,10 +505,10 @@ describe("workspace views", () => {
     });
 
     expect(router.currentRoute.value.fullPath).toBe("/settings/guide");
-    expect(wrapper.text()).toContain("Ink 里最常用的三种打印方式");
-    expect(wrapper.text()).toContain("三种常用使用方式");
+    expect(wrapper.text()).toContain("Ink 里最常用的两种打印方式");
+    expect(wrapper.text()).toContain("两种常用使用方式");
     expect(wrapper.text()).toContain("添加到 iPhone 主屏幕");
-    expect(wrapper.text()).toContain("对话打印、直接打印、定时打印");
+    expect(wrapper.text()).toContain("对话打印、直接打印");
     expect(wrapper.text()).toContain("没找到问题？");
     expect(wrapper.text()).toContain("反馈给作者");
   });

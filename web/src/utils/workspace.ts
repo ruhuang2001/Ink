@@ -1,13 +1,10 @@
-import { translate } from "@/i18n";
 import {
   formatRelativeTimestampForLocale,
   getDeviceStatusLabelForLocale,
-  getPluginInstallationStatusLabelForLocale,
   getPrintStatusLabelForLocale,
   getSourceStatusLabelForLocale,
   getUserRoleLabelForLocale,
 } from "@/i18n/formatters";
-import type { PluginDetails, PluginInstallationStatus } from "@/types/plugins";
 import type {
   DeviceStatus,
   PrintStatus,
@@ -107,45 +104,6 @@ export function getSourceStatusBadgeClass(status: SourceConnectionStatus) {
   }
 
   return getInsetBadgeClass("neutral");
-}
-
-export function getPluginInstallationStatusLabel(status: PluginInstallationStatus) {
-  return getPluginInstallationStatusLabelForLocale(status) || status;
-}
-
-export function getPluginInstallationStatusBadgeClass(status: PluginInstallationStatus) {
-  switch (status) {
-    case "ready":
-      return getInsetBadgeClass("success");
-    case "failed":
-      return getInsetBadgeClass("danger");
-    case "disabled":
-      return getInsetBadgeClass("neutral");
-    default:
-      return getInsetBadgeClass("warning");
-  }
-}
-
-export function getPluginBindingStatusLabel(plugin: PluginDetails) {
-  if (plugin.installation.status === "disabled") {
-    return translate("statuses.pluginBinding.disabled");
-  }
-
-  if (!plugin.binding?.enabled) {
-    return translate("statuses.pluginBinding.disconnected");
-  }
-
-  return getSourceStatusLabel(plugin.binding.status);
-}
-
-export function getPluginBindingStatusBadgeClass(plugin: PluginDetails) {
-  if (plugin.installation.status === "disabled" || !plugin.binding?.enabled) {
-    return getInsetBadgeClass("neutral");
-  }
-
-  return plugin.binding.status === "error"
-    ? getInsetBadgeClass("danger")
-    : getInsetBadgeClass("success");
 }
 
 export function getUserRoleLabel(role: UserRole) {

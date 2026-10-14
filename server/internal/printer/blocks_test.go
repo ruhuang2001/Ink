@@ -4,18 +4,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ruhuang/ink/server/internal/plugins"
+	"github.com/ruhuang/ink/server/internal/content"
 )
 
 func TestRenderBlocksToTextAllTypes(t *testing.T) {
 	t.Parallel()
 
-	blocks := []plugins.ContentBlock{
-		{Type: plugins.BlockHeading, Level: 1, Text: "今日要闻"},
-		{Type: plugins.BlockParagraph, Text: "早上好,这是今天的推送。"},
-		{Type: plugins.BlockImage, URL: "https://example.com/a.png", Alt: "封面"},
-		{Type: plugins.BlockLink, URL: "https://example.com/article", Text: "阅读全文"},
-		{Type: plugins.BlockDivider},
+	blocks := []content.ContentBlock{
+		{Type: content.BlockHeading, Level: 1, Text: "今日要闻"},
+		{Type: content.BlockParagraph, Text: "早上好,这是今天的推送。"},
+		{Type: content.BlockImage, URL: "https://example.com/a.png", Alt: "封面"},
+		{Type: content.BlockLink, URL: "https://example.com/article", Text: "阅读全文"},
+		{Type: content.BlockDivider},
 	}
 
 	rendered, err := RenderBlocksToText(blocks)
@@ -48,8 +48,8 @@ func TestRenderBlocksToTextEmpty(t *testing.T) {
 func TestRenderBlocksToTextInvalidURL(t *testing.T) {
 	t.Parallel()
 
-	blocks := []plugins.ContentBlock{
-		{Type: plugins.BlockImage, URL: "not-a-url"},
+	blocks := []content.ContentBlock{
+		{Type: content.BlockImage, URL: "not-a-url"},
 	}
 	if _, err := RenderBlocksToText(blocks); err == nil {
 		t.Fatalf("expected error for invalid image url")
@@ -59,8 +59,8 @@ func TestRenderBlocksToTextInvalidURL(t *testing.T) {
 func TestRenderBlocksToTextLinkWithoutLabel(t *testing.T) {
 	t.Parallel()
 
-	blocks := []plugins.ContentBlock{
-		{Type: plugins.BlockLink, URL: "https://example.com"},
+	blocks := []content.ContentBlock{
+		{Type: content.BlockLink, URL: "https://example.com"},
 	}
 
 	rendered, err := RenderBlocksToText(blocks)
@@ -76,7 +76,7 @@ func TestRenderBlocksToTextHeadingLevels(t *testing.T) {
 	t.Parallel()
 
 	for _, level := range []int{1, 2, 3} {
-		blocks := []plugins.ContentBlock{{Type: plugins.BlockHeading, Level: level, Text: "标题"}}
+		blocks := []content.ContentBlock{{Type: content.BlockHeading, Level: level, Text: "标题"}}
 		rendered, err := RenderBlocksToText(blocks)
 		if err != nil {
 			t.Fatalf("render level %d: %v", level, err)

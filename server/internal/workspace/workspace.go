@@ -240,55 +240,10 @@ func SeedState(now time.Time) State {
 				Content:   "鸡蛋、吐司、番茄、酸奶。",
 			},
 		},
-		Schedules: []Schedule{
-			{
-				ID:        "schedule-morning",
-				Title:     "早报摘要",
-				Source:    "晨间订阅",
-				TimeLabel: "每天 08:00",
-				DeviceID:  "device-desk",
-				Enabled:   true,
-			},
-			{
-				ID:        "schedule-night",
-				Title:     "晚安提醒",
-				Source:    "睡前便签",
-				TimeLabel: "每天 22:00",
-				DeviceID:  "device-bedroom",
-				Enabled:   true,
-			},
-			{
-				ID:        "schedule-weekend",
-				Title:     "周末清单",
-				Source:    "家庭计划",
-				TimeLabel: "周六 09:30",
-				DeviceID:  "device-desk",
-				Enabled:   false,
-			},
-		},
-		Sources: []SourceConnection{
-			{
-				ID:     "source-worth",
-				Name:   "今天值得看",
-				Type:   "RSS",
-				Note:   "每日文章摘要",
-				Status: SourceConnectionStatusConnected,
-			},
-			{
-				ID:     "source-weather",
-				Name:   "天气提醒",
-				Type:   "在线服务",
-				Note:   "晨间天气简报",
-				Status: SourceConnectionStatusConnected,
-			},
-			{
-				ID:     "source-calendar",
-				Name:   "家庭日历",
-				Type:   "日历",
-				Note:   "最近同步失败，请重新授权",
-				Status: SourceConnectionStatusError,
-			},
-		},
+		// Extension data was removed from the 1.0 runtime. Existing rows are
+		// preserved when loaded, but new accounts must not receive examples.
+		Schedules: []Schedule{},
+		Sources:   []SourceConnection{},
 		Preferences: Preferences{
 			LoginProtectionEnabled:  false,
 			SendConfirmationEnabled: true,

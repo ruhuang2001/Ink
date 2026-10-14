@@ -15,11 +15,11 @@ HTTP, worker, business, and database pool metrics are disabled and the database
 backlog sampler does not run. A Collector, Grafana, and a metrics server are not
 required to process requests.
 
-| Endpoint | Listener | Contract |
-| --- | --- | --- |
-| `GET /healthz` | API | Process liveness, always 200 while accepting requests. No database or provider calls. |
-| `GET /readyz` | API | 200 when PostgreSQL responds and all enabled workers have been started and have not exited; otherwise 503. Database ping has a 1-second timeout. Shutdown immediately makes the probe fail. |
-| `GET /metrics` | Separate `METRICS_ADDR` listener | Prometheus exposition; never registered on the API listener. |
+| Endpoint       | Listener                         | Contract                                                                                                                                                                                    |
+| -------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /healthz` | API                              | Process liveness, always 200 while accepting requests. No database or provider calls.                                                                                                       |
+| `GET /readyz`  | API                              | 200 when PostgreSQL responds and all enabled workers have been started and have not exited; otherwise 503. Database ping has a 1-second timeout. Shutdown immediately makes the probe fail. |
+| `GET /metrics` | Separate `METRICS_ADDR` listener | Prometheus exposition; never registered on the API listener.                                                                                                                                |
 
 `METRICS_ADDR` is empty by default (metrics and sampler disabled). Set it to
 `127.0.0.1:9090` for a Prometheus instance on the same host. Container deployments
@@ -35,16 +35,15 @@ scrape_configs:
   - job_name: ink-api
     scrape_interval: 15s
     static_configs:
-      - targets: ['127.0.0.1:9090']
+      - targets: ["127.0.0.1:9090"]
 ```
 
-The readiness worker set includes plugin fetching, print scheduling, inbox
-cleanup, and print status synchronization when enabled. A transient job failure
+The readiness worker set contains only print-status synchronization when both `WORKERS_ENABLED` and `PRINT_STATUS_SYNC_ENABLED` are true. Intentionally disabled workers do not block readiness; PostgreSQL is still checked. Legacy plugins, schedule delivery and inbox cleanup never start in Ink 1.0. A transient job failure
 does not remove the API from service. Readiness checks worker lifecycle, **not
 forward progress**: a blocked worker with an open done channel still passes.
 When metrics are enabled, worker scan metrics expose progress for monitoring; automatic stall thresholds
 are provided as configurable Prometheus rules, not readiness failures. Readiness does not call AI,
-Memobird, or plugin subprocesses and does not return internal error details.
+Memobird and does not return internal error details.
 
 ## HTTP metrics and logs
 
@@ -94,8 +93,7 @@ histogram_quantile(0.95,
 ## Worker progress and database pool metrics
 
 With metrics enabled, active workers export the following metrics with a static `worker` label:
-`plugin_fetch`, `schedule`, `inbox_janitor`, or `print_status_sync`. Disabled
-print status synchronization exports no worker series.
+`print_status_sync`. Disabling `WORKERS_ENABLED` or `PRINT_STATUS_SYNC_ENABLED` exports no worker series.
 
 - `ink_worker_scans_total{worker,result}` — `success`, `error`, or `canceled`.
 - `ink_worker_scan_duration_seconds{worker}` — completed scan histogram.
@@ -120,8 +118,7 @@ For a running scan, inspect its elapsed time (also exposes a blocked first scan)
 ```
 
 For an idle worker, inspect time since completion against its poll interval.
-Do not apply a universal one-minute heartbeat threshold: the janitor normally
-waits six hours, and execution time depends on batch size and provider budgets.
+Execution time depends on batch size and provider budgets; compare elapsed time with the configured poll interval.
 These are diagnostic signals, not pre-calibrated alerts. Monitor Prometheus
 `up` separately; process restarts reset counters and timestamps.
 
@@ -143,19 +140,15 @@ signals, not query latency or database availability probes.
 
 With metrics enabled, `ink_operations_total{operation,result}` and
 `ink_operation_duration_seconds{operation}` distinguish batch scanning from
-actual operations: `plugin_fetch`, `schedule`, `delivery`, `print_submit`,
-`print_status`, and `png_render`. Results are `success`, `error`, or `canceled`.
-Plugin fetch includes ingestion and success persistence. Delivery success means
-a local print job was created/reused and delivery saved, **not physical printing**.
+actual operations: `print_submit`, `print_status`, and `png_render`. Results are `success`, `error`, or `canceled`. No plugin operations are exported by the 1.0 application.
 Print submission success means provider submission and local persistence succeeded.
 A successful status check may still say not printed; exhausted polling is an error.
 PNG metrics cover actual preview and submission rendering, including size rejection.
-Manual and automatic schedule runs with failed individual deliveries count as errors even when the
-batch API returns no error. Metrics do not change existing retries or state transitions.
+Metrics do not change existing retries or state transitions.
 
 ## Cached database-wide backlog
 
-Only when `METRICS_ADDR` is configured, a background query samples five fixed
+Only when `METRICS_ADDR` is configured, a background query samples three fixed
 queues every 30 seconds with a two-second context timeout. It does not run in the
 default lightweight setup, and Prometheus scrapes never run this query. `ink_backlog_items{queue}`
 and `ink_backlog_oldest_due_timestamp_seconds{queue}` expose counts and oldest due
@@ -165,12 +158,10 @@ On failure the previous complete sample is retained; before first success there
 are no queue series. Timeout limits query time, not the number of matching rows;
 large tables need query-plan/capacity review.
 
-`plugin_fetch` and `schedule` mirror due-claim predicates, excluding active leases.
 `print_status` includes due accepted-job checks and provider-less queued jobs at
 the three-minute unknown-submission recovery boundary. `pending_confirmation`
 and `submitted_print` are informational populations (their timestamps are creation
-times), not actionable overdue work. Counts cover due scans/checks, not all inbox
-items nor schedule-relative retry candidates. A submitted job can also be due for
+times), not actionable overdue work. Legacy plugin queues are not sampled or shown. A submitted job can also be due for
 a status check; these populations must not be added together. All replicas observe
 the same database: aggregate queues with **max, not sum**.
 
@@ -213,7 +204,7 @@ cd server && go test -race ./internal/platform/httpapi ./internal/platform/obser
 Tests cover bounded labels, sensitive-data exclusion, request correlation,
 implicit status/body bytes, panic before/after headers and flush, intentional
 aborts, readiness dependency failures and timeout, and registry/listener route
-isolation. Worker tests exercise all four real runners with idle, blocked,
+isolation. Worker tests cover print-status synchronization with idle, blocked,
 failed, timed-out, canceled, and mixed failure/cancellation scans through the
 metrics HTTP handler. Pool tests scrape without a database and verify canceled
 acquisition counters. Real deployment acceptance should also stop PostgreSQL and verify

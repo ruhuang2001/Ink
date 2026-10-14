@@ -11,13 +11,6 @@ import (
 // confirmation/device waiting populations are informational, never overdue work.
 func (s *Store) SampleBacklog(ctx context.Context, now time.Time) ([]observability.BacklogSample, error) {
 	rows, err := s.db.Query(ctx, `
-		select 'plugin_fetch', count(*), min(next_fetch_at) from plugin_bindings
-		where enabled and status = 'connected' and next_fetch_at <= $1
-		  and (fetch_lease_until is null or fetch_lease_until < $1)
-		union all
-		select 'schedule', count(*), min(next_run_at) from print_schedules
-		where enabled and next_run_at <= $1 and (lease_until is null or lease_until < $1)
-		union all
 		select 'print_status', count(*), min(due_at) from (
 		  select coalesce(j.next_status_check_at, j.updated_at) as due_at
 		  from print_jobs j join printer_bindings b on b.id = j.printer_binding_id and b.user_id = j.user_id

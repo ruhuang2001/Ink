@@ -140,6 +140,41 @@ describe("http client", () => {
     });
   });
 
+  it.each([new TypeError("response body disconnected"), new SyntaxError("invalid JSON")])(
+    "normalizes a successful response whose body fails with %s",
+    async (failure) => {
+      const response = new Response(null, { status: 201 });
+      vi.spyOn(response, "json").mockRejectedValueOnce(failure);
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+      await expect(request("/api/accepted", { method: "POST", body: "{}" })).rejects.toMatchObject({
+        status: 0,
+        code: "network_error",
+      });
+    },
+  );
+
+  it("preserves a rejected HTTP status when its error body cannot be read", async () => {
+    const response = new Response(null, { status: 400 });
+    vi.spyOn(response, "json").mockRejectedValueOnce(new TypeError("response body disconnected"));
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+    await expect(request("/api/rejected", { method: "POST", body: "{}" })).rejects.toMatchObject({
+      status: 400,
+      code: "request_failed",
+    });
+  });
+
+  it("preserves explicit HTTP business errors", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "invalid_printer_input", message: "invalid title" }), {
+        status: 400,
+      }),
+    );
+    await expect(request("/api/rejected", { method: "POST", body: "{}" })).rejects.toMatchObject({
+      status: 400,
+      code: "invalid_printer_input",
+    });
+  });
+
   it("cancels an abandoned 401 body and propagates a transient refresh failure", async () => {
     const response = new Response("expired", { status: 401 });
     const cancel = vi.spyOn(response.body!, "cancel");

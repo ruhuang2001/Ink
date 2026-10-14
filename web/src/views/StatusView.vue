@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { RouterLink } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
@@ -166,59 +165,6 @@ async function submitAddDevice() {
                   }}
                 </button>
               </div>
-            </article>
-          </div>
-        </section>
-
-        <section>
-          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 class="text-base leading-6 font-semibold text-stone-900">
-                {{ t("status.autoPrint") }}
-              </h3>
-            </div>
-            <RouterLink to="/prints" class="ui-btn-secondary px-3 py-1.5 text-sm">
-              {{ t("status.actions.goToPrints") }}
-            </RouterLink>
-          </div>
-
-          <div
-            v-if="workspaceStore.activeSchedules.length === 0"
-            class="border-y border-stone-200 px-6 py-10 text-center"
-          >
-            <h4 class="text-base font-semibold text-stone-900">
-              {{ t("status.emptySchedules") }}
-            </h4>
-          </div>
-
-          <div v-else class="ui-list-card">
-            <article
-              v-for="task in workspaceStore.activeSchedules"
-              :key="task.id"
-              class="ui-list-row flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-stone-900">{{ task.title }}</p>
-                <p class="mt-0.5 text-sm text-stone-500">
-                  {{ task.source }} · {{ task.timeLabel }} ·
-                  {{ workspaceStore.getDeviceName(task.deviceId) }}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                class="ui-toggle"
-                :class="{ 'is-on': task.enabled }"
-                :aria-label="
-                  t(task.enabled ? 'status.actions.disableTask' : 'status.actions.enableTask', {
-                    title: task.title,
-                  })
-                "
-                :aria-pressed="task.enabled"
-                @click="workspaceStore.toggleSchedule(task.id)"
-              >
-                <span class="ui-toggle-thumb" />
-              </button>
             </article>
           </div>
         </section>

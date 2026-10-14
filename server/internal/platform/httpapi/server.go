@@ -15,39 +15,13 @@ import (
 
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/content"
 	"github.com/ruhuang/ink/server/internal/feedback"
 	"github.com/ruhuang/ink/server/internal/platform/observability"
-	"github.com/ruhuang/ink/server/internal/pluginfetch"
-	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
-	"github.com/ruhuang/ink/server/internal/schedule"
 	"github.com/ruhuang/ink/server/internal/session"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
-
-type PluginService interface {
-	ListAdminInstallations(ctx context.Context, accessToken string) ([]plugins.PluginDetails, error)
-	UploadPlugin(ctx context.Context, accessToken string, filename string, source io.Reader) (plugins.PluginDetails, error)
-	InstallFromGit(ctx context.Context, accessToken string, input plugins.GitInstallInput) (plugins.PluginDetails, error)
-	DisableInstallation(ctx context.Context, accessToken string, installationID string) (plugins.PluginDetails, error)
-	ListUserPlugins(ctx context.Context, accessToken string) ([]plugins.PluginDetails, error)
-	GetUserPlugin(ctx context.Context, accessToken string, installationID string) (plugins.PluginDetails, error)
-	SaveBinding(ctx context.Context, accessToken string, installationID string, input plugins.BindingInput) (plugins.PluginDetails, error)
-	TestBinding(ctx context.Context, accessToken string, installationID string, input plugins.BindingInput) (plugins.ValidationResult, error)
-}
-
-type PluginRunService interface {
-	RunManual(ctx context.Context, accessToken string, installationID string) (pluginfetch.ManualRunResult, error)
-}
-
-type ScheduleService interface {
-	List(ctx context.Context, accessToken string) ([]schedule.ScheduleView, error)
-	Create(ctx context.Context, accessToken string, input schedule.UpsertInput) (schedule.ScheduleView, error)
-	Update(ctx context.Context, accessToken string, scheduleID string, input schedule.UpsertInput) (schedule.ScheduleView, error)
-	Toggle(ctx context.Context, accessToken string, scheduleID string) (schedule.ScheduleView, error)
-	Delete(ctx context.Context, accessToken string, scheduleID string) error
-	RunNow(ctx context.Context, accessToken string, scheduleID string) (schedule.ManualPrintResult, error)
-}
 
 type FeedbackService interface {
 	Submit(ctx context.Context, accessToken string, input feedback.SubmitInput) error
@@ -56,27 +30,21 @@ type FeedbackService interface {
 const (
 	defaultJSONMaxBytes   int64 = 1 << 20
 	workspaceJSONMaxBytes int64 = 4 << 20
-
-	pluginUploadMultipartMemory int64 = 32 << 10
 )
 
 // Server exposes the HTTP handlers for authentication endpoints.
 type Server struct {
-	auth                 auth.AuthService
-	workspace            workspace.WorkspaceService
-	ai                   ai.AIService
-	printer              printer.PrinterService
-	feedback             FeedbackService
-	plugins              PluginService
-	pluginRuns           PluginRunService
-	schedules            ScheduleService
-	logger               *slog.Logger
-	rateLimiter          *LoginRateLimiter
-	trustedProxyCIDRs    []netip.Prefix
-	trustedProxyHeader   string
-	pluginUploadMaxBytes int64
-	metrics              *observability.Metrics
-	ready                func(context.Context) error
+	auth               auth.AuthService
+	workspace          workspace.WorkspaceService
+	ai                 ai.AIService
+	printer            printer.PrinterService
+	feedback           FeedbackService
+	logger             *slog.Logger
+	rateLimiter        *LoginRateLimiter
+	trustedProxyCIDRs  []netip.Prefix
+	trustedProxyHeader string
+	metrics            *observability.Metrics
+	ready              func(context.Context) error
 }
 
 // NewServer wires the auth service, logger, and login rate limiter into an HTTP server.
@@ -86,32 +54,24 @@ func NewServer(
 	aiService ai.AIService,
 	printerService printer.PrinterService,
 	feedbackService FeedbackService,
-	pluginService PluginService,
-	pluginRunService PluginRunService,
-	scheduleService ScheduleService,
 	logger *slog.Logger,
 	rateWindow time.Duration,
 	rateMax int,
 	rateMaxEntries int,
 	trustedProxyCIDRs []netip.Prefix,
 	trustedProxyHeader string,
-	pluginUploadMaxBytes int64,
 	options ...func(*Server),
 ) *Server {
 	s := &Server{
-		auth:                 authService,
-		workspace:            workspaceService,
-		ai:                   aiService,
-		printer:              printerService,
-		feedback:             feedbackService,
-		plugins:              pluginService,
-		pluginRuns:           pluginRunService,
-		schedules:            scheduleService,
-		logger:               logger,
-		rateLimiter:          NewLoginRateLimiter(rateWindow, rateMax, rateMaxEntries),
-		trustedProxyCIDRs:    append([]netip.Prefix(nil), trustedProxyCIDRs...),
-		trustedProxyHeader:   trustedProxyHeader,
-		pluginUploadMaxBytes: pluginUploadMaxBytes,
+		auth:               authService,
+		workspace:          workspaceService,
+		ai:                 aiService,
+		printer:            printerService,
+		feedback:           feedbackService,
+		logger:             logger,
+		rateLimiter:        NewLoginRateLimiter(rateWindow, rateMax, rateMaxEntries),
+		trustedProxyCIDRs:  append([]netip.Prefix(nil), trustedProxyCIDRs...),
+		trustedProxyHeader: trustedProxyHeader,
 	}
 	for _, option := range options {
 		option(s)
@@ -138,15 +98,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/ai/config", s.wrap(s.handleGetAIConfig))
 	mux.HandleFunc("PUT /api/v1/admin/ai/config", s.wrap(s.handleSaveAIConfig))
 	mux.HandleFunc("POST /api/v1/ai/reply", s.wrap(s.handleGenerateAIReply))
-	mux.HandleFunc("GET /api/v1/admin/plugins", s.wrap(s.handleListAdminPlugins))
-	mux.HandleFunc("POST /api/v1/admin/plugins/upload", s.wrap(s.handleUploadPlugin))
-	mux.HandleFunc("POST /api/v1/admin/plugins/install-from-git", s.wrap(s.handleInstallPluginFromGit))
-	mux.HandleFunc("POST /api/v1/admin/plugins/{installationID}/disable", s.wrap(s.handleDisablePlugin))
-	mux.HandleFunc("GET /api/v1/plugins", s.wrap(s.handleListPlugins))
-	mux.HandleFunc("GET /api/v1/plugins/{installationID}", s.wrap(s.handleGetPlugin))
-	mux.HandleFunc("PUT /api/v1/plugins/{installationID}/binding", s.wrap(s.handleSavePluginBinding))
-	mux.HandleFunc("POST /api/v1/plugins/{installationID}/test", s.wrap(s.handleTestPluginBinding))
-	mux.HandleFunc("POST /api/v1/plugins/{installationID}/run", s.wrap(s.handleRunPlugin))
 	mux.HandleFunc("GET /api/v1/printers", s.wrap(s.handleListPrinters))
 	mux.HandleFunc("POST /api/v1/printers/bind", s.wrap(s.handleBindPrinter))
 	mux.HandleFunc("DELETE /api/v1/printers/{printerID}", s.wrap(s.handleDeletePrinter))
@@ -159,12 +110,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/print-jobs/{jobID}/submit", s.wrap(s.handleSubmitPrintJob))
 	mux.HandleFunc("POST /api/v1/print-jobs/{jobID}/cancel", s.wrap(s.handleCancelPrintJob))
 	mux.HandleFunc("PUT /api/v1/print-jobs/{jobID}/device", s.wrap(s.handleUpdatePrintJobDevice))
-	mux.HandleFunc("GET /api/v1/print-schedules", s.wrap(s.handleListPrintSchedules))
-	mux.HandleFunc("POST /api/v1/print-schedules", s.wrap(s.handleCreatePrintSchedule))
-	mux.HandleFunc("PUT /api/v1/print-schedules/{scheduleID}", s.wrap(s.handleUpdatePrintSchedule))
-	mux.HandleFunc("POST /api/v1/print-schedules/{scheduleID}/run", s.wrap(s.handleRunPrintSchedule))
-	mux.HandleFunc("POST /api/v1/print-schedules/{scheduleID}/toggle", s.wrap(s.handleTogglePrintSchedule))
-	mux.HandleFunc("DELETE /api/v1/print-schedules/{scheduleID}", s.wrap(s.handleDeletePrintSchedule))
 	return s.observeHTTP(mux)
 }
 
@@ -228,7 +173,7 @@ type createPrintJobRequest struct {
 type printPreviewRequest struct {
 	Title   string                 `json:"title"`
 	Content string                 `json:"content"`
-	Blocks  []plugins.ContentBlock `json:"blocks,omitempty"`
+	Blocks  []content.ContentBlock `json:"blocks,omitempty"`
 }
 
 type updatePrintJobDeviceRequest struct {
@@ -237,25 +182,6 @@ type updatePrintJobDeviceRequest struct {
 
 type submitFeedbackRequest struct {
 	Content string `json:"content"`
-}
-
-type pluginBindingRequest struct {
-	Enabled bool              `json:"enabled"`
-	Config  map[string]any    `json:"config"`
-	Secrets map[string]string `json:"secrets"`
-}
-
-type printScheduleRequest struct {
-	Title                string                 `json:"title"`
-	PluginInstallationID string                 `json:"pluginInstallationId"`
-	FrequencyType        schedule.FrequencyType `json:"frequencyType"`
-	Timezone             string                 `json:"timezone"`
-	Hour                 int                    `json:"hour"`
-	Minute               int                    `json:"minute"`
-	Weekdays             []int                  `json:"weekdays"`
-	PrintPolicy          schedule.PrintPolicy   `json:"printPolicy"`
-	DeviceID             string                 `json:"deviceId"`
-	Enabled              bool                   `json:"enabled"`
 }
 
 type errorEnvelope struct {
@@ -805,138 +731,6 @@ func (s *Server) handleUpdatePrintJobDevice(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeJSON(w, http.StatusOK, map[string]workspace.PrintJob{"printJob": job})
-}
-
-func (s *Server) handleListPrintSchedules(w http.ResponseWriter, r *http.Request, requestID string) {
-	accessToken := bearerToken(r.Header.Get("Authorization"))
-	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
-		return
-	}
-
-	items, err := s.schedules.List(r.Context(), accessToken)
-	if err != nil {
-		s.writeScheduleError(w, requestID, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string][]schedule.ScheduleView{"schedules": items})
-}
-
-func (s *Server) handleCreatePrintSchedule(w http.ResponseWriter, r *http.Request, requestID string) {
-	accessToken := bearerToken(r.Header.Get("Authorization"))
-	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
-		return
-	}
-
-	var payload printScheduleRequest
-	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
-		return
-	}
-
-	item, err := s.schedules.Create(r.Context(), accessToken, schedule.UpsertInput{
-		Title:                payload.Title,
-		PluginInstallationID: payload.PluginInstallationID,
-		FrequencyType:        payload.FrequencyType,
-		Timezone:             payload.Timezone,
-		Hour:                 payload.Hour,
-		Minute:               payload.Minute,
-		Weekdays:             payload.Weekdays,
-		PrintPolicy:          payload.PrintPolicy,
-		DeviceID:             payload.DeviceID,
-		Enabled:              payload.Enabled,
-	})
-	if err != nil {
-		s.writeScheduleError(w, requestID, err)
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, map[string]schedule.ScheduleView{"schedule": item})
-}
-
-func (s *Server) handleUpdatePrintSchedule(w http.ResponseWriter, r *http.Request, requestID string) {
-	accessToken := bearerToken(r.Header.Get("Authorization"))
-	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
-		return
-	}
-
-	var payload printScheduleRequest
-	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, false) {
-		return
-	}
-
-	item, err := s.schedules.Update(r.Context(), accessToken, r.PathValue("scheduleID"), schedule.UpsertInput{
-		Title:                payload.Title,
-		PluginInstallationID: payload.PluginInstallationID,
-		FrequencyType:        payload.FrequencyType,
-		Timezone:             payload.Timezone,
-		Hour:                 payload.Hour,
-		Minute:               payload.Minute,
-		Weekdays:             payload.Weekdays,
-		PrintPolicy:          payload.PrintPolicy,
-		DeviceID:             payload.DeviceID,
-		Enabled:              payload.Enabled,
-	})
-	if err != nil {
-		s.writeScheduleError(w, requestID, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]schedule.ScheduleView{"schedule": item})
-}
-
-func (s *Server) handleRunPrintSchedule(w http.ResponseWriter, r *http.Request, requestID string) {
-	accessToken := bearerToken(r.Header.Get("Authorization"))
-	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
-		return
-	}
-
-	var payload struct{}
-	if !decodeJSON(w, r, requestID, &payload, defaultJSONMaxBytes, true) {
-		return
-	}
-
-	result, err := s.schedules.RunNow(r.Context(), accessToken, r.PathValue("scheduleID"))
-	if err != nil {
-		s.writeScheduleError(w, requestID, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]schedule.ManualPrintResult{"result": result})
-}
-
-func (s *Server) handleTogglePrintSchedule(w http.ResponseWriter, r *http.Request, requestID string) {
-	accessToken := bearerToken(r.Header.Get("Authorization"))
-	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
-		return
-	}
-
-	item, err := s.schedules.Toggle(r.Context(), accessToken, r.PathValue("scheduleID"))
-	if err != nil {
-		s.writeScheduleError(w, requestID, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]schedule.ScheduleView{"schedule": item})
-}
-
-func (s *Server) handleDeletePrintSchedule(w http.ResponseWriter, r *http.Request, requestID string) {
-	accessToken := bearerToken(r.Header.Get("Authorization"))
-	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
-		return
-	}
-
-	if err := s.schedules.Delete(r.Context(), accessToken, r.PathValue("scheduleID")); err != nil {
-		s.writeScheduleError(w, requestID, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

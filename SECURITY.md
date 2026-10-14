@@ -2,13 +2,13 @@
 
 ## Supported versions
 
-Ink is still in early development. Security fixes are applied to:
+For the 1.0 line, security fixes apply to the latest released 1.x version and `main`. Before a stable 1.0 is published, release candidates remain pre-release software and do not constitute a stable support promise.
 
-| Version                     | Supported |
-| --------------------------- | --------- |
-| `main`                      | yes       |
-| latest `0.x` release        | yes       |
-| older pre-release snapshots | no        |
+| Version                                  | Supported                                   |
+| ---------------------------------------- | ------------------------------------------- |
+| `main`                                   | yes                                         |
+| latest stable `1.x` release              | yes, after publication                      |
+| older releases and pre-release snapshots | no; upgrade to the latest supported release |
 
 ## Reporting a vulnerability
 
@@ -22,11 +22,9 @@ Please use GitHub private vulnerability reporting for this repository:
 
 Do not open a public issue for undisclosed vulnerabilities, credentials, token leaks, or exploit details.
 
-## Plugin threat boundary
+## Legacy plugin data
 
-Ink plugins are trusted server-side code. Plugin installation, dependency resolution and build hooks, and runtime entrypoints can execute code with the server process's privileges. Restricting installation endpoints to administrators controls who may install a plugin; it does not make an untrusted plugin or dependency safe.
-
-Install plugins only from sources whose code and dependency chain you trust. Ink must not offer an untrusted public plugin marketplace until plugin installation and execution have an appropriate sandbox and enforceable capability model.
+Ink 1.0 removes plugin installation, execution and scheduling from the running application while preserving historical database rows and files. Archival plugin files and dependencies can contain executable code; treat them as private backup material and do not execute them during ordinary recovery. Any future plugin feature needs a separately reviewed security and compatibility contract.
 
 ## Browser session boundary
 
@@ -38,7 +36,7 @@ Moving refresh credentials to `HttpOnly`, `Secure`, and appropriately `SameSite`
 
 Pull requests run npm dependency review, `pnpm audit`, Go reachability analysis through `govulncheck`, and CodeQL analysis for Go and JavaScript/TypeScript. Vulnerability exceptions must be narrow, evidence-based, documented beside the affected manifest, and have an expiry date.
 
-`server/osv-scanner.toml` currently records one temporary exception for `GO-2026-5932`: `openpgp` is present transitively through `go-git`, but Ink does not import that package and `govulncheck` reports no reachable package or symbol. The exception expires on 2026-11-09 and must not be renewed without another applicability review.
+The removed plugin runtime no longer depends on `go-git` or its OpenPGP dependencies. The former `GO-2026-5932` exception has been removed; there are no active vulnerability exceptions.
 
 ## What to include
 

@@ -130,3 +130,39 @@ func workspaceTestDatabase(t *testing.T) *pgxpool.Pool {
 	applyMigration(t, ctx, db, 10)
 	return db
 }
+
+func TestWorkspaceSavePreservesArchivedExtensionFields(t *testing.T) {
+	db := workspaceTestDatabase(t)
+	ctx := t.Context()
+	if _, err := db.Exec(ctx, `insert into users (id,email,password_hash,display_name,status)
+ values ('archive-user','archive@example.com','hash','Archive','active');
+ insert into workspace_snapshots(user_id,state) values ('archive-user',
+ '{"schedules":[{"id":"legacy-plan","extra":"retain"}],"sources":[{"id":"legacy-source","unknownField":42}]}'::jsonb)`); err != nil {
+		t.Fatal(err)
+	}
+	store := New(db)
+	loaded, err := store.FindByUserID(ctx, "archive-user")
+	if err != nil || loaded == nil {
+		t.Fatalf("load archive: %v", err)
+	}
+	loaded.Schedules = []workspace.Schedule{{ID: "replacement"}}
+	loaded.Sources = nil
+	loaded.Conversations = []workspace.Conversation{{ID: "new-draft", Draft: "new content"}}
+	if _, err := store.SaveByUserID(ctx, "archive-user", *loaded, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	var preserved bool
+	if err := db.QueryRow(ctx, `select
+ state->'schedules' = '[{"id":"legacy-plan","extra":"retain"}]'::jsonb
+ and state->'sources' = '[{"id":"legacy-source","unknownField":42}]'::jsonb
+ and state->'conversations'->0->>'draft' = 'new content'
+ from workspace_snapshots where user_id='archive-user'`).Scan(&preserved); err != nil {
+		t.Fatal(err)
+	}
+	if !preserved {
+		t.Fatal("core save must preserve original archival JSON including unknown fields")
+	}
+	if _, err := store.SaveByUserID(ctx, "archive-user", *loaded, time.Now()); !errors.Is(err, workspace.ErrConflict) {
+		t.Fatalf("archive preservation bypassed revision CAS: %v", err)
+	}
+}

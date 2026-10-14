@@ -4,20 +4,19 @@
 
 # Ink
 
-Ink is a self-hosted workspace for collecting content and printing it on Memobird thermal printers. It combines a Vue web console, a Go API, PostgreSQL persistence, scheduled source plugins, and a server-side PNG print pipeline.
+Ink is a self-hosted workspace for writing content, using AI assistance, and printing it on Memobird thermal printers. It combines a Vue web console, a Go API, PostgreSQL persistence, and a server-side PNG print pipeline.
 
-> Ink is an early `0.x` project. APIs, database schemas, and plugin contracts may change before `1.0`.
+The 1.0 candidate scope is single-instance self-hosting: accounts, devices, drafts and conversations, AI configuration and replies, PNG preview, manual printing, and print status/history. Plugin installation, fetching and plugin schedules are removed from the running application. Existing plugin tables, stored state and installation files are preserved for migration and archival recovery.
 
 Current development focuses on the basic printing flow: sign in, bind a device,
-write and preview content, submit a job, and check its status and history. AI,
-trusted plugins, and recurring schedules remain available; their expansion is
-deferred while the core is stabilized. See [Maintenance scope](docs/MAINTENANCE.md).
+write and preview content, submit a job, and check its status and history.
+See [Maintenance scope](docs/MAINTENANCE.md) for the remaining real-device acceptance checks. A passing build is not evidence of a production or physical-printer deployment.
 
 ## What it does
 
-- Manage Memobird devices, print jobs, and recurring print schedules.
-- Install trusted Node.js or Python source plugins from ZIP archives or allowlisted Git hosts.
-- Fetch external content on a plugin-defined interval, deduplicate it, and deliver it through independent print schedules.
+- Manage Memobird devices and manual print jobs.
+- Save drafts, conversations and preferences with revision conflict protection.
+- Configure an AI provider and generate replies.
 - Render previews and physical jobs through the same 384px-wide PNG pipeline.
 
 ## Self-hosting
@@ -40,7 +39,7 @@ make dev-web
 - [Maintenance scope and stability checklist](docs/MAINTENANCE.md)
 - [Workspace synchronization API](docs/WORKSPACE_API.md)
 - [Database backup and restore verification](docs/BACKUP_RESTORE.md)
-- [Plugin development and protocol](docs/PLUGIN_SPEC.md)
+- [Historical plugin protocol](docs/PLUGIN_SPEC.md) (legacy reference; unavailable in 1.0)
 - [Server reference](server/README.md)
 - [Frontend reference](web/README.md)
 - [Contributing](CONTRIBUTING.md)
@@ -48,7 +47,7 @@ make dev-web
 
 ## Security limits
 
-Plugins are trusted server-side programs. Their dependency installers and entrypoints can run with the API process's privileges. Permission declarations are review metadata, not a sandbox. Install only code and dependencies you trust; do not expose plugin installation to untrusted users.
+The 1.0 API does not install or execute plugins. Retained plugin backups may still contain executable code; keep them private and do not run unreviewed files during recovery.
 
 The browser currently stores access and refresh session tokens in Web Storage. Deploy Ink behind HTTPS, use a restrictive Content Security Policy, and treat browser XSS as a session-compromise risk until cookie-based refresh sessions are implemented.
 
@@ -61,6 +60,8 @@ make check-local-ci
 ```
 
 `make check-local-ci` runs the web and server CI jobs locally with `act`, plus the API smoke test against an isolated PostgreSQL container.
+
+Version tags run quality checks against the exact candidate commit and create a draft release. Publish an RC or stable release through the explicit release workflow only after reviewing its scope and evidence. See [Release procedure](docs/SELF_HOSTING.md#release-candidates-and-version-policy).
 
 ## License
 

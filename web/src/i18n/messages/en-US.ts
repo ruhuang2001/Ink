@@ -12,13 +12,13 @@ const enUS = {
     status: {
       label: "Devices",
       title: "Devices",
-      description: "Review device bindings, schedules, and recent print history.",
+      description: "Review device bindings and recent print history.",
       navHint: "Devices and jobs",
     },
     prints: {
       label: "Prints",
       title: "Prints",
-      description: "Manage pending items, schedules, and print history in one place.",
+      description: "Manage pending items and print history in one place.",
       navHint: "Print flow",
     },
     tutorial: {
@@ -99,20 +99,6 @@ const enUS = {
           note: "Bedtime reminders",
         },
       },
-      schedules: {
-        morning: {
-          title: "Morning digest",
-          source: "Morning feed",
-        },
-        night: {
-          title: "Good night reminder",
-          source: "Bedtime note",
-        },
-        weekend: {
-          title: "Weekend list",
-          source: "Home plan",
-        },
-      },
       printJobs: {
         pending: {
           title: "Good night note",
@@ -135,31 +121,12 @@ const enUS = {
           content: "Eggs, toast, tomatoes, yogurt.",
         },
       },
-      sources: {
-        worth: {
-          name: "Worth reading today",
-          type: "RSS",
-          note: "Daily article summary",
-        },
-        weather: {
-          name: "Weather reminder",
-          type: "Online service",
-          note: "Morning weather brief",
-        },
-        calendar: {
-          name: "Family calendar",
-          type: "Calendar",
-          note: "The latest update failed. Re-authorize to continue.",
-        },
-      },
     },
     summary: {
       welcomeLabel: "Shape content and get ready to print",
       boundDevices: "Bound devices",
-      enabledSchedules: "Enabled schedules",
       completedToday: "Completed today",
       deviceCount: "{count}",
-      scheduleCount: "{count}",
       printCount: "{count}",
     },
     flash: {
@@ -177,19 +144,6 @@ const enUS = {
       deviceAdded: "Added a new device.",
       deviceDeleted: "Device deleted.",
       deviceRemoved: "Device removed.",
-      scheduleUpdated: "Updated the scheduled task status.",
-      scheduleCreated: "Created a new scheduled task.",
-      scheduleDeviceUpdated: "Updated the schedule device.",
-      scheduleDeleted: "Scheduled task deleted.",
-      sourceConnected: "Plugin connected.",
-      sourceDisconnected: "Plugin disconnected.",
-      pluginUploaded: "Plugin uploaded and installed.",
-      pluginInstalledFromGit: "Pulled the plugin repository and finished installation.",
-      pluginDisabled: "Plugin disabled.",
-      pluginTestPassed: "Plugin connection test passed.",
-      pluginTestFailed: "Plugin connection test failed.",
-      pluginConfigSaved: "Plugin configuration saved.",
-      pluginConfigEnabled: "Plugin configuration saved and enabled.",
       defaultDeviceUpdated: "Default device updated.",
       themeUpdated: "Theme preference updated.",
       sendConfirmationEnabled: "New content will go straight into the print queue.",
@@ -206,10 +160,11 @@ const enUS = {
     },
     errors: {
       syncPrintStatus: "Unable to load print status. Please try again later.",
+      localDraftStorage:
+        "This browser could not preserve your unsynced draft. Download it before leaving.",
       syncWorkspace: "Unable to save data. Please try again later.",
       loadAccountData: "Unable to load account data. Please try again later.",
-      loadIntegrations:
-        "Unable to load plugins, devices, and AI configuration. Please try again later.",
+      loadIntegrations: "Unable to load devices and AI configuration. Please try again later.",
       promptRequired: "Enter the content you want Ink to shape first.",
       regenerateUnavailable: "There is no content available to regenerate right now.",
       generateReply: "Unable to generate a reply right now. Please try again later.",
@@ -224,23 +179,15 @@ const enUS = {
       deviceIdRequired: "Enter the Memobird device ID.",
       bindDevice: "Failed to bind the device. Please try again later.",
       deleteDevice: "Failed to delete the device. Please try again later.",
-      scheduleDeviceRequired: "Choose an available device first.",
-      pluginSourceRequired: "Choose a plugin source first.",
-      createSchedule: "Failed to create the scheduled task. Please try again later.",
-      updateSchedule: "Failed to update the scheduled task. Please try again later.",
-      deleteSchedule: "Failed to delete the scheduled task. Please try again later.",
       authRequired: "Your login session has expired. Please sign in again.",
-      uploadPlugin: "Failed to upload the plugin. Please try again later.",
-      installPluginFromGit: "Failed to install the plugin from Git. Please try again later.",
-      disablePlugin: "Failed to disable the plugin. Please try again later.",
-      testPlugin: "Failed to test the plugin connection. Please try again later.",
-      savePluginConfiguration: "Failed to save the plugin configuration. Please try again later.",
       defaultDeviceOffline: "An unbound device cannot be set as default.",
       saveAIConfig: "Failed to save the AI configuration. Please try again later.",
       loadAccountDataRelogin: "Unable to load account data. Please sign in again.",
       login: "Sign-in failed. Please try again later.",
       changePassword: "Failed to change the password. Please try again later.",
       feedbackLoginRequired: "Sign in before sending feedback.",
+      feedbackSubmissionUnknown:
+        "The feedback submission result is unknown. The author may already have received the print. Check before sending it again to avoid a duplicate.",
       submitFeedback: "Failed to send feedback. Please try again later.",
       createAccount: "Failed to create the account. Please try again later.",
     },
@@ -252,20 +199,9 @@ const enUS = {
       manualPrintTitle: "Manual note",
       manualPrintContent: "A new print item has been created. You can keep editing it later.",
       manualPrintSource: "Manual print",
-      scheduleTitle: "New scheduled task",
-      scheduleManualSource: "Created manually",
-      scheduleTimeFallback: "Every day 19:30",
       deviceName: "Memobird {count}",
       removedDevice: "Removed device",
       devicePendingNote: "Waiting to bind",
-      pluginGitRepo: "Git repository: {url}",
-      pluginDefaultNote: "Can be used as a scheduled print content source",
-      pluginRuntimeNode: "Node",
-      pluginRuntimePython: "Python",
-      pluginSourceGit: "Git plugin",
-      pluginSourceUpload: "Uploaded plugin",
-      sourceConnectedNote: "Connected normally",
-      sourceDisconnectedNote: "Not connected to this source yet",
       messageAuthorUser: "Me",
       messageAuthorAssistant: "Ink",
     },
@@ -278,12 +214,26 @@ const enUS = {
   },
   shell: {
     routeLoadError: "This page could not load. Check your connection and retry.",
+    printOutcome: {
+      checked: "I checked the device",
+      confirm:
+        "Have you checked the device output and understood that submitting again may print a duplicate?",
+    },
+    draftRecovery: {
+      title: "Unsynced account draft found",
+      description:
+        "This draft is shown only after signing in to its account. Restore replaces your current conversations and preferences, then saves against the latest server revision. You can download it first.",
+      restore: "Restore draft",
+      download: "Download unsynced draft",
+      discard: "Discard backup",
+      confirmRestore: "Replace your current conversations and preferences with this backup?",
+      confirmDiscard: "Discard this unsynced backup?",
+    },
     syncErrors: {
       title: "Some data could not be synchronized",
       workspace: "Workspace: {message}",
       printers: "Devices and printing: {message}",
       ai: "AI service: {message}",
-      extensions: "Extensions: {message}",
       retry: "Retry",
       reload: "Reload workspace",
       download: "Download local draft JSON",
@@ -384,7 +334,6 @@ const enUS = {
   },
   status: {
     boundDevices: "Bound devices",
-    autoPrint: "Auto print",
     recentPrints: "Recent prints",
     defaultDevicePrefix: "Default · ",
     emptyDevices: {
@@ -394,15 +343,11 @@ const enUS = {
       anonymous:
         "This is a demo workspace while signed out. After you sign in, this area switches to your real device list.",
     },
-    emptySchedules: "No auto-print schedules yet",
     actions: {
       addDevice: "Add device",
       setDefault: "Set as default",
       remove: "Remove",
       unbind: "Unbind",
-      goToPrints: "Go to prints",
-      enableTask: "Enable {title}",
-      disableTask: "Disable {title}",
     },
     dialog: {
       title: "Add device",
@@ -427,8 +372,8 @@ const enUS = {
   tutorial: {
     hero: {
       eyebrow: "Tutorial",
-      title: "The three most common ways to print in Ink",
-      subtitle: "Chat to print, direct print, and scheduled print",
+      title: "The two most common ways to print in Ink",
+      subtitle: "Chat to print and direct print",
     },
     features: {
       chat: {
@@ -439,10 +384,6 @@ const enUS = {
         title: "Print view",
         body: "Create a note manually when you already know what to print.",
       },
-      schedule: {
-        title: "Scheduled print",
-        body: "Send content automatically at a fixed time.",
-      },
     },
     actions: {
       goToConversations: "Go to conversations",
@@ -450,7 +391,7 @@ const enUS = {
     },
     stepsSection: {
       eyebrow: "How it works",
-      title: "Three common ways to use Ink",
+      title: "Two common ways to use Ink",
     },
     steps: {
       chat: {
@@ -462,11 +403,6 @@ const enUS = {
         title: "Create and print directly from the print view",
         body: "If you already know the content, go straight to the print view and create a note manually without starting in chat first.",
         note: "Best for a quick fixed sentence or a temporary notice.",
-      },
-      schedule: {
-        title: "Use scheduled printing for recurring content",
-        body: "Create an automatic task in the print view so specific content is sent to the device on a fixed schedule, such as morning reminders or recurring notices.",
-        note: "Best for recurring content you want to print steadily.",
       },
     },
     mobile: {
@@ -485,11 +421,6 @@ const enUS = {
         question: "Should I start from the conversation view or the print view?",
         answer:
           "If you are still shaping the content and want Ink to polish it, start in conversations. If the content is already fixed and you only want to print it immediately, go straight to prints.",
-      },
-      scheduleUse: {
-        question: "What is scheduled printing good for?",
-        answer:
-          "It works well for recurring content you want to send every day or every week, such as reminders, to-do summaries, or recurring greetings.",
       },
       contentTooLong: {
         question: "What if the conversation content is too long to print well?",
@@ -612,85 +543,15 @@ const enUS = {
         },
       },
     },
-    plugins: {
-      testPassed: "Connection test passed.",
-      title: "Plugins",
-      installed: "Installed plugins",
-      add: "Add plugin",
-      empty: "No plugins yet",
-      configure: "Configure plugin",
-      disabling: "Disabling...",
-      disable: "Disable",
-      addDialog: {
-        title: "Add plugin",
-        securityTitle: "Install trusted plugins only",
-        securityWarning:
-          "Plugins and their dependencies execute on the server with the server process privileges. Install only from trusted sources.",
-        permissionsWarning:
-          "Requested permission badges are declarations, not grants enforced by a sandbox.",
-        zipUpload: "Upload ZIP",
-        githubImport: "Import from GitHub",
-        chooseZip: "Choose ZIP file",
-        uploading: "Uploading...",
-        processing: "Processing {name}",
-        repoUrl: "Repository URL",
-        repoRef: "Branch",
-        repoSubdir: "Subdirectory",
-        placeholders: {
-          repoUrl: "Example: https://github.com/example/ink-plugin.git",
-          repoRef: "Default: main",
-          repoSubdir: "Example: plugins/acme-source",
-        },
-        importing: "Importing...",
-        submit: "Import plugin",
-        errors: {
-          repoUrlRequired: "Enter the Git repository URL.",
-        },
-      },
-      configDialog: {
-        fallbackTitle: "Plugin configuration",
-        installStatus: "Install status",
-        fetchPolicy: "Fetch policy",
-        fetchEveryMinutes: "Fetch every {minutes} minutes",
-        nextFetchAt: "Next fetch {time}",
-        noFetchScheduled: "No automatic fetch is scheduled right now",
-        enableWorkspaceBinding: "Enable plugin",
-        noWorkspaceConfig: "This plugin needs no additional settings.",
-        checkboxFallback: "Enable this option",
-        secretPlaceholder: "Leave blank to keep the current secret",
-        testing: "Testing...",
-        test: "Test plugin",
-        saving: "Saving...",
-        save: "Save config",
-      },
-      anonymousActions: {
-        connect: "Connect",
-        disconnect: "Disconnect",
-      },
-      permissions: {
-        networkNone: "No network",
-        networkAll: "All network",
-        networkHosts: "Network: {hosts}",
-        unspecifiedHosts: "unspecified hosts",
-        cache: "Persistent cache",
-        installScripts: "Install scripts",
-      },
-      sourceTypeGit: "GitHub",
-      sourceTypeZip: "ZIP",
-    },
   },
   prints: {
     loading: "Loading…",
     loadMore: "Load more",
-    confirmDeleteSchedule: "Delete this scheduled task?",
     recentPrints: "Recent prints",
-    connectedPlugins: "Connected plugins",
-    noConnectedPlugins: "No plugins are enabled yet. Add one in Settings.",
     moreSettings: "More settings",
     actions: {
       bindingTutorial: "Binding tutorial",
       newPrint: "New print",
-      newSchedule: "New schedule",
       confirmPrint: "Confirm print",
       cancelPrint: "Cancel print",
       preview: "Print preview",
@@ -714,16 +575,6 @@ const enUS = {
       targetDevice: "Target device",
       queuedHint:
         "Once sent to Memobird, the job can no longer be canceled or rebound to another device.",
-    },
-    schedules: {
-      title: "Schedules",
-      emptyTitle: "No schedules yet",
-      deviceLabel: "Send to device",
-      enableTask: "Enable {title}",
-      disableTask: "Disable {title}",
-      sendToDevice: "Send to {device}",
-      nextRunAt: "Next run {time}",
-      batchSizeHint: "Print {count} items per run, ordered by the earliest fetched content first.",
     },
     defaultSettings: {
       title: "Default print settings",
@@ -749,83 +600,12 @@ const enUS = {
         createFailed: "Failed to create the print job.",
       },
     },
-    scheduleDialog: {
-      title: "New scheduled task",
-      manualSourceFallback: "Created manually",
-      fields: {
-        title: "Task name",
-        plugin: "Source plugin",
-        frequency: "Frequency",
-        timezone: "Timezone",
-        hour: "Hour",
-        minute: "Minute",
-        weekdays: "Run on",
-        batchSize: "Items per print",
-        source: "Content source",
-        time: "Execution time",
-        device: "Target device",
-      },
-      placeholders: {
-        title: "Example: Morning reminder",
-        time: "Every day 19:30",
-        plugin: "Choose a plugin",
-        timezone: "Example: Asia/Shanghai",
-        source: "Example: Created manually",
-      },
-      frequency: {
-        daily: "Every day",
-        weekly: "Every week",
-      },
-      emptyPlugins: "No plugins are available. Install and enable one in Settings first.",
-      pluginDetails: {
-        fetchFrequency: "Fetch frequency",
-        fetchEveryMinutes: "Fetch every {minutes} minutes",
-        fetchHint:
-          "The plugin gets content at the interval above. Each scheduled task selects items it has not printed yet.",
-        fetchStatus: "Fetch status",
-        lastFetchedAt: "Last fetched {time}",
-        neverFetched: "No fetch has run yet",
-        nextFetchAt: "Next fetch {time}",
-        noNextFetch: "No automatic fetch is scheduled right now",
-        batchSizeHint: "Print up to this many items each time, starting with older content.",
-      },
-      emptyPluginSelection: "Choose a connected plugin and set how many items to print each time.",
-      submit: "Create task",
-      errors: {
-        titleRequired: "Enter a task name.",
-        deviceRequired: "Bind a device before creating a scheduled task.",
-        pluginRequired: "Choose an enabled plugin source first.",
-        weekdayRequired: "Select at least one weekday for a weekly task.",
-        invalidBatchSize: "Batch size must be a positive integer.",
-        createFailed: "Failed to create the scheduled task.",
-        timeRequired: "Enter the execution time.",
-      },
-    },
-    errors: {
-      invalidBatchSize: "Batch size must be a positive integer.",
-    },
   },
   time: {
     justNow: "Just now",
     minutesAgo: "{count} min ago",
     todayAt: "Today {time}",
     yesterdayAt: "Yesterday {time}",
-  },
-  weekdays: {
-    short: {
-      0: "Sun",
-      1: "Mon",
-      2: "Tue",
-      3: "Wed",
-      4: "Thu",
-      5: "Fri",
-      6: "Sat",
-    },
-  },
-  schedule: {
-    everyDay: "Every day {time}",
-    everyWeek: "{days} {time}",
-    listSeparator: ", ",
   },
   statuses: {
     device: {
@@ -843,16 +623,6 @@ const enUS = {
     source: {
       connected: "Connected",
       error: "Error",
-      disconnected: "Disconnected",
-    },
-    pluginInstallation: {
-      installing: "Installing",
-      ready: "Ready",
-      failed: "Error",
-      disabled: "Disabled",
-    },
-    pluginBinding: {
-      disabled: "Disabled",
       disconnected: "Disconnected",
     },
     userRole: {
@@ -886,6 +656,8 @@ const enUS = {
       printer_resource_not_found: "The device or print job could not be found.",
       invalid_printer_input: "Enter valid device or print information.",
       printer_unavailable: "The Memobird service is temporarily unavailable.",
+      print_submission_unknown:
+        "The print submission result is unknown. Check the device before sending again to avoid duplicate prints. The saved task is available in print history.",
       print_content_too_large:
         "Content exceeds the print limits. Split it before previewing or printing: title 512 bytes, body 64 KiB, 8,000 characters total, and image height 8,192 pixels. Avoid excessive consecutive zero-width characters.",
       workspace_conflict:
@@ -895,12 +667,6 @@ const enUS = {
       invalid_feedback_input: "Enter feedback content.",
       feedback_recipient_missing: "No admin account is available to receive feedback.",
       feedback_printer_missing: "The admin account does not have a default Memobird yet.",
-      plugin_not_found: "The requested plugin could not be found.",
-      plugin_secret_missing: "The server plugin encryption key is missing.",
-      invalid_plugin_input: "Enter a valid plugin configuration.",
-      plugin_git_install_disabled: "Installing plugins from Git is disabled on the server.",
-      schedule_not_found: "The requested schedule could not be found.",
-      schedule_conflict: "The schedule changed. Reload it before editing again.",
     },
   },
 } as const;

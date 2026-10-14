@@ -1,5 +1,4 @@
 import { request } from "@/services/http";
-import type { ContentBlock } from "@/types/plugins";
 import type { Device, PrintJob, PrintJobCounts, PrintJobSummary } from "@/types/workspace";
 
 export interface BindPrinterPayload {
@@ -117,18 +116,6 @@ export async function createPrintJob(accessToken: string, payload: CreatePrintJo
 export async function renderPrintPreview(
   accessToken: string,
   payload: Pick<CreatePrintJobPayload, "title" | "content">,
-) {
-  const response = await request<{ image: string }>("/api/v1/print-preview", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify(payload),
-  });
-  return response.image;
-}
-
-export async function renderBlocksPrintPreview(
-  accessToken: string,
-  payload: { title: string; blocks: ContentBlock[] },
 ) {
   const response = await request<{ image: string }>("/api/v1/print-preview", {
     method: "POST",

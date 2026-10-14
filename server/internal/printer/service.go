@@ -8,19 +8,20 @@ import (
 	"time"
 
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/content"
 	"github.com/ruhuang/ink/server/internal/platform/observability"
-	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/workspace"
 	memobirdapi "github.com/ruhuang2001/memobird-go/memobird"
 )
 
 var (
-	ErrForbidden       = errors.New("forbidden")
-	ErrNotConfigured   = errors.New("printer service not configured")
-	ErrNotFound        = errors.New("printer resource not found")
-	ErrInvalidInput    = errors.New("invalid printer input")
-	ErrUnavailable     = errors.New("printer provider unavailable")
-	ErrContentTooLarge = errors.New("print content exceeds rendering limits")
+	ErrForbidden                = errors.New("forbidden")
+	ErrNotConfigured            = errors.New("printer service not configured")
+	ErrNotFound                 = errors.New("printer resource not found")
+	ErrInvalidInput             = errors.New("invalid printer input")
+	ErrUnavailable              = errors.New("printer provider unavailable")
+	ErrSubmissionOutcomeUnknown = fmt.Errorf("%w: submission outcome unknown", ErrUnavailable)
+	ErrContentTooLarge          = errors.New("print content exceeds rendering limits")
 )
 
 const submitPersistenceTimeout = 5 * time.Second
@@ -107,7 +108,7 @@ type PrinterService interface {
 	CancelPrintJob(ctx context.Context, accessToken string, jobID string) (workspace.PrintJob, error)
 	UpdatePrintJobDevice(ctx context.Context, accessToken string, jobID string, input UpdateJobDeviceInput) (workspace.PrintJob, error)
 	RenderPreview(ctx context.Context, title string, content string) (string, error)
-	RenderBlocksPreview(ctx context.Context, title string, blocks []plugins.ContentBlock) (string, error)
+	RenderBlocksPreview(ctx context.Context, title string, blocks []content.ContentBlock) (string, error)
 }
 
 type SystemPrinterService interface {
@@ -305,7 +306,7 @@ func (s *Service) renderImage(ctx context.Context, title, content string) (image
 	return renderPrintImage(title, content)
 }
 
-func (s *Service) RenderBlocksPreview(ctx context.Context, title string, blocks []plugins.ContentBlock) (string, error) {
+func (s *Service) RenderBlocksPreview(ctx context.Context, title string, blocks []content.ContentBlock) (string, error) {
 	content, err := RenderBlocksToText(blocks)
 	if err != nil {
 		return "", err
@@ -326,9 +327,12 @@ func (s *Service) createPrintJobForUser(ctx context.Context, userID string, inpu
 		}
 		if existing != nil {
 			if existing.ErrorMessage != nil && *existing.ErrorMessage == SubmissionOutcomeUnknown {
-				return workspace.PrintJob{}, fmt.Errorf("%w: %s", ErrUnavailable, SubmissionOutcomeUnknown)
+				return workspace.PrintJob{}, ErrSubmissionOutcomeUnknown
 			}
 			if input.SubmitImmediately && existing.Status == workspace.PrintStatusFailed {
+				if s.accessKey == "" {
+					return workspace.PrintJob{}, ErrNotConfigured
+				}
 				if _, err := printableTextForRender(existing.Title, existing.Content); err != nil {
 					return workspace.PrintJob{}, err
 				}
@@ -341,6 +345,14 @@ func (s *Service) createPrintJobForUser(ctx context.Context, userID string, inpu
 				}
 				if binding.Status != workspace.DeviceStatusConnected {
 					return workspace.PrintJob{}, ErrInvalidInput
+				}
+				// Persist the in-flight state before retrying a definitely rejected
+				// submission. A crash or failed result save must not leave it retryable.
+				existing.Status = workspace.PrintStatusQueued
+				existing.ErrorMessage = nil
+				existing.UpdatedAt = nextVersionTime(s.clock.Now(), existing.UpdatedAt)
+				if err := s.repo.SaveJob(ctx, *existing); err != nil {
+					return workspace.PrintJob{}, err
 				}
 				submitted, err := s.submitJob(ctx, *binding, *existing)
 				if err != nil {
@@ -557,7 +569,7 @@ func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (subm
 		return Job{}, ErrNotConfigured
 	}
 
-	client, err := s.newClient(binding)
+	client, outcome, err := s.newSubmissionClient(binding)
 	if err != nil {
 		job.Status = workspace.PrintStatusFailed
 		job.ErrorMessage = new(err.Error())
@@ -572,8 +584,14 @@ func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (subm
 	if err != nil {
 		job.Status = workspace.PrintStatusFailed
 		job.ErrorMessage = new(err.Error())
+		if outcome.attempted && !outcome.rejected {
+			job.ErrorMessage = new(SubmissionOutcomeUnknown)
+		}
 		job.UpdatedAt = s.clock.Now()
 		resultErr := fmt.Errorf("%w: %s", ErrUnavailable, err.Error())
+		if outcome.attempted && !outcome.rejected {
+			resultErr = ErrSubmissionOutcomeUnknown
+		}
 		if saveErr := s.persistSubmittedJob(ctx, job); saveErr != nil {
 			return Job{}, errors.Join(resultErr, fmt.Errorf("persist print job failure: %w", saveErr))
 		}
@@ -594,7 +612,7 @@ func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (subm
 	job.StatusCheckAttempts = 0
 
 	if err := s.persistSubmittedJob(ctx, job); err != nil {
-		return Job{}, err
+		return Job{}, errors.Join(ErrSubmissionOutcomeUnknown, fmt.Errorf("persist accepted print result: %w", err))
 	}
 	return job, nil
 }

@@ -1,4 +1,4 @@
-package plugins
+package content
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 
 // ValidateBlocks returns the first semantic error found in blocks, or nil if
 // every block is well-formed. It is intentionally strict: malformed blocks are
-// rejected at ingest time so the dispatcher never has to guess.
+// rejected before rendering so output never has to guess.
 func ValidateBlocks(blocks []ContentBlock) error {
 	if len(blocks) == 0 {
 		return fmt.Errorf("item must contain at least one block")
