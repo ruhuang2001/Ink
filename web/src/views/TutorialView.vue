@@ -115,7 +115,9 @@ async function handleFeedbackSubmit() {
           </button>
           <button
             class="ui-btn-primary px-4 py-2.5 text-sm"
-            :disabled="workspaceStore.feedbackSubmitting"
+            :disabled="
+              workspaceStore.feedbackSubmitting || workspaceStore.feedbackSubmissionUnknown
+            "
           >
             {{
               workspaceStore.feedbackSubmitting

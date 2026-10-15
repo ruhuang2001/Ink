@@ -54,7 +54,10 @@ func (b *submissionResponseBody) Read(buffer []byte) (int, error) {
 	} else {
 		b.overflow = true
 	}
-	if errors.Is(err, io.EOF) && !b.overflow && b.status == http.StatusOK {
+	// A complete provider rejection can use 200 or a client-error status.
+	// Server errors remain ambiguous even when their body resembles a rejection.
+	rejectionStatus := b.status == http.StatusOK || b.status >= http.StatusBadRequest && b.status < http.StatusInternalServerError
+	if errors.Is(err, io.EOF) && !b.overflow && rejectionStatus {
 		var decoded struct {
 			Code *int `json:"showapi_res_code"`
 		}

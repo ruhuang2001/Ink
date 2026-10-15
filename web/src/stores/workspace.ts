@@ -69,6 +69,7 @@ const STORAGE_KEY = "ink.workspace.v1";
 const AUTH_SESSION_STORAGE_KEY = "ink.auth.session.v1";
 const ACCOUNT_DRAFT_STORAGE_PREFIX = "ink.workspace.draft.v1.";
 const PRINT_OUTCOME_STORAGE_PREFIX = "ink.print.outcome.v1.";
+const FEEDBACK_OUTCOME_STORAGE_PREFIX = "ink.feedback.outcome.v1.";
 const REMOTE_SAVE_DEBOUNCE_MS = 750;
 const REMOTE_PRINT_STATUS_POLL_MS = 5000;
 const REMOTE_PRINT_STATUS_INITIAL_POLL_MS = 1500;
@@ -85,13 +86,69 @@ function accountDraftPrefix(userId: string) {
 }
 
 function downloadState(state: WorkspaceState) {
-  const json = JSON.stringify(state, null, 2);
-  const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+  downloadDraftText(JSON.stringify(state, null, 2));
+}
+
+function downloadDraftText(text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = "ink-workspace-draft.json";
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function isRecoverableDraft(value: unknown): value is WorkspaceState {
+  if (!value || typeof value !== "object") return false;
+  const state = value as WorkspaceState;
+  const preferences = state.preferences;
+  return (
+    Array.isArray(state.conversations) &&
+    typeof state.activeConversationId === "string" &&
+    state.conversations.every(
+      (conversation) =>
+        conversation &&
+        typeof conversation.id === "string" &&
+        typeof conversation.title === "string" &&
+        typeof conversation.preview === "string" &&
+        typeof conversation.updatedAt === "string" &&
+        typeof conversation.draft === "string" &&
+        Array.isArray(conversation.messages) &&
+        conversation.messages.every(
+          (message) =>
+            message &&
+            typeof message.id === "string" &&
+            (message.role === "user" || message.role === "assistant") &&
+            typeof message.text === "string" &&
+            typeof message.createdAt === "string",
+        ),
+    ) &&
+    !!preferences &&
+    typeof preferences.defaultDeviceId === "string" &&
+    typeof preferences.loginProtectionEnabled === "boolean" &&
+    typeof preferences.sendConfirmationEnabled === "boolean" &&
+    typeof preferences.tutorialTabEnabled === "boolean" &&
+    ["light", "dark", "system"].includes(preferences.theme) &&
+    ["zh-CN", "en-US", "system"].includes(preferences.locale)
+  );
+}
+
+function readOutcomeMarkers(key: string, pending?: string) {
+  const markers = new Set<string>();
+  if (pending) markers.add(pending);
+  let failed = false;
+  for (const name of ["localStorage", "sessionStorage"] as const) {
+    try {
+      const marker = window[name].getItem(key);
+      if (marker) markers.add(marker);
+    } catch {
+      failed = true;
+    }
+  }
+  // Sorting a new array preserves the project's ES2022 target.
+  // oxlint-disable-next-line unicorn/no-array-sort
+  const values = Array.from(markers).sort();
+  return { markers: values, signature: JSON.stringify(values), failed };
 }
 
 function getNow() {
@@ -455,6 +512,7 @@ function buildAIReplyMessages(messages: ConversationMessage[]) {
 
 export const useWorkspaceStore = defineStore("workspace", () => {
   const pendingPrintOutcomes = new Map<string, string>();
+  const pendingFeedbackOutcomes = new Map<string, string>();
   const persisted = readPersistedWorkspaceState();
   const persistedAuthSession = readPersistedAuthSession();
 
@@ -471,6 +529,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const workspaceSyncError = ref("");
   const workspaceConflict = ref(false);
   const recoveredWorkspaceDraft = ref<WorkspaceState | null>(null);
+  const damagedWorkspaceDrafts = ref<{ key: string; raw: string }[]>([]);
   const workspaceDraftStorageError = ref("");
   const workspaceRevision = ref(0);
   const accountCreationLoading = ref(false);
@@ -524,6 +583,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const isCreatingPrint = ref(false);
   const printSubmissionUnknown = ref(false);
   const printOutcomeStorageError = ref("");
+  const feedbackSubmissionUnknown = ref(false);
+  const feedbackOutcomeStorageError = ref("");
   const flashMessage = ref("");
   const flashTone = ref<"success" | "error" | "info">("info");
   const postLoginTutorialOpen = ref(false);
@@ -540,6 +601,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   let remotePrintStatusBackoffMs = REMOTE_PRINT_STATUS_POLL_MS;
   let disposed = false;
   let displayedPrintOutcomeMarker: string | null = null;
+  let displayedFeedbackOutcomeMarker: string | null = null;
   const anonymousPrintCompletionTimers = new Set<number>();
   let remotePrintAccountVersion = 0;
   let remotePrintPageVersion = 0;
@@ -782,48 +844,30 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     displayedPrintOutcomeMarker = null;
     if (!userId || !authSession.value) return;
     const key = `${PRINT_OUTCOME_STORAGE_PREFIX}${encodeURIComponent(userId)}`;
-    let marker: string | null = null;
-    try {
-      marker = window.localStorage.getItem(key);
-    } catch {
-      marker = pendingPrintOutcomes.get(userId) ?? null;
+    const result = readOutcomeMarkers(key, pendingPrintOutcomes.get(userId));
+    displayedPrintOutcomeMarker = result.signature;
+    printSubmissionUnknown.value = result.failed || result.markers.length > 0;
+    if (result.failed || pendingPrintOutcomes.has(userId))
       printOutcomeStorageError.value = translate("store.errors.printOutcomeStorage");
-    }
-    try {
-      marker = marker ?? window.sessionStorage.getItem(key);
-    } catch {
-      marker = marker ?? pendingPrintOutcomes.get(userId) ?? null;
-      printOutcomeStorageError.value = translate("store.errors.printOutcomeStorage");
-    }
-    if (!marker && pendingPrintOutcomes.has(userId)) {
-      marker = pendingPrintOutcomes.get(userId)!;
-      printOutcomeStorageError.value = translate("store.errors.printOutcomeStorage");
-    }
-    displayedPrintOutcomeMarker = marker;
-    printSubmissionUnknown.value = !!marker;
   }
 
-  function markPrintOutcomeUnknown() {
-    const userId = authUser.value?.id;
+  function markPrintOutcomeUnknown(userId: string | undefined) {
     if (!userId) return;
     const marker = createId("outcome");
     pendingPrintOutcomes.set(userId, marker);
-    displayedPrintOutcomeMarker = marker;
-    printSubmissionUnknown.value = true;
     const key = `${PRINT_OUTCOME_STORAGE_PREFIX}${encodeURIComponent(userId)}`;
     try {
       window.localStorage.setItem(key, marker);
       pendingPrintOutcomes.delete(userId);
       window.sessionStorage.removeItem(key);
-      printOutcomeStorageError.value = "";
     } catch {
-      printOutcomeStorageError.value = translate("store.errors.printOutcomeStorage");
       try {
         window.sessionStorage.setItem(key, marker);
       } catch {
         /* Keep the current-session latch. */
       }
     }
+    if (!disposed && authUser.value?.id === userId && authSession.value) loadPrintOutcome();
   }
 
   function acknowledgePrintOutcome() {
@@ -831,11 +875,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     if (!userId || !authSession.value) return false;
     const key = `${PRINT_OUTCOME_STORAGE_PREFIX}${encodeURIComponent(userId)}`;
     try {
-      const latest =
-        window.localStorage.getItem(key) ??
-        window.sessionStorage.getItem(key) ??
-        pendingPrintOutcomes.get(userId);
-      if (latest && latest !== displayedPrintOutcomeMarker) {
+      const latest = readOutcomeMarkers(key, pendingPrintOutcomes.get(userId));
+      if (latest.failed || latest.signature !== displayedPrintOutcomeMarker) {
         loadPrintOutcome();
         return false;
       }
@@ -848,6 +889,62 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       return true;
     } catch {
       printOutcomeStorageError.value = translate("store.errors.printOutcomeStorage");
+      return false;
+    }
+  }
+
+  function loadFeedbackOutcome() {
+    const userId = authUser.value?.id;
+    feedbackSubmissionUnknown.value = false;
+    feedbackOutcomeStorageError.value = "";
+    displayedFeedbackOutcomeMarker = null;
+    if (!userId || !authSession.value) return;
+    const key = `${FEEDBACK_OUTCOME_STORAGE_PREFIX}${encodeURIComponent(userId)}`;
+    const result = readOutcomeMarkers(key, pendingFeedbackOutcomes.get(userId));
+    displayedFeedbackOutcomeMarker = result.signature;
+    feedbackSubmissionUnknown.value = result.failed || result.markers.length > 0;
+    if (result.failed || pendingFeedbackOutcomes.has(userId))
+      feedbackOutcomeStorageError.value = translate("store.errors.feedbackOutcomeStorage");
+  }
+
+  function markFeedbackOutcomeUnknown(userId: string | undefined) {
+    if (!userId) return;
+    const marker = createId("outcome");
+    pendingFeedbackOutcomes.set(userId, marker);
+    const key = `${FEEDBACK_OUTCOME_STORAGE_PREFIX}${encodeURIComponent(userId)}`;
+    try {
+      window.localStorage.setItem(key, marker);
+      pendingFeedbackOutcomes.delete(userId);
+      window.sessionStorage.removeItem(key);
+    } catch {
+      try {
+        window.sessionStorage.setItem(key, marker);
+      } catch {
+        /* Keep the current-session latch. */
+      }
+    }
+    if (!disposed && authUser.value?.id === userId && authSession.value) loadFeedbackOutcome();
+  }
+
+  function acknowledgeFeedbackOutcome() {
+    const userId = authUser.value?.id;
+    if (!userId || !authSession.value) return false;
+    const key = `${FEEDBACK_OUTCOME_STORAGE_PREFIX}${encodeURIComponent(userId)}`;
+    try {
+      const latest = readOutcomeMarkers(key, pendingFeedbackOutcomes.get(userId));
+      if (latest.failed || latest.signature !== displayedFeedbackOutcomeMarker) {
+        loadFeedbackOutcome();
+        return false;
+      }
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
+      pendingFeedbackOutcomes.delete(userId);
+      displayedFeedbackOutcomeMarker = null;
+      feedbackSubmissionUnknown.value = false;
+      feedbackOutcomeStorageError.value = "";
+      return true;
+    } catch {
+      feedbackOutcomeStorageError.value = translate("store.errors.feedbackOutcomeStorage");
       return false;
     }
   }
@@ -867,6 +964,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   function loadRecoveredWorkspaceDraft(userId: string, excludeCurrentTab = false) {
     recoveredWorkspaceDraft.value = null;
+    damagedWorkspaceDrafts.value = [];
     recoveredDraftStorageKey = null;
     recoveredDraftStoredValue = null;
     try {
@@ -879,13 +977,40 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           continue;
         const raw = window.localStorage.getItem(key);
         if (!raw) continue;
-        recoveredWorkspaceDraft.value = normalizeWorkspaceState(JSON.parse(raw));
-        recoveredDraftStorageKey = key;
-        recoveredDraftStoredValue = raw;
-        break;
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          if (!isRecoverableDraft(parsed)) throw new Error("Invalid draft shape");
+          if (!recoveredWorkspaceDraft.value) {
+            recoveredWorkspaceDraft.value = normalizeWorkspaceState(parsed);
+            recoveredDraftStorageKey = key;
+            recoveredDraftStoredValue = raw;
+          }
+        } catch {
+          damagedWorkspaceDrafts.value.push({ key, raw });
+        }
       }
     } catch {
       workspaceDraftStorageError.value = translate("store.errors.localDraftStorage");
+    }
+  }
+
+  function downloadDamagedWorkspaceDraft(key: string) {
+    if (authUser.value?.id !== workspaceOwnerId.value) return;
+    const draft = damagedWorkspaceDrafts.value.find((item) => item.key === key);
+    if (draft) downloadDraftText(draft.raw);
+  }
+
+  function discardDamagedWorkspaceDraft(key: string) {
+    const userId = authUser.value?.id;
+    const draft = damagedWorkspaceDrafts.value.find((item) => item.key === key);
+    if (!userId || workspaceOwnerId.value !== userId || !draft) return false;
+    try {
+      if (window.localStorage.getItem(key) === draft.raw) window.localStorage.removeItem(key);
+      loadRecoveredWorkspaceDraft(userId, true);
+      return true;
+    } catch {
+      workspaceDraftStorageError.value = translate("store.errors.localDraftStorage");
+      return false;
     }
   }
 
@@ -993,10 +1118,12 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       remoteSavePending = false;
       remoteWorkspaceDirty = false;
       recoveredWorkspaceDraft.value = null;
+      damagedWorkspaceDrafts.value = [];
       workspaceDraftStorageError.value = "";
       isGenerating.value = false;
       isCreatingPrint.value = false;
       loadPrintOutcome();
+      loadFeedbackOutcome();
       passwordChangeLoading.value = false;
       feedbackSubmitting.value = false;
       accountCreationLoading.value = false;
@@ -1985,6 +2112,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     isCreatingPrint.value = true;
     const accountVersion = remotePrintAccountVersion;
+    const originUserId = authUser.value?.id;
     try {
       if (isAuthenticated.value && authSession.value) {
         if (!defaultDeviceId.value) {
@@ -2014,9 +2142,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
       return job;
     } catch (error) {
+      if (isPrintSubmissionUnknown(error)) markPrintOutcomeUnknown(originUserId);
       if (!isCurrentAccount(accountVersion)) return null;
       if (isPrintSubmissionUnknown(error)) {
-        markPrintOutcomeUnknown();
         try {
           await refreshRemotePrintJobs();
         } catch {
@@ -2107,6 +2235,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     if (isAuthenticated.value && authSession.value) {
       const accountVersion = remotePrintAccountVersion;
+      const originUserId = authUser.value?.id;
       try {
         const submitted = await submitPrintJob(authSession.value.accessToken, jobId);
         if (!isCurrentAccount(accountVersion)) return false;
@@ -2114,9 +2243,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         showFlashKey("store.flash.printQueued", "success");
         return true;
       } catch (error) {
+        if (isPrintSubmissionUnknown(error)) markPrintOutcomeUnknown(originUserId);
         if (!isCurrentAccount(accountVersion)) return false;
         if (isPrintSubmissionUnknown(error)) {
-          markPrintOutcomeUnknown();
           try {
             await refreshRemotePrintJobs();
           } catch {
@@ -2610,7 +2739,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   async function submitFeedback(content: string) {
     const accountVersion = remotePrintAccountVersion;
+    const originUserId = authUser.value?.id;
     const current = authSession.value;
+    loadFeedbackOutcome();
+    if (feedbackSubmissionUnknown.value) {
+      feedbackError.value = translate("store.errors.feedbackSubmissionUnknown");
+      return false;
+    }
+    if (feedbackSubmitting.value) return false;
     const normalizedContent = content.trim();
 
     if (!current) {
@@ -2633,6 +2769,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       showFlashKey("store.flash.feedbackSubmitted", "success");
       return true;
     } catch (error) {
+      if (isPrintSubmissionUnknown(error)) markFeedbackOutcomeUnknown(originUserId);
       if (!isCurrentAccount(accountVersion)) return false;
       feedbackError.value = isPrintSubmissionUnknown(error)
         ? translate("store.errors.feedbackSubmissionUnknown")
@@ -2741,6 +2878,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     workspaceSyncError,
     workspaceConflict,
     recoveredWorkspaceDraft,
+    damagedWorkspaceDrafts,
+    downloadDamagedWorkspaceDraft,
+    discardDamagedWorkspaceDraft,
     workspaceDraftStorageError,
     downloadRecoveredWorkspaceDraft,
     discardRecoveredWorkspaceDraft,
@@ -2782,6 +2922,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     isCreatingPrint,
     printSubmissionUnknown,
     printOutcomeStorageError,
+    feedbackSubmissionUnknown,
+    feedbackOutcomeStorageError,
+    acknowledgeFeedbackOutcome,
     acknowledgePrintOutcome,
     flashMessage,
     flashTone,

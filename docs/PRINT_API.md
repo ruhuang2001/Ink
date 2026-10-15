@@ -119,11 +119,23 @@ applies when the provider accepted the request but saving its result failed.
 Clients should refresh job history, retain the draft and avoid offering an
 immediate retry for this error. Provider response details remain private.
 Errors before the print POST (configuration, rendering, or image conversion)
-and complete successful HTTP responses containing an explicit provider rejection
-remain retryable. Before such a retry calls the provider, its in-flight state is
+and complete HTTP 200 or 4xx responses containing an explicit, valid provider
+rejection remain retryable. A status code alone does not establish rejection;
+truncated, malformed or contradictory 4xx responses and all 5xx responses remain
+uncertain. Before such a retry calls the provider, its in-flight state is
 saved as queued, so a crash or failed result save cannot restore the old retryable
 failure. Users should check the device before manually creating a replacement
 for any job whose outcome is unknown.
+
+The web client retains account-specific unknown-outcome protection across reloads
+and sign-out. A late response from a prior session records the protection for
+the originating account. Manual printing requires explicit device-check
+acknowledgement before another submission. Feedback has separate protection:
+users must verify receipt with the administrator before acknowledging that
+another feedback submission may print twice. Clearing browser site data removes
+these browser safeguards; storage failures are reported and retain the current
+session's protection where possible. A completed 401 followed by a failed token
+refresh is an authentication failure, not an uncertain print submission.
 
 In the print view, active jobs and history load independently in pages of 20.
 Each section offers **Load more** when another page exists; **Preview** retrieves

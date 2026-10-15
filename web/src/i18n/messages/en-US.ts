@@ -160,6 +160,8 @@ const enUS = {
     },
     errors: {
       syncPrintStatus: "Unable to load print status. Please try again later.",
+      feedbackOutcomeStorage:
+        "This browser cannot save the feedback verification reminder. Contact the author to verify receipt and explicitly acknowledge; reloading or clearing site data may lose the reminder.",
       printOutcomeStorage:
         "This browser cannot save the print check reminder. Check the device and explicitly acknowledge it; reloading or clearing site data may lose the reminder.",
       localDraftStorage:
@@ -189,7 +191,7 @@ const enUS = {
       changePassword: "Failed to change the password. Please try again later.",
       feedbackLoginRequired: "Sign in before sending feedback.",
       feedbackSubmissionUnknown:
-        "The feedback submission result is unknown. The author may already have received the print. Check before sending it again to avoid a duplicate.",
+        "The feedback submission result is unknown. The author may already have received the print. Contact the author to verify receipt, then explicitly acknowledge before sending again.",
       submitFeedback: "Failed to send feedback. Please try again later.",
       createAccount: "Failed to create the account. Please try again later.",
     },
@@ -216,12 +218,22 @@ const enUS = {
   },
   shell: {
     routeLoadError: "This page could not load. Check your connection and retry.",
+    feedbackOutcome: {
+      checked: "I verified with the author",
+      confirm:
+        "Have you verified receipt with the author and understood that sending again may create a duplicate print?",
+    },
     printOutcome: {
       checked: "I checked the device",
       confirm:
         "Have you checked the device output and understood that submitting again may print a duplicate?",
     },
     draftRecovery: {
+      damaged:
+        "Some draft backups cannot be restored automatically and have been kept unchanged. Download the original content or explicitly discard it; valid drafts can still be restored.",
+      damagedItem: "Damaged backup {number}",
+      confirmDiscardDamaged:
+        "Delete this damaged backup? You can download its original content first.",
       title: "Unsynced account draft found",
       description:
         "This draft is shown only after signing in to its account. Restore replaces your current conversations and preferences, then saves against the latest server revision. You can download it first.",
@@ -644,6 +656,8 @@ const enUS = {
   },
   errors: {
     api: {
+      auth_refresh_failed:
+        "Session refresh failed. The original request was rejected and did not execute. Try again later or sign in again.",
       network_error: "Network error. Check your connection and try again.",
       request_failed: "Request failed. Please try again later.",
       invalid_session_payload: "The login session is invalid. Please sign in again.",

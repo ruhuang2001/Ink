@@ -43,6 +43,13 @@ data removes browser copies. Storage failures show an explicit download warning;
 the app cannot confirm that the file was saved to disk. Successful saves clear
 only the current page's confirmed copy.
 
+Each recovery copy is inspected independently. An unreadable or incompatible
+copy does not hide valid copies from other pages. The browser retains its raw
+content and offers download or confirmed deletion; it never silently discards
+the damaged copy. Restoring preferences accepts a default printer only if it
+still exists in the live connected bindings, otherwise retaining a valid live
+default or leaving the selection empty.
+
 Plugins and plugin schedules are removed from 1.0. The deprecated `schedules`
 and `sources` fields remain archival data. Saves preserve their original database
 JSON, including unknown nested properties, regardless of client omissions or

@@ -57,9 +57,22 @@ export async function request<T>(input: string, init: HttpRequestInit = {}): Pro
       await response.body?.cancel().catch(() => undefined);
       attempt.cleanup();
       const accessToken = headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-      const nextAccessToken = await refreshAccessToken(accessToken);
+      let nextAccessToken: string | null;
+      try {
+        nextAccessToken = await refreshAccessToken(accessToken);
+      } catch {
+        throw new AuthApiError(
+          401,
+          "auth_refresh_failed",
+          "会话刷新失败，原请求未执行，请稍后重试或重新登录。",
+        );
+      }
       if (init.signal?.aborted) {
-        throw networkError(new DOMException("aborted", "AbortError"), false);
+        throw new AuthApiError(
+          401,
+          "auth_refresh_failed",
+          "会话刷新期间请求已取消，原请求未执行。",
+        );
       }
       if (nextAccessToken) {
         headers.set("Authorization", `Bearer ${nextAccessToken}`);

@@ -158,6 +158,8 @@ const zhCN = {
     },
     errors: {
       syncPrintStatus: "加载打印状态失败，请稍后重试。",
+      feedbackOutcomeStorage:
+        "浏览器无法保存反馈核实提示。请联系作者核实后明确确认；刷新或清理站点数据可能丢失提示。",
       printOutcomeStorage:
         "浏览器无法保存打印核对提示。请核对设备后明确确认；刷新或清理站点数据可能丢失提示。",
       localDraftStorage: "浏览器无法保留未同步草稿。请下载草稿后再离开。",
@@ -186,7 +188,7 @@ const zhCN = {
       changePassword: "修改密码失败，请稍后重试。",
       feedbackLoginRequired: "请先登录后再反馈。",
       feedbackSubmissionUnknown:
-        "反馈提交结果未知，作者可能已经收到纸条。请先确认，避免直接重复发送。",
+        "反馈提交结果未知，作者可能已经收到纸条。请联系作者核实是否收到，再明确确认，避免直接重复发送。",
       submitFeedback: "发送反馈失败，请稍后重试。",
       createAccount: "创建账号失败，请稍后重试。",
     },
@@ -212,11 +214,19 @@ const zhCN = {
   },
   shell: {
     routeLoadError: "页面加载失败，请检查网络后重试。",
+    feedbackOutcome: {
+      checked: "已联系作者核实",
+      confirm: "确认已联系作者核实反馈是否收到，并了解重复发送可能导致重复纸条？",
+    },
     printOutcome: {
       checked: "已核对设备",
       confirm: "确认已经核对设备输出，并了解再次提交可能造成重复打印？",
     },
     draftRecovery: {
+      damaged:
+        "发现无法自动恢复的草稿备份，已原样保留。可下载原始内容或明确丢弃；其他有效草稿仍可恢复。",
+      damagedItem: "损坏备份 {number}",
+      confirmDiscardDamaged: "确定删除这份损坏备份？删除前可以先下载原始内容。",
       title: "发现上次未同步的账号草稿",
       description:
         "草稿只在当前账号登录后显示。恢复会替换当前对话和偏好，并使用服务器最新版本保存；也可以先下载再决定。",
@@ -625,6 +635,7 @@ const zhCN = {
   },
   errors: {
     api: {
+      auth_refresh_failed: "会话刷新失败，原请求已被拒绝且未执行。请稍后重试或重新登录。",
       network_error: "网络异常，请检查连接后重试。",
       request_failed: "请求失败，请稍后重试。",
       invalid_session_payload: "登录会话无效，请重新登录。",

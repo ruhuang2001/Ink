@@ -74,6 +74,16 @@ function acknowledgePrintOutcome() {
   if (window.confirm(t("shell.printOutcome.confirm"))) workspaceStore.acknowledgePrintOutcome();
 }
 
+function acknowledgeFeedbackOutcome() {
+  if (window.confirm(t("shell.feedbackOutcome.confirm")))
+    workspaceStore.acknowledgeFeedbackOutcome();
+}
+
+function discardDamagedDraft(key: string) {
+  if (window.confirm(t("shell.draftRecovery.confirmDiscardDamaged")))
+    workspaceStore.discardDamagedWorkspaceDraft(key);
+}
+
 function closePostLoginTutorial() {
   workspaceStore.closePostLoginTutorial();
 }
@@ -252,7 +262,9 @@ async function recoverSynchronization() {
     <div
       v-if="
         workspaceStore.isAuthenticated &&
-        (workspaceStore.recoveredWorkspaceDraft || workspaceStore.workspaceDraftStorageError)
+        (workspaceStore.recoveredWorkspaceDraft ||
+          workspaceStore.damagedWorkspaceDrafts.length ||
+          workspaceStore.workspaceDraftStorageError)
       "
       role="alert"
       class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 lg:px-8"
@@ -261,6 +273,26 @@ async function recoverSynchronization() {
         <p v-if="workspaceStore.workspaceDraftStorageError">
           {{ workspaceStore.workspaceDraftStorageError }}
         </p>
+        <div v-if="workspaceStore.damagedWorkspaceDrafts.length" class="space-y-2">
+          <p>{{ t("shell.draftRecovery.damaged") }}</p>
+          <div
+            v-for="(draft, index) in workspaceStore.damagedWorkspaceDrafts"
+            :key="draft.key"
+            class="flex flex-wrap gap-2"
+          >
+            <span>{{ t("shell.draftRecovery.damagedItem", { number: index + 1 }) }}</span>
+            <button
+              type="button"
+              class="ui-btn-secondary"
+              @click="workspaceStore.downloadDamagedWorkspaceDraft(draft.key)"
+            >
+              {{ t("shell.draftRecovery.download") }}
+            </button>
+            <button type="button" class="ui-btn-secondary" @click="discardDamagedDraft(draft.key)">
+              {{ t("shell.draftRecovery.discard") }}
+            </button>
+          </div>
+        </div>
         <template v-if="workspaceStore.recoveredWorkspaceDraft">
           <p class="font-medium">{{ t("shell.draftRecovery.title") }}</p>
           <p>{{ t("shell.draftRecovery.description") }}</p>
@@ -355,6 +387,22 @@ async function recoverSynchronization() {
         </p>
         <button type="button" class="ui-btn-secondary" @click="acknowledgePrintOutcome">
           {{ t("shell.printOutcome.checked") }}
+        </button>
+      </div>
+    </div>
+
+    <div
+      v-if="workspaceStore.isAuthenticated && workspaceStore.feedbackSubmissionUnknown"
+      role="alert"
+      class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 lg:px-8"
+    >
+      <div class="mx-auto max-w-7xl space-y-2">
+        <p>{{ t("store.errors.feedbackSubmissionUnknown") }}</p>
+        <p v-if="workspaceStore.feedbackOutcomeStorageError">
+          {{ workspaceStore.feedbackOutcomeStorageError }}
+        </p>
+        <button type="button" class="ui-btn-secondary" @click="acknowledgeFeedbackOutcome">
+          {{ t("shell.feedbackOutcome.checked") }}
         </button>
       </div>
     </div>

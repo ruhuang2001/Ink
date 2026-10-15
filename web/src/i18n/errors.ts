@@ -3,6 +3,7 @@ import { AuthApiError } from "@/services/auth";
 import { translate } from "./index";
 
 const LOCALIZED_ERROR_CODES = new Set([
+  "auth_refresh_failed",
   "ai_not_configured",
   "ai_provider_unavailable",
   "ai_secret_missing",

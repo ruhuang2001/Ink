@@ -48,6 +48,23 @@ func TestSubmissionErrorsPreserveUnknownOutcomeAndRejectRetry(t *testing.T) {
 			w.WriteHeader(http.StatusBadGateway)
 			_, _ = io.WriteString(w, `{"showapi_res_code":0}`)
 		}},
+		{"truncated 4xx rejection body", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Length", "100")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"showapi_res_code":0}`)
+		}},
+		{"4xx missing rejection code", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"showapi_res_error":"bad request"}`)
+		}},
+		{"4xx accepted response", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"showapi_res_code":1,"printcontentid":321}`)
+		}},
+		{"4xx malformed rejection response", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"showapi_res_code":0,"printcontentid":"invalid"}`)
+		}},
 		{"timeout after acceptance", func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -81,31 +98,36 @@ func TestSubmissionErrorsPreserveUnknownOutcomeAndRejectRetry(t *testing.T) {
 }
 
 func TestExplicitProviderRejectionRemainsRetryable(t *testing.T) {
-	var prints atomic.Int32
-	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(io.Discard, r.Body)
-		if r.URL.Path == "/home/getSignalBase64Pic" {
-			_, _ = io.WriteString(w, `{"showapi_res_code":1,"result":"synthetic-bitmap"}`)
-			return
-		}
-		if prints.Add(1) == 1 {
-			_, _ = io.WriteString(w, `{"showapi_res_code":0,"showapi_res_error":"device offline"}`)
-			return
-		}
-		_, _ = io.WriteString(w, `{"showapi_res_code":1,"printcontentid":321}`)
-	}))
-	defer provider.Close()
-	service, repo := submissionFixture(provider.URL)
-	input := automaticSubmission()
-	if _, err := service.CreatePrintJobForUser(t.Context(), "user-1", input); !errors.Is(err, ErrUnavailable) || errors.Is(err, ErrSubmissionOutcomeUnknown) {
-		t.Fatalf("expected explicit rejection, got %v", err)
-	}
-	if job := repo.jobs[input.JobID]; job.Status != workspace.PrintStatusFailed || job.ErrorMessage == nil || *job.ErrorMessage == SubmissionOutcomeUnknown {
-		t.Fatalf("explicit rejection must remain retryable: %+v", job)
-	}
-	job, err := service.CreatePrintJobForUser(t.Context(), "user-1", input)
-	if err != nil || prints.Load() != 2 || job.Status != workspace.PrintStatusQueued {
-		t.Fatalf("explicit rejection retry failed: prints=%d job=%+v error=%v", prints.Load(), job, err)
+	for _, status := range []int{http.StatusOK, http.StatusBadRequest, http.StatusForbidden, http.StatusUnprocessableEntity, http.StatusTooManyRequests} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			var prints atomic.Int32
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.Copy(io.Discard, r.Body)
+				if r.URL.Path == "/home/getSignalBase64Pic" {
+					_, _ = io.WriteString(w, `{"showapi_res_code":1,"result":"synthetic-bitmap"}`)
+					return
+				}
+				if prints.Add(1) == 1 {
+					w.WriteHeader(status)
+					_, _ = io.WriteString(w, `{"showapi_res_code":0,"showapi_res_error":"device offline"}`)
+					return
+				}
+				_, _ = io.WriteString(w, `{"showapi_res_code":1,"printcontentid":321}`)
+			}))
+			defer provider.Close()
+			service, repo := submissionFixture(provider.URL)
+			input := automaticSubmission()
+			if _, err := service.CreatePrintJobForUser(t.Context(), "user-1", input); !errors.Is(err, ErrUnavailable) || errors.Is(err, ErrSubmissionOutcomeUnknown) {
+				t.Fatalf("expected explicit rejection, got %v", err)
+			}
+			if job := repo.jobs[input.JobID]; job.Status != workspace.PrintStatusFailed || job.ErrorMessage == nil || *job.ErrorMessage == SubmissionOutcomeUnknown {
+				t.Fatalf("explicit rejection must remain retryable: %+v", job)
+			}
+			job, err := service.CreatePrintJobForUser(t.Context(), "user-1", input)
+			if err != nil || prints.Load() != 2 || job.Status != workspace.PrintStatusQueued {
+				t.Fatalf("explicit rejection retry failed: prints=%d job=%+v error=%v", prints.Load(), job, err)
+			}
+		})
 	}
 }
 

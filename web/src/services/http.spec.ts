@@ -206,7 +206,7 @@ describe("http client", () => {
     });
   });
 
-  it("cancels an abandoned 401 body and propagates a transient refresh failure", async () => {
+  it("keeps a rejected original request distinct from a transient refresh failure", async () => {
     const response = new Response("expired", { status: 401 });
     const cancel = vi.spyOn(response.body!, "cancel");
     vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
@@ -214,9 +214,9 @@ describe("http client", () => {
     configureAuthRefresh(async () => {
       throw failure;
     });
-    await expect(request("/test", { headers: { Authorization: "Bearer token" } })).rejects.toBe(
-      failure,
-    );
+    await expect(
+      request("/test", { headers: { Authorization: "Bearer token" } }),
+    ).rejects.toMatchObject({ status: 401, code: "auth_refresh_failed" });
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 });
