@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ruhuang/ink/server/internal/plugins"
+	"github.com/ruhuang/ink/server/internal/content"
 )
 
 // RenderBlocksToText flattens a list of ContentBlocks into the plain-text
@@ -16,8 +16,8 @@ import (
 // can upscale them; paragraphs and link labels become regular lines; image
 // and link URLs are printed below a short caption; dividers become a line of
 // dashes.
-func RenderBlocksToText(blocks []plugins.ContentBlock) (string, error) {
-	if err := plugins.ValidateBlocks(blocks); err != nil {
+func RenderBlocksToText(blocks []content.ContentBlock) (string, error) {
+	if err := content.ValidateBlocks(blocks); err != nil {
 		return "", err
 	}
 
@@ -35,28 +35,28 @@ func RenderBlocksToText(blocks []plugins.ContentBlock) (string, error) {
 	return strings.Join(sections, "\n\n"), nil
 }
 
-func renderBlock(block plugins.ContentBlock) (string, error) {
+func renderBlock(block content.ContentBlock) (string, error) {
 	switch block.Type {
-	case plugins.BlockHeading:
+	case content.BlockHeading:
 		return strings.TrimSpace(block.Text), nil
-	case plugins.BlockParagraph:
+	case content.BlockParagraph:
 		return strings.TrimSpace(block.Text), nil
-	case plugins.BlockImage:
+	case content.BlockImage:
 		alt := strings.TrimSpace(block.Alt)
 		if alt == "" {
 			alt = "图片"
 		}
 		return fmt.Sprintf("[%s] %s", alt, strings.TrimSpace(block.URL)), nil
-	case plugins.BlockLink:
+	case content.BlockLink:
 		label := strings.TrimSpace(block.Text)
 		url := strings.TrimSpace(block.URL)
 		if label == "" {
 			return url, nil
 		}
 		return fmt.Sprintf("%s\n%s", label, url), nil
-	case plugins.BlockDivider:
+	case content.BlockDivider:
 		return strings.Repeat("-", 16), nil
-	case plugins.BlockList:
+	case content.BlockList:
 		lines := make([]string, 0, len(block.Items))
 		for index, item := range block.Items {
 			prefix := "- "
@@ -66,7 +66,7 @@ func renderBlock(block plugins.ContentBlock) (string, error) {
 			lines = append(lines, prefix+strings.TrimSpace(item))
 		}
 		return strings.Join(lines, "\n"), nil
-	case plugins.BlockQuote:
+	case content.BlockQuote:
 		return "“" + strings.TrimSpace(block.Text) + "”", nil
 	default:
 		return "", fmt.Errorf("unsupported block type %q", block.Type)

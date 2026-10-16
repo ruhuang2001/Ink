@@ -57,9 +57,22 @@ export async function request<T>(input: string, init: HttpRequestInit = {}): Pro
       await response.body?.cancel().catch(() => undefined);
       attempt.cleanup();
       const accessToken = headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-      const nextAccessToken = await refreshAccessToken(accessToken);
+      let nextAccessToken: string | null;
+      try {
+        nextAccessToken = await refreshAccessToken(accessToken);
+      } catch {
+        throw new AuthApiError(
+          401,
+          "auth_refresh_failed",
+          "会话刷新失败，原请求未执行，请稍后重试或重新登录。",
+        );
+      }
       if (init.signal?.aborted) {
-        throw networkError(new DOMException("aborted", "AbortError"), false);
+        throw new AuthApiError(
+          401,
+          "auth_refresh_failed",
+          "会话刷新期间请求已取消，原请求未执行。",
+        );
       }
       if (nextAccessToken) {
         headers.set("Authorization", `Bearer ${nextAccessToken}`);
@@ -72,7 +85,11 @@ export async function request<T>(input: string, init: HttpRequestInit = {}): Pro
       try {
         errorPayload = (await attempt.readJSON()) as ApiErrorResponse;
       } catch (error) {
-        if (error instanceof AuthApiError) throw error;
+        // A 5xx can follow an accepted mutation; an unreadable error body
+        // cannot establish whether it completed. Preserve that uncertainty.
+        // Explicit 4xx rejection statuses remain authoritative.
+        if (error instanceof AuthApiError && (response.status >= 500 || error.status !== 0))
+          throw error;
         errorPayload = null;
       }
 
@@ -118,8 +135,7 @@ async function fetchWithTimeout(input: string, init: HttpRequestInit, headers: H
         try {
           return await response.json();
         } catch (error) {
-          if (controller.signal.aborted) throw networkError(error, timedOut);
-          throw error;
+          throw networkError(error, timedOut);
         }
       },
       cleanup: () => {

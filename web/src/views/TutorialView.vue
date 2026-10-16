@@ -25,12 +25,6 @@ const steps = computed(
         body: t("tutorial.steps.print.body"),
         note: t("tutorial.steps.print.note"),
       },
-      {
-        number: "03",
-        title: t("tutorial.steps.schedule.title"),
-        body: t("tutorial.steps.schedule.body"),
-        note: t("tutorial.steps.schedule.note"),
-      },
     ] as const,
 );
 
@@ -40,10 +34,6 @@ const faqs = computed(
       {
         question: t("tutorial.faqs.chatOrPrint.question"),
         answer: t("tutorial.faqs.chatOrPrint.answer"),
-      },
-      {
-        question: t("tutorial.faqs.scheduleUse.question"),
-        answer: t("tutorial.faqs.scheduleUse.answer"),
       },
       {
         question: t("tutorial.faqs.contentTooLong.question"),
@@ -125,7 +115,9 @@ async function handleFeedbackSubmit() {
           </button>
           <button
             class="ui-btn-primary px-4 py-2.5 text-sm"
-            :disabled="workspaceStore.feedbackSubmitting"
+            :disabled="
+              workspaceStore.feedbackSubmitting || workspaceStore.feedbackSubmissionUnknown
+            "
           >
             {{
               workspaceStore.feedbackSubmitting
@@ -153,7 +145,7 @@ async function handleFeedbackSubmit() {
           </div>
         </div>
 
-        <div class="grid border-y border-stone-200 sm:grid-cols-3 sm:divide-x sm:divide-stone-200">
+        <div class="grid border-y border-stone-200 sm:grid-cols-2 sm:divide-x sm:divide-stone-200">
           <RouterLink
             to="/conversations"
             class="border-b border-stone-200 px-4 py-5 transition-colors hover:bg-stone-50 sm:border-b-0"
@@ -174,14 +166,6 @@ async function handleFeedbackSubmit() {
             </p>
             <p class="mt-2 text-sm leading-6 text-stone-600">
               {{ t("tutorial.features.print.body") }}
-            </p>
-          </RouterLink>
-          <RouterLink to="/prints" class="px-4 py-5 transition-colors hover:bg-stone-50">
-            <p class="text-sm font-semibold text-stone-900">
-              {{ t("tutorial.features.schedule.title") }}
-            </p>
-            <p class="mt-2 text-sm leading-6 text-stone-600">
-              {{ t("tutorial.features.schedule.body") }}
             </p>
           </RouterLink>
         </div>

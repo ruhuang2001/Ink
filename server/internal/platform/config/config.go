@@ -32,6 +32,7 @@ type Config struct {
 	MemobirdAccessKey             string
 	MemobirdBaseURL               string
 	MemobirdTimeout               time.Duration
+	WorkersEnabled                bool
 	PrintStatusSyncEnabled        bool
 	PrintStatusPollInterval       time.Duration
 	PrintStatusBatchSize          int
@@ -39,20 +40,6 @@ type Config struct {
 	PrintStatusRecheckInterval    time.Duration
 	PrintStatusMaxRecheckInterval time.Duration
 	PrintStatusMaxAttempts        int
-	PluginRoot                    string
-	PluginExecTimeout             time.Duration
-	PluginInstallTimeout          time.Duration
-	PluginUploadMaxBytes          int64
-	PluginOutputMaxBytes          int64
-	PluginFetchMaxItems           int
-	PluginFetchMaxBlocksPerItem   int
-	PluginFetchMaxTextBytes       int
-	PluginFetchMaxURLBytes        int
-	PluginEnvAllowlist            []string
-	PluginGitAllowedHosts         []string
-	SchedulerPollInterval         time.Duration
-	InboxJanitorInterval          time.Duration
-	InboxRetention                time.Duration
 }
 
 // Load reads application configuration from the current environment.
@@ -105,6 +92,13 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	workersEnabled := true
+	if value := strings.TrimSpace(os.Getenv("WORKERS_ENABLED")); value != "" {
+		workersEnabled, err = strconv.ParseBool(value)
+		if err != nil {
+			return Config{}, fmt.Errorf("WORKERS_ENABLED must be true or false")
+		}
+	}
 
 	printStatusPollInterval, err := envDuration("PRINT_STATUS_POLL_INTERVAL", 2*time.Second)
 	if err != nil {
@@ -131,61 +125,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	pluginExecTimeout, err := envDuration("PLUGIN_EXEC_TIMEOUT", 20*time.Second)
-	if err != nil {
-		return Config{}, err
-	}
-
-	pluginInstallTimeout, err := envDuration("PLUGIN_INSTALL_TIMEOUT", 2*time.Minute)
-	if err != nil {
-		return Config{}, err
-	}
-
-	pluginUploadMaxBytes, err := envInt64("PLUGIN_UPLOAD_MAX_BYTES", 32<<20)
-	if err != nil {
-		return Config{}, err
-	}
-
-	pluginOutputMaxBytes, err := envInt64("PLUGIN_OUTPUT_MAX_BYTES", 1<<20)
-	if err != nil {
-		return Config{}, err
-	}
-
-	pluginFetchMaxItems, err := envInt("PLUGIN_FETCH_MAX_ITEMS", 100)
-	if err != nil {
-		return Config{}, err
-	}
-
-	pluginFetchMaxBlocksPerItem, err := envInt("PLUGIN_FETCH_MAX_BLOCKS_PER_ITEM", 80)
-	if err != nil {
-		return Config{}, err
-	}
-
-	pluginFetchMaxTextBytes, err := envInt("PLUGIN_FETCH_MAX_TEXT_BYTES", 32768)
-	if err != nil {
-		return Config{}, err
-	}
-
-	pluginFetchMaxURLBytes, err := envInt("PLUGIN_FETCH_MAX_URL_BYTES", 2048)
-	if err != nil {
-		return Config{}, err
-	}
-
-	schedulerPollInterval, err := envDuration("SCHEDULER_POLL_INTERVAL", 30*time.Second)
-	if err != nil {
-		return Config{}, err
-	}
-
-	inboxJanitorInterval, err := envDuration("INBOX_JANITOR_INTERVAL", 6*time.Hour)
-	if err != nil {
-		return Config{}, err
-	}
-
-	inboxRetention, err := envDuration("INBOX_RETENTION", 30*24*time.Hour)
-	if err != nil {
-		return Config{}, err
-	}
-
 	cfg := Config{
 		AppName:                       envString("APP_NAME", "ink-auth"),
 		Port:                          port,
@@ -205,6 +144,7 @@ func Load() (Config, error) {
 		MemobirdAccessKey:             os.Getenv("MEMOBIRD_ACCESS_KEY"),
 		MemobirdBaseURL:               os.Getenv("MEMOBIRD_BASE_URL"),
 		MemobirdTimeout:               memobirdTimeout,
+		WorkersEnabled:                workersEnabled,
 		PrintStatusSyncEnabled:        envBool("PRINT_STATUS_SYNC_ENABLED", true),
 		PrintStatusPollInterval:       printStatusPollInterval,
 		PrintStatusBatchSize:          printStatusBatchSize,
@@ -212,20 +152,6 @@ func Load() (Config, error) {
 		PrintStatusRecheckInterval:    printStatusRecheckInterval,
 		PrintStatusMaxRecheckInterval: printStatusMaxRecheckInterval,
 		PrintStatusMaxAttempts:        printStatusMaxAttempts,
-		PluginRoot:                    envString("PLUGIN_ROOT", ".plugins"),
-		PluginExecTimeout:             pluginExecTimeout,
-		PluginInstallTimeout:          pluginInstallTimeout,
-		PluginUploadMaxBytes:          pluginUploadMaxBytes,
-		PluginOutputMaxBytes:          pluginOutputMaxBytes,
-		PluginFetchMaxItems:           pluginFetchMaxItems,
-		PluginFetchMaxBlocksPerItem:   pluginFetchMaxBlocksPerItem,
-		PluginFetchMaxTextBytes:       pluginFetchMaxTextBytes,
-		PluginFetchMaxURLBytes:        pluginFetchMaxURLBytes,
-		PluginEnvAllowlist:            envStringList("PLUGIN_ENV_ALLOWLIST", []string{}),
-		PluginGitAllowedHosts:         envStringList("PLUGIN_GIT_ALLOWED_HOSTS", []string{"github.com", "gitee.com", "gitlab.com"}),
-		SchedulerPollInterval:         schedulerPollInterval,
-		InboxJanitorInterval:          inboxJanitorInterval,
-		InboxRetention:                inboxRetention,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -286,40 +212,6 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("PRINT_STATUS_MAX_ATTEMPTS must be between 1 and 100")
 	}
 
-	if cfg.PluginExecTimeout <= 0 {
-		return Config{}, fmt.Errorf("PLUGIN_EXEC_TIMEOUT must be positive")
-	}
-	if cfg.PluginInstallTimeout <= 0 {
-		return Config{}, fmt.Errorf("PLUGIN_INSTALL_TIMEOUT must be positive")
-	}
-	if cfg.PluginUploadMaxBytes <= 0 {
-		return Config{}, fmt.Errorf("PLUGIN_UPLOAD_MAX_BYTES must be positive")
-	}
-	if cfg.PluginOutputMaxBytes <= 0 {
-		return Config{}, fmt.Errorf("PLUGIN_OUTPUT_MAX_BYTES must be positive")
-	}
-	if cfg.PluginFetchMaxItems <= 0 {
-		return Config{}, fmt.Errorf("PLUGIN_FETCH_MAX_ITEMS must be positive")
-	}
-	if cfg.PluginFetchMaxBlocksPerItem <= 0 {
-		return Config{}, fmt.Errorf("PLUGIN_FETCH_MAX_BLOCKS_PER_ITEM must be positive")
-	}
-	if cfg.PluginFetchMaxTextBytes <= 0 {
-		return Config{}, fmt.Errorf("PLUGIN_FETCH_MAX_TEXT_BYTES must be positive")
-	}
-	if cfg.PluginFetchMaxURLBytes <= 0 {
-		return Config{}, fmt.Errorf("PLUGIN_FETCH_MAX_URL_BYTES must be positive")
-	}
-	if cfg.SchedulerPollInterval <= 0 {
-		return Config{}, fmt.Errorf("SCHEDULER_POLL_INTERVAL must be positive")
-	}
-	if cfg.InboxJanitorInterval <= 0 {
-		return Config{}, fmt.Errorf("INBOX_JANITOR_INTERVAL must be positive")
-	}
-	if cfg.InboxRetention <= 0 {
-		return Config{}, fmt.Errorf("INBOX_RETENTION must be positive")
-	}
-
 	return cfg, nil
 }
 
@@ -370,20 +262,6 @@ func envInt(key string, fallback int) (int, error) {
 	}
 
 	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be a valid integer: %w", key, err)
-	}
-
-	return parsed, nil
-}
-
-func envInt64(key string, fallback int64) (int64, error) {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback, nil
-	}
-
-	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("%s must be a valid integer: %w", key, err)
 	}

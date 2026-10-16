@@ -103,14 +103,6 @@
   border-top: 2px solid var(--sl-edge) !important;
   background: #f7eadb !important;
 }
-.ink-page[data-design="structured"] .ink-print-hero h1 {
-  font-size: clamp(2.4rem, 5vw, 4.5rem);
-  letter-spacing: -0.07em;
-  line-height: 1.16;
-}
-.ink-page[data-design="structured"] .ink-print-hero {
-  padding-bottom: 2.5rem;
-}
 .ink-page[data-design="structured"] .ui-btn-primary {
   border: 2px solid var(--sl-edge);
   border-radius: 0;
@@ -278,12 +270,6 @@
 }
 .ink-page[data-design="structured"] .ui-timeline::before {
   background: var(--sl-edge);
-}
-.ink-page[data-design="structured"] .ink-workspace-heading {
-  border-bottom: 2px solid var(--sl-edge);
-}
-.ink-page[data-design="structured"] .ink-workspace-heading h1 {
-  font-size: clamp(2rem, 4vw, 3.5rem);
 }
 .ink-page[data-design="paper"] .ink-icon {
   display: none;

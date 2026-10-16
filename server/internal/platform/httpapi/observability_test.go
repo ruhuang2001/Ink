@@ -178,7 +178,7 @@ func TestMetricsRegistryIsolation(t *testing.T) {
 }
 
 func TestHTTPObservationWithoutMetricsPreservesContract(t *testing.T) {
-	s := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	s := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 	if s.metrics != nil {
 		t.Fatal("default server must not create a metrics registry")
 	}

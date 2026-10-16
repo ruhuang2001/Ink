@@ -64,7 +64,7 @@ func sample(t *testing.T, body, name string) float64 {
 
 func TestWorkerScanMetricsThroughRunners(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	for _, name := range []string{"schedule", "plugin_fetch", "print_status_sync", "inbox_janitor"} {
+	for _, name := range []string{"print_status_sync"} {
 		for _, outcome := range []struct {
 			name, result string
 			err          error
@@ -87,25 +87,9 @@ func TestWorkerScanMetricsThroughRunners(t *testing.T) {
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
 				defer close(p.release)
-				var done <-chan struct{}
-				switch name {
-				case "schedule":
-					r := scheduler.NewRunner(p, logger, 6*time.Hour, 10)
-					r.Observer = observer
-					done = r.Start(ctx)
-				case "plugin_fetch":
-					r := scheduler.NewFetchRunner(p, logger, 6*time.Hour, 10)
-					r.Observer = observer
-					done = r.Start(ctx)
-				case "print_status_sync":
-					r := scheduler.NewPrintStatusRunner(p, logger, 6*time.Hour, 10)
-					r.Observer = observer
-					done = r.Start(ctx)
-				case "inbox_janitor":
-					r := scheduler.NewInboxJanitor(p, nil, logger, 6*time.Hour, time.Hour)
-					r.Observer = observer
-					done = r.Start(ctx)
-				}
+				r := scheduler.NewPrintStatusRunner(p, logger, 6*time.Hour, 10)
+				r.Observer = observer
+				done := r.Start(ctx)
 				select {
 				case <-p.started:
 				case <-time.After(time.Second):

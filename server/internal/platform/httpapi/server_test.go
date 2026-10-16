@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -16,11 +15,9 @@ import (
 
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/content"
 	"github.com/ruhuang/ink/server/internal/feedback"
-	"github.com/ruhuang/ink/server/internal/pluginfetch"
-	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
-	"github.com/ruhuang/ink/server/internal/schedule"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
@@ -30,9 +27,6 @@ func newTestServer(
 	aiService fakeAIService,
 	printerService fakePrinterService,
 	feedbackService fakeFeedbackService,
-	pluginService fakePluginService,
-	pluginRunService fakePluginRunService,
-	scheduleService fakeScheduleService,
 ) *Server {
 	return NewServer(
 		authService,
@@ -40,16 +34,12 @@ func newTestServer(
 		aiService,
 		printerService,
 		feedbackService,
-		pluginService,
-		pluginRunService,
-		scheduleService,
 		slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)),
 		time.Minute,
 		5,
 		100,
 		nil,
 		"",
-		32<<20,
 	)
 }
 
@@ -68,7 +58,7 @@ func TestLoginHandlerReturnsTokens(t *testing.T) {
 				AccessTokenExpiresAt: time.Now().UTC().Add(15 * time.Minute),
 			},
 		},
-	}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"email":"name@example.com","password":"demo-password"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -102,7 +92,7 @@ func TestJSONRequestBoundaries(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+			server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 			request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(test.body))
 			response := httptest.NewRecorder()
 
@@ -117,7 +107,7 @@ func TestJSONRequestBoundaries(t *testing.T) {
 
 func TestOversizedJSONDoesNotCallService(t *testing.T) {
 	calls := 0
-	server := newTestServer(fakeAuthService{loginCalls: &calls}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	server := newTestServer(fakeAuthService{loginCalls: &calls}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 	body := `{"email":"name@example.com","password":"` + string(bytes.Repeat([]byte("x"), int(defaultJSONMaxBytes))) + `"}`
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(body))
 	response := httptest.NewRecorder()
@@ -139,25 +129,8 @@ func TestOversizedJSONDoesNotCallService(t *testing.T) {
 	}
 }
 
-func TestManualPluginRunAllowsEmptyBody(t *testing.T) {
-	calls := 0
-	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{calls: &calls}, fakeScheduleService{})
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/plugins/plugin-1/run", nil)
-	request.Header.Set("Authorization", "Bearer access-token")
-	response := httptest.NewRecorder()
-
-	server.Handler().ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", response.Code)
-	}
-	if calls != 1 {
-		t.Fatalf("expected one plugin run, got %d", calls)
-	}
-}
-
 func TestMeRequiresBearerToken(t *testing.T) {
-	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 	response := httptest.NewRecorder()
 
@@ -183,7 +156,7 @@ func TestLoginRateLimit(t *testing.T) {
 				AccessTokenExpiresAt: time.Now().UTC().Add(15 * time.Minute),
 			},
 		},
-	}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 1, 100, nil, "", 32<<20)
+	}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 1, 100, nil, "")
 
 	first := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"email":"name@example.com","password":"demo-password"}`))
 	first.RemoteAddr = "127.0.0.1:1234"
@@ -209,7 +182,7 @@ func TestLoginRateLimitUsesAccountAndIPDimensions(t *testing.T) {
 			loginResult: auth.AuthResult{
 				Token: auth.TokenPair{AccessTokenExpiresAt: time.Now().UTC().Add(time.Minute)},
 			},
-		}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+		}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 		server.rateLimiter = NewLoginRateLimiter(time.Minute, 1, 100)
 		return server
 	}
@@ -369,7 +342,7 @@ func TestLoginRateLimiterExpiresAndBoundsEntries(t *testing.T) {
 }
 
 func TestChangePasswordReturnsNoContent(t *testing.T) {
-	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 	request := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/auth/change-password",
@@ -399,9 +372,6 @@ func TestCreateUserRequiresAdminAuthorization(t *testing.T) {
 		fakeAIService{},
 		fakePrinterService{},
 		fakeFeedbackService{},
-		fakePluginService{},
-		fakePluginRunService{},
-		fakeScheduleService{},
 	)
 	request := httptest.NewRequest(
 		http.MethodPost,
@@ -419,7 +389,7 @@ func TestCreateUserRequiresAdminAuthorization(t *testing.T) {
 }
 
 func TestWorkspaceHandlersRequireAuthorization(t *testing.T) {
-	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 
 	getRequest := httptest.NewRequest(http.MethodGet, "/api/v1/workspace", nil)
 	getResponse := httptest.NewRecorder()
@@ -439,7 +409,7 @@ func TestWorkspaceHandlersRequireAuthorization(t *testing.T) {
 }
 
 func TestSaveWorkspaceAcceptsTutorialPreference(t *testing.T) {
-	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 	request := httptest.NewRequest(http.MethodPut, "/api/v1/workspace", bytes.NewBufferString(`{
 		"devices":[],"conversations":[],"activeConversationId":"","printJobs":[],"schedules":[],"sources":[],
 		"preferences":{"loginProtectionEnabled":false,"sendConfirmationEnabled":true,"tutorialTabEnabled":false,"theme":"light","defaultDeviceId":"","locale":"system"},
@@ -469,7 +439,7 @@ func TestSaveWorkspaceReturnsRevisionErrors(t *testing.T) {
 		{"stale revision", workspace.ErrConflict, http.StatusConflict, "workspace_conflict"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			server := newTestServer(fakeAuthService{}, fakeWorkspaceService{err: test.err}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+			server := newTestServer(fakeAuthService{}, fakeWorkspaceService{err: test.err}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 			request := httptest.NewRequest(http.MethodPut, "/api/v1/workspace", strings.NewReader(`{"revision":1}`))
 			request.Header.Set("Authorization", "Bearer token")
 			response := httptest.NewRecorder()
@@ -482,7 +452,7 @@ func TestSaveWorkspaceReturnsRevisionErrors(t *testing.T) {
 }
 
 func TestAIConfigRequiresAuthorization(t *testing.T) {
-	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/ai/config", nil)
 	response := httptest.NewRecorder()
 
@@ -504,9 +474,6 @@ func TestListPrintersReturnsDevices(t *testing.T) {
 			},
 		},
 		fakeFeedbackService{},
-		fakePluginService{},
-		fakePluginRunService{},
-		fakeScheduleService{},
 	)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/printers", nil)
 	request.Header.Set("Authorization", "Bearer access-token")
@@ -540,7 +507,7 @@ func TestPrintPreviewValidatesSessionBeforeRendering(t *testing.T) {
 		} {
 			t.Run(payload.name+"/"+test.name, func(t *testing.T) {
 				var calls int
-				server := newTestServer(fakeAuthService{currentUserErr: test.authErr}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{previewCalls: &calls}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+				server := newTestServer(fakeAuthService{currentUserErr: test.authErr}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{previewCalls: &calls}, fakeFeedbackService{})
 				request := httptest.NewRequest(http.MethodPost, "/api/v1/print-preview", strings.NewReader(payload.body))
 				if test.token != "" {
 					request.Header.Set("Authorization", "Bearer "+test.token)
@@ -672,7 +639,7 @@ func (f fakePrinterService) RenderPreview(_ context.Context, _ string, _ string)
 	return "iVBORw0KGgo=", f.err
 }
 
-func (f fakePrinterService) RenderBlocksPreview(_ context.Context, _ string, _ []plugins.ContentBlock) (string, error) {
+func (f fakePrinterService) RenderBlocksPreview(_ context.Context, _ string, _ []content.ContentBlock) (string, error) {
 	if f.previewCalls != nil {
 		*f.previewCalls++
 	}
@@ -777,94 +744,8 @@ func (f fakeFeedbackService) Submit(_ context.Context, _ string, _ feedback.Subm
 
 var _ FeedbackService = fakeFeedbackService{}
 
-type fakePluginService struct {
-	items  []plugins.PluginDetails
-	result plugins.PluginDetails
-	test   plugins.ValidationResult
-	err    error
-}
-
-func (f fakePluginService) ListAdminInstallations(_ context.Context, _ string) ([]plugins.PluginDetails, error) {
-	return f.items, f.err
-}
-
-func (f fakePluginService) UploadPlugin(_ context.Context, _ string, _ string, _ io.Reader) (plugins.PluginDetails, error) {
-	return f.result, f.err
-}
-
-func (f fakePluginService) InstallFromGit(_ context.Context, _ string, _ plugins.GitInstallInput) (plugins.PluginDetails, error) {
-	return f.result, f.err
-}
-
-func (f fakePluginService) DisableInstallation(_ context.Context, _ string, _ string) (plugins.PluginDetails, error) {
-	return f.result, f.err
-}
-
-func (f fakePluginService) ListUserPlugins(_ context.Context, _ string) ([]plugins.PluginDetails, error) {
-	return f.items, f.err
-}
-
-func (f fakePluginService) GetUserPlugin(_ context.Context, _ string, _ string) (plugins.PluginDetails, error) {
-	return f.result, f.err
-}
-
-func (f fakePluginService) SaveBinding(_ context.Context, _ string, _ string, _ plugins.BindingInput) (plugins.PluginDetails, error) {
-	return f.result, f.err
-}
-
-func (f fakePluginService) TestBinding(_ context.Context, _ string, _ string, _ plugins.BindingInput) (plugins.ValidationResult, error) {
-	return f.test, f.err
-}
-
-type fakePluginRunService struct {
-	result pluginfetch.ManualRunResult
-	err    error
-	calls  *int
-}
-
-func (f fakePluginRunService) RunManual(_ context.Context, _ string, _ string) (pluginfetch.ManualRunResult, error) {
-	if f.calls != nil {
-		*f.calls++
-	}
-	return f.result, f.err
-}
-
-type fakeScheduleService struct {
-	items []schedule.ScheduleView
-	item  schedule.ScheduleView
-	err   error
-}
-
-func (f fakeScheduleService) List(_ context.Context, _ string) ([]schedule.ScheduleView, error) {
-	return f.items, f.err
-}
-
-func (f fakeScheduleService) Create(_ context.Context, _ string, _ schedule.UpsertInput) (schedule.ScheduleView, error) {
-	return f.item, f.err
-}
-
-func (f fakeScheduleService) Update(_ context.Context, _ string, _ string, _ schedule.UpsertInput) (schedule.ScheduleView, error) {
-	return f.item, f.err
-}
-
-func (f fakeScheduleService) Toggle(_ context.Context, _ string, _ string) (schedule.ScheduleView, error) {
-	return f.item, f.err
-}
-
-func (f fakeScheduleService) RunNow(_ context.Context, _ string, _ string) (schedule.ManualPrintResult, error) {
-	return schedule.ManualPrintResult{}, nil
-}
-
-func (f fakeScheduleService) Delete(_ context.Context, _ string, _ string) error {
-	return f.err
-}
-
-var _ PluginService = fakePluginService{}
-var _ PluginRunService = fakePluginRunService{}
-var _ ScheduleService = fakeScheduleService{}
-
 func TestSubmitFeedbackRequiresAuthorization(t *testing.T) {
-	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/feedback/print", bytes.NewBufferString(`{"content":"hello"}`))
 	response := httptest.NewRecorder()
 
@@ -882,9 +763,6 @@ func TestSubmitFeedbackReturnsNoContent(t *testing.T) {
 		fakeAIService{},
 		fakePrinterService{},
 		fakeFeedbackService{},
-		fakePluginService{},
-		fakePluginRunService{},
-		fakeScheduleService{},
 	)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/feedback/print", bytes.NewBufferString(`{"content":"hello"}`))
 	request.Header.Set("Authorization", "Bearer access-token")
@@ -903,7 +781,7 @@ func TestPrintJobReadRoutes(t *testing.T) {
 	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{
 		printJobs: []workspace.PrintJob{{ID: "job-1", Title: "Row", Content: "full private body", Status: workspace.PrintStatusQueued}},
 		listInput: &listInput, statusInput: &statusInput, latestJobID: new("job-1"),
-	}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	}, fakeFeedbackService{})
 	for _, test := range []struct {
 		url      string
 		expected int

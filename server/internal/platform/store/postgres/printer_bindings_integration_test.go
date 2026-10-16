@@ -1,13 +1,11 @@
 package postgres
 
 import (
-	"errors"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/ruhuang/ink/server/internal/printer"
-	"github.com/ruhuang/ink/server/internal/schedule"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
@@ -26,10 +24,6 @@ func TestRemovePrinterPreservesHistoryAndDisablesSchedules(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := New(db)
-	staleSchedule, err := store.FindByID(ctx, "remove-user", "remove-schedule")
-	if err != nil || staleSchedule == nil {
-		t.Fatalf("load original schedule: %+v, %v", staleSchedule, err)
-	}
 	if err := store.DeleteBinding(ctx, "other-user", "remove-device"); err != nil {
 		t.Fatal(err)
 	}
@@ -44,9 +38,10 @@ func TestRemovePrinterPreservesHistoryAndDisablesSchedules(t *testing.T) {
 	if err != nil || binding == nil || binding.Status != workspace.DeviceStatusOffline {
 		t.Fatalf("binding was not preserved offline: %+v, %v", binding, err)
 	}
-	current, err := store.FindByID(ctx, "remove-user", "remove-schedule")
-	if err != nil || current == nil || current.Enabled || current.LeaseUntil != nil {
-		t.Fatalf("schedule was not preserved disabled: %+v, %v", current, err)
+	var scheduleEnabled bool
+	var scheduleLease *time.Time
+	if err := db.QueryRow(ctx, "select enabled,lease_until from print_schedules where id='remove-schedule'").Scan(&scheduleEnabled, &scheduleLease); err != nil || scheduleEnabled || scheduleLease != nil {
+		t.Fatalf("retained schedule was not disabled: enabled=%t lease=%v error=%v", scheduleEnabled, scheduleLease, err)
 	}
 	for _, jobID := range []string{"completed-job", "queued-job", "pending-job"} {
 		job, err := store.FindJobByID(ctx, "remove-user", jobID)
@@ -70,36 +65,12 @@ func TestRemovePrinterPreservesHistoryAndDisablesSchedules(t *testing.T) {
 	if err != nil || len(due) != 1 || due[0].ID != "queued-job" {
 		t.Fatalf("accepted job lost status synchronization: %+v, %v", due, err)
 	}
-	if err := store.Save(ctx, *staleSchedule); !errors.Is(err, schedule.ErrConflict) {
-		t.Fatal(err)
-	}
-	current, err = store.FindByID(ctx, "remove-user", "remove-schedule")
-	if err != nil || current.Enabled {
-		t.Fatalf("stale runner re-enabled removed device schedule: %+v, %v", current, err)
-	}
-	claimed, err := store.ClaimDue(ctx, time.Now().Add(time.Hour), time.Now().Add(2*time.Hour), 20)
-	if err != nil || len(claimed) != 0 {
-		t.Fatalf("disabled schedule remained eligible: %+v, %v", claimed, err)
-	}
 	binding.Status = workspace.DeviceStatusConnected
 	binding.UpdatedAt = time.Now().UTC()
 	if err := store.SaveBinding(ctx, *binding); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Save(ctx, *staleSchedule); !errors.Is(err, schedule.ErrConflict) {
-		t.Fatal(err)
-	}
-	current, err = store.FindByID(ctx, "remove-user", "remove-schedule")
-	if err != nil || current.Enabled {
-		t.Fatalf("rebind resumed schedule without approval: %+v, %v", current, err)
-	}
-	current.Enabled = true
-	current.UpdatedAt = time.Now().UTC()
-	if err := store.Save(ctx, *current); err != nil {
-		t.Fatal(err)
-	}
-	current, err = store.FindByID(ctx, "remove-user", "remove-schedule")
-	if err != nil || !current.Enabled {
-		t.Fatalf("schedule could not resume after rebind: %+v, %v", current, err)
+	if err := db.QueryRow(ctx, "select enabled from print_schedules where id='remove-schedule'").Scan(&scheduleEnabled); err != nil || scheduleEnabled {
+		t.Fatalf("rebind changed retained schedule: enabled=%t error=%v", scheduleEnabled, err)
 	}
 }

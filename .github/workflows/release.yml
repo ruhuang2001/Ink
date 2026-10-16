@@ -5,20 +5,141 @@ on:
     tags:
       - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing candidate tag (for example v1.0.0-rc.1 or v1.0.0)
+        required: true
+        type: string
+      publish:
+        description: Publish after all candidate checks pass (otherwise keep a draft)
+        default: false
+        type: boolean
+      physical_print_verified:
+        description: Stable release only — real binding, print, network recovery and completion were verified
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  github-release:
+  candidate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      sha: ${{ steps.resolve.outputs.sha }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: resolve immutable candidate
+        id: resolve
+        env:
+          CANDIDATE_TAG: ${{ inputs.tag || github.ref_name }}
+          PUBLISH: ${{ inputs.publish || false }}
+          PHYSICAL_PRINT_VERIFIED: ${{ inputs.physical_print_verified || false }}
+        run: |
+          python3 - <<'PY_CANDIDATE'
+          import os
+          import re
+          import subprocess
+
+          tag = os.environ["CANDIDATE_TAG"]
+          if not re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?", tag):
+              raise SystemExit("Use an existing vMAJOR.MINOR.PATCH or prerelease tag")
+          sha = subprocess.check_output(["git", "rev-parse", "--verify", f"refs/tags/{tag}^{{commit}}"], text=True).strip()
+          prerelease = "-" in tag
+          if os.environ["PUBLISH"] == "true" and not prerelease and os.environ["PHYSICAL_PRINT_VERIFIED"] != "true":
+              raise SystemExit("Publishing a stable release requires the explicit real-printer verification declaration")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"tag={tag}\nsha={sha}\nprerelease={str(prerelease).lower()}\n")
+          PY_CANDIDATE
+
+  web-candidate:
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HUSKY: 0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+      - name: verify frontend candidate
+        working-directory: web
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.0 --activate
+          pnpm install --frozen-lockfile
+          pnpm audit --audit-level moderate
+          pnpm check
+
+  server-candidate:
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - run: make check-api
+      - run: make lint-api
+      - name: scan candidate binaries for reachable vulnerabilities
+        working-directory: server
+        run: |
+          scan_dir="$(mktemp -d)"
+          trap 'rm -rf "$scan_dir"' EXIT
+          GOBIN="$scan_dir" go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          for package in $(go list ./cmd/...); do
+            binary="$scan_dir/${package##*/}"
+            go build -o "$binary" "$package"
+            "$scan_dir/govulncheck" -mode=binary "$binary"
+          done
+      - run: make smoke-api
+      - name: verify core and retained legacy database recovery
+        run: bash scripts/check-backup-restore.sh
+      - name: verify encrypted AI configuration and retained file recovery
+        run: INK_TEST_BACKUP_RECOVERY=1 go -C server test -race ./internal/platform/store/postgres -run TestBackupRestoresEncryptedSecretsAndRetainedFiles -count=1 -v
+      - run: make check-observability
+
+  github-release:
+    needs: [candidate, web-candidate, server-candidate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: create github release
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: reject a moved candidate tag
+        env:
+          CANDIDATE_TAG: ${{ needs.candidate.outputs.tag }}
+          CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+        run: test "$(git rev-parse --verify "refs/tags/$CANDIDATE_TAG^{commit}")" = "$CANDIDATE_SHA"
+      - name: create or publish the checked release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
+          tag_name: ${{ needs.candidate.outputs.tag }}
+          target_commitish: ${{ needs.candidate.outputs.sha }}
           generate_release_notes: true
+          draft: ${{ github.event_name != 'workflow_dispatch' || !inputs.publish }}
+          prerelease: ${{ needs.candidate.outputs.prerelease == 'true' }}

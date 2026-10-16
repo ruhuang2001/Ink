@@ -2,7 +2,7 @@
 
 Thanks for your interest in contributing to Ink.
 
-Ink is still in early development, so the codebase and workflows may change quickly. Please keep contributions focused, easy to review, and aligned with the current direction of the project.
+The 1.0 candidate focuses on single-instance self-hosting of accounts, devices, drafts/conversations, AI assistance and manual printing. Please keep contributions focused, easy to review, and aligned with that scope. Plugins and plugin schedules are removed; retained legacy records and files must remain recoverable. Structured content blocks remain supported by the core renderer.
 
 ## Ways to contribute
 
@@ -17,8 +17,8 @@ You can help by:
 ## Repository overview
 
 - `web/` contains the Vue 3 + TypeScript frontend built with Vite.
-- `server/` contains the Go API, PostgreSQL repositories, migrations, workers, and plugin runtime.
-- `docs/` contains self-hosting, architecture, and plugin protocol documentation.
+- `server/` contains the Go API, PostgreSQL repositories, migrations, and print-status synchronization.
+- `docs/` contains self-hosting, architecture, API and archived plugin documentation.
 - `Makefile` provides the quickest way to run common local commands.
 
 ## Before you start
@@ -192,7 +192,7 @@ Please keep commits readable and consistent with the existing project history.
 
 Before opening a pull request, run the checks relevant to your change.
 
-Use `make check-local-ci` before a commit or push when Docker and `act` are available. It runs the same web, server, and Go lint jobs used in CI, followed by the isolated API smoke test.
+Run `make check-local-ci` before a commit or push; Docker and `act` are required. It runs the web, server, and Go lint jobs used in CI, followed by the isolated API smoke test. Do not bypass the repository hooks. For database/recovery changes, also run `bash scripts/check-backup-restore.sh`. Release candidates run additional checks against a fixed commit as described in the [release procedure](docs/SELF_HOSTING.md#release-candidates-and-version-policy).
 
 ## License
 

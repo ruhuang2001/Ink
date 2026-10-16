@@ -88,6 +88,16 @@ func (s *Service) SaveState(ctx context.Context, accessToken string, state State
 
 	normalized := NormalizeState(state)
 	normalized.PrintJobs = []PrintJob{}
+	current, err := s.repo.FindByUserID(ctx, currentUser.ID)
+	if err != nil {
+		return State{}, err
+	}
+	if current == nil || current.Revision != state.Revision {
+		return State{}, ErrConflict
+	}
+	// Removed extension fields are archival data, not writable v1 capabilities.
+	normalized.Schedules = current.Schedules
+	normalized.Sources = current.Sources
 	revision, err := s.repo.SaveByUserID(ctx, currentUser.ID, normalized, s.clock.Now())
 	if err != nil {
 		return State{}, err

@@ -1,6 +1,6 @@
 # Ink API
 
-The Go service owns authentication, PostgreSQL persistence, printer integration, trusted plugin execution, content collection, scheduling, PNG rendering, and background cleanup.
+The Go service owns authentication, PostgreSQL persistence, AI configuration and replies, printer integration, PNG rendering, and background print-status synchronization. The 1.0 candidate removes plugin installation, fetching and scheduling from the API. Historical plugin tables and files are preserved without execution.
 
 Ordinary self-hosting uses the lightweight default: JSON request logs, request
 IDs, `/healthz`, and `/readyz`, with no monitoring services required. Metrics and
@@ -44,12 +44,12 @@ Never trust a CIDR containing arbitrary clients, and configure every proxy in th
 - `make migrate-up`: apply SQL migrations from `server/migrations/`
 - `make seed-dev`: create the development admin account if it does not already exist
 - `make check-api`: `gofmt`, Go tests, and backend build
-- `make smoke-api`: real API smoke flow for auth, workspace persistence, plugin upload/binding/fetch, and schedule delivery (requires Docker and `uv`; uses a disposable PostgreSQL container and temporary credentials)
+- `make smoke-api`: real API smoke flow for auth, workspace persistence, devices, print history and PNG preview (requires Docker; uses a disposable PostgreSQL container and temporary credentials)
 - `make reset-db`: remove the local PostgreSQL volume
 
 `make reset-db` deletes local development database data. It is not a production migration or rollback command.
 
-Default smoke runs use an isolated temporary PostgreSQL container and remove it, the temporary credentials, and plugin artifacts on exit. CI can supply an empty disposable database explicitly with `INK_SMOKE_BOOTSTRAP_DB=0 DATABASE_URL=... make smoke-api`; its migrated schema and seeded admin remain in that external database, which the caller must dispose of. This override does not read the database URL from `.env` and should never target a development or production database.
+Default smoke runs use an isolated temporary PostgreSQL container and remove it and temporary credentials on exit. CI can supply an empty disposable database explicitly with `INK_SMOKE_BOOTSTRAP_DB=0 DATABASE_URL=... make smoke-api`; its migrated schema and seeded admin remain in that external database, which the caller must dispose of. This override does not read the database URL from `.env` and should never target a development or production database.
 
 `INK_DEV_ADMIN_CREDENTIALS_PATH` optionally changes where `ink-seed dev` writes initial credentials; relative paths are resolved from the command's working directory. The default remains `server/.dev-admin-password`.
 
@@ -59,11 +59,12 @@ Default smoke runs use an isolated temporary PostgreSQL container and remove it,
 - workspace: read and write persisted workspace state
 - admin: member creation and shared AI configuration
 - printers and print jobs: device bindings, queue actions, and job lifecycle
-- plugins and schedules: installation, binding, validation, and scheduling
 - feedback: printable feedback submission for the admin workflow
 - preview: server-side 384px PNG rendering without creating a print job
 
-> **Plugin operator warning:** Plugins, dependency installers/build hooks, and entrypoints execute as trusted server-side code with the API process's privileges. Admin-only installation is not a sandbox; install only plugins and dependencies you trust. See [`docs/PLUGIN_SPEC.md`](../docs/PLUGIN_SPEC.md#security-model).
+Structured content blocks remain supported by preview/rendering; they are part of the core content model and do not require plugin execution. The [historical plugin specification](../docs/PLUGIN_SPEC.md) is archived reference material, not an available 1.0 endpoint contract.
+
+Set `WORKERS_ENABLED=false` for isolated recovery checks to stop print-status synchronization. Manual API operations remain enabled; also clear provider credentials and isolate outbound networking as described in [Backup and restore](../docs/BACKUP_RESTORE.md#safe-recovery-api-checks).
 
 ## Observability
 

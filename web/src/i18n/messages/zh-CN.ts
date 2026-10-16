@@ -12,13 +12,13 @@ const zhCN = {
     status: {
       label: "设备",
       title: "设备",
-      description: "查看设备绑定情况、定时任务和最近的打印记录。",
+      description: "查看设备绑定情况和最近的打印记录。",
       navHint: "设备与任务",
     },
     prints: {
       label: "打印",
       title: "打印",
-      description: "管理待确认内容、定时任务和打印记录，把打印流程集中在一起。",
+      description: "管理待确认内容和打印记录，把打印流程集中在一起。",
       navHint: "打印流程",
     },
     tutorial: {
@@ -97,20 +97,6 @@ const zhCN = {
           note: "睡前提醒",
         },
       },
-      schedules: {
-        morning: {
-          title: "早报摘要",
-          source: "晨间订阅",
-        },
-        night: {
-          title: "晚安提醒",
-          source: "睡前便签",
-        },
-        weekend: {
-          title: "周末清单",
-          source: "家庭计划",
-        },
-      },
       printJobs: {
         pending: {
           title: "晚安留言",
@@ -133,31 +119,12 @@ const zhCN = {
           content: "鸡蛋、吐司、番茄、酸奶。",
         },
       },
-      sources: {
-        worth: {
-          name: "今天值得看",
-          type: "RSS",
-          note: "每日文章摘要",
-        },
-        weather: {
-          name: "天气提醒",
-          type: "在线服务",
-          note: "晨间天气简报",
-        },
-        calendar: {
-          name: "家庭日历",
-          type: "日历",
-          note: "最近更新失败，请重新授权",
-        },
-      },
     },
     summary: {
       welcomeLabel: "整理内容，准备打印",
       boundDevices: "已绑定设备",
-      enabledSchedules: "已启用任务",
       completedToday: "今日完成",
       deviceCount: "{count} 台",
-      scheduleCount: "{count} 条",
       printCount: "{count} 条",
     },
     flash: {
@@ -175,19 +142,6 @@ const zhCN = {
       deviceAdded: "已添加新设备。",
       deviceDeleted: "设备已删除。",
       deviceRemoved: "已移除设备。",
-      scheduleUpdated: "定时任务状态已更新。",
-      scheduleCreated: "已创建新的定时任务。",
-      scheduleDeviceUpdated: "定时任务设备已更新。",
-      scheduleDeleted: "定时任务已删除。",
-      sourceConnected: "插件已连接。",
-      sourceDisconnected: "插件已解绑。",
-      pluginUploaded: "插件已上传并完成安装。",
-      pluginInstalledFromGit: "插件仓库已拉取并完成安装。",
-      pluginDisabled: "插件已停用。",
-      pluginTestPassed: "插件连接测试通过。",
-      pluginTestFailed: "插件连接测试未通过。",
-      pluginConfigSaved: "插件配置已保存。",
-      pluginConfigEnabled: "插件配置已保存并启用。",
       defaultDeviceUpdated: "默认设备已更新。",
       themeUpdated: "主题设置已更新。",
       sendConfirmationEnabled: "新内容会直接进入打印队列。",
@@ -204,9 +158,14 @@ const zhCN = {
     },
     errors: {
       syncPrintStatus: "加载打印状态失败，请稍后重试。",
+      feedbackOutcomeStorage:
+        "浏览器无法保存反馈核实提示。请联系作者核实后明确确认；刷新或清理站点数据可能丢失提示。",
+      printOutcomeStorage:
+        "浏览器无法保存打印核对提示。请核对设备后明确确认；刷新或清理站点数据可能丢失提示。",
+      localDraftStorage: "浏览器无法保留未同步草稿。请下载草稿后再离开。",
       syncWorkspace: "保存数据失败，请稍后重试。",
       loadAccountData: "加载账号数据失败，请稍后重试。",
-      loadIntegrations: "加载插件、设备与 AI 配置失败，请稍后重试。",
+      loadIntegrations: "加载设备与 AI 配置失败，请稍后重试。",
       promptRequired: "请先输入要整理的内容。",
       regenerateUnavailable: "当前没有可重新生成的内容。",
       generateReply: "暂时没能生成回复，请稍后重试。",
@@ -221,23 +180,15 @@ const zhCN = {
       deviceIdRequired: "请填写咕咕机设备编号。",
       bindDevice: "绑定设备失败，请稍后重试。",
       deleteDevice: "删除设备失败，请稍后重试。",
-      scheduleDeviceRequired: "请先选择可用设备。",
-      pluginSourceRequired: "请选择插件来源。",
-      createSchedule: "创建定时任务失败，请稍后重试。",
-      updateSchedule: "更新定时任务失败，请稍后重试。",
-      deleteSchedule: "删除定时任务失败，请稍后重试。",
       authRequired: "登录状态已失效，请重新登录。",
-      uploadPlugin: "上传插件失败，请稍后重试。",
-      installPluginFromGit: "从 Git 安装插件失败，请稍后重试。",
-      disablePlugin: "停用插件失败，请稍后重试。",
-      testPlugin: "测试插件连接失败，请稍后重试。",
-      savePluginConfiguration: "保存插件配置失败，请稍后重试。",
       defaultDeviceOffline: "已解绑设备不能设为默认。",
       saveAIConfig: "保存 AI 配置失败，请稍后重试。",
       loadAccountDataRelogin: "加载账号数据失败，请重新登录。",
       login: "登录失败，请稍后重试。",
       changePassword: "修改密码失败，请稍后重试。",
       feedbackLoginRequired: "请先登录后再反馈。",
+      feedbackSubmissionUnknown:
+        "反馈提交结果未知，作者可能已经收到纸条。请联系作者核实是否收到，再明确确认，避免直接重复发送。",
       submitFeedback: "发送反馈失败，请稍后重试。",
       createAccount: "创建账号失败，请稍后重试。",
     },
@@ -249,20 +200,9 @@ const zhCN = {
       manualPrintTitle: "手动新建纸条",
       manualPrintContent: "新的打印内容已创建，你可以稍后继续编辑。",
       manualPrintSource: "手动打印",
-      scheduleTitle: "新的定时任务",
-      scheduleManualSource: "手动创建",
-      scheduleTimeFallback: "每天 19:30",
       deviceName: "咕咕机 {count}",
       removedDevice: "已移除设备",
       devicePendingNote: "等待绑定",
-      pluginGitRepo: "Git 仓库：{url}",
-      pluginDefaultNote: "可作为定时打印内容来源",
-      pluginRuntimeNode: "Node",
-      pluginRuntimePython: "Python",
-      pluginSourceGit: "Git 插件",
-      pluginSourceUpload: "上传插件",
-      sourceConnectedNote: "连接正常",
-      sourceDisconnectedNote: "尚未连接到此来源",
       messageAuthorUser: "我",
       messageAuthorAssistant: "Ink",
     },
@@ -274,12 +214,33 @@ const zhCN = {
   },
   shell: {
     routeLoadError: "页面加载失败，请检查网络后重试。",
+    feedbackOutcome: {
+      checked: "已联系作者核实",
+      confirm: "确认已联系作者核实反馈是否收到，并了解重复发送可能导致重复纸条？",
+    },
+    printOutcome: {
+      checked: "已核对设备",
+      confirm: "确认已经核对设备输出，并了解再次提交可能造成重复打印？",
+    },
+    draftRecovery: {
+      damaged:
+        "发现无法自动恢复的草稿备份，已原样保留。可下载原始内容或明确丢弃；其他有效草稿仍可恢复。",
+      damagedItem: "损坏备份 {number}",
+      confirmDiscardDamaged: "确定删除这份损坏备份？删除前可以先下载原始内容。",
+      title: "发现上次未同步的账号草稿",
+      description:
+        "草稿只在当前账号登录后显示。恢复会替换当前对话和偏好，并使用服务器最新版本保存；也可以先下载再决定。",
+      restore: "恢复草稿",
+      download: "下载未同步草稿",
+      discard: "丢弃备份",
+      confirmRestore: "恢复备份会替换当前对话和偏好，是否继续？",
+      confirmDiscard: "确定丢弃这份未同步备份？",
+    },
     syncErrors: {
       title: "部分数据未能同步",
       workspace: "工作区：{message}",
       printers: "设备与打印：{message}",
       ai: "AI 服务：{message}",
-      extensions: "扩展功能：{message}",
       retry: "重试",
       reload: "重新加载工作区",
       download: "下载本地草稿 JSON",
@@ -353,17 +314,29 @@ const zhCN = {
     draftPlaceholder: "发送消息...",
     selectedCount: "已选中 {count} 条",
     sending: "生成中...",
+    shortcut: "Enter 换行 · Ctrl / ⌘ + Enter 发送",
+    messageRegion: "对话消息",
+    save: {
+      saving: "保存中…",
+      saved: "已保存",
+      failed: "保存失败 · 重试",
+    },
     emptyState: {
       title: "这里还没有消息",
       withHistory: "输入内容后即可开始新的对话。",
       firstConversation: "还没有历史对话，直接输入第一条消息即可开始。",
     },
     selection: {
+      message: "选择第 {index} 条消息用于打印",
       select: "选择这条消息",
       deselect: "取消选择这条消息",
     },
     actions: {
       deleteConversation: "删除对话",
+      selectForPrint: "选择打印",
+      finishSelection: "完成选择",
+      more: "更多对话操作",
+      jumpToLatest: "回到最新",
       printSelected: "打印选中问答",
       printConversation: "打印当前对话",
       saveDraft: "保存草稿",
@@ -374,7 +347,6 @@ const zhCN = {
   },
   status: {
     boundDevices: "已绑定设备",
-    autoPrint: "自动打印",
     recentPrints: "最近打印",
     defaultDevicePrefix: "默认设备 · ",
     emptyDevices: {
@@ -382,15 +354,11 @@ const zhCN = {
       authenticated: "登录成功后会弹出绑定说明，按提示填写设备编号就能完成真实绑定。",
       anonymous: "当前未登录时展示的是演示工作区；登录后，这里会切到你账号自己的真实设备列表。",
     },
-    emptySchedules: "还没有自动打印计划",
     actions: {
       addDevice: "添加设备",
       setDefault: "设为默认",
       remove: "移除",
       unbind: "解绑",
-      goToPrints: "前往打印",
-      enableTask: "开启{title}",
-      disableTask: "关闭{title}",
     },
     dialog: {
       title: "添加设备",
@@ -415,8 +383,8 @@ const zhCN = {
   tutorial: {
     hero: {
       eyebrow: "使用教程",
-      title: "Ink 里最常用的三种打印方式",
-      subtitle: "对话打印、直接打印、定时打印",
+      title: "Ink 里最常用的两种打印方式",
+      subtitle: "对话打印、直接打印",
     },
     features: {
       chat: {
@@ -427,10 +395,6 @@ const zhCN = {
         title: "打印页",
         body: "手动新建纸条，适合快速直接出纸。",
       },
-      schedule: {
-        title: "定时打印",
-        body: "设置固定时间，按计划自动发送内容。",
-      },
     },
     actions: {
       goToConversations: "去对话页",
@@ -438,7 +402,7 @@ const zhCN = {
     },
     stepsSection: {
       eyebrow: "操作步骤",
-      title: "三种常用使用方式",
+      title: "两种常用使用方式",
     },
     steps: {
       chat: {
@@ -450,11 +414,6 @@ const zhCN = {
         title: "在打印页直接新建并打印",
         body: "如果你已经想好内容，可以直接去打印页手动创建纸条，不需要先走对话流程。",
         note: "适合快速打印一句固定文案或临时通知。",
-      },
-      schedule: {
-        title: "用定时打印安排固定内容",
-        body: "你可以在打印页设置自动任务，让某些内容按固定时间发送到设备，比如晨间提醒、晚安便签或周期性通知。",
-        note: "适合重复出现、想稳定出纸的内容。",
       },
     },
     mobile: {
@@ -473,18 +432,13 @@ const zhCN = {
         answer:
           "如果你还在想内容、想让 Ink 帮你润色，就先去对话页；如果内容已经确定，只想立刻出纸，就直接去打印页。",
       },
-      scheduleUse: {
-        question: "定时打印适合拿来做什么？",
-        answer: "适合每天、每周都要重复发送的内容，比如固定提醒、待办摘要或周期性问候。",
-      },
       contentTooLong: {
         question: "对话里的内容会不会太长，不适合打印？",
         answer: "可以直接继续追问，让 Ink 帮你压缩成更短、更适合出纸的小段内容，再发送打印。",
       },
       notPrinted: {
         question: "为什么纸条没有马上打印出来？",
-        answer:
-          "先到打印页确认当前状态；定时内容会在设定时刻执行，手动发送的内容一般会很快开始处理。",
+        answer: "先到打印页确认当前状态；手动发送的内容一般会很快开始处理。",
       },
     },
     start: {
@@ -597,84 +551,16 @@ const zhCN = {
         },
       },
     },
-    plugins: {
-      testPassed: "连接测试通过。",
-      title: "插件",
-      installed: "已安装插件",
-      add: "添加插件",
-      empty: "还没有插件",
-      configure: "配置插件",
-      disabling: "停用中...",
-      disable: "停用",
-      addDialog: {
-        title: "添加插件",
-        securityTitle: "仅安装可信插件",
-        securityWarning:
-          "插件及其依赖会在服务端执行，并拥有服务器进程的权限。请只安装来自可信来源的插件。",
-        permissionsWarning: "请求的权限徽章仅是插件声明，并不代表由沙箱强制执行的授权。",
-        zipUpload: "ZIP 上传",
-        githubImport: "GitHub 导入",
-        chooseZip: "选择 ZIP 文件",
-        uploading: "上传中...",
-        processing: "正在处理 {name}",
-        repoUrl: "仓库地址",
-        repoRef: "分支",
-        repoSubdir: "子目录",
-        placeholders: {
-          repoUrl: "例如：https://github.com/example/ink-plugin.git",
-          repoRef: "默认 main",
-          repoSubdir: "例如：plugins/acme-source",
-        },
-        importing: "导入中...",
-        submit: "导入插件",
-        errors: {
-          repoUrlRequired: "请输入 Git 仓库地址。",
-        },
-      },
-      configDialog: {
-        fallbackTitle: "插件配置",
-        installStatus: "安装状态",
-        fetchPolicy: "抓取策略",
-        fetchEveryMinutes: "每 {minutes} 分钟抓取一次",
-        nextFetchAt: "下次抓取 {time}",
-        noFetchScheduled: "当前未安排自动抓取",
-        enableWorkspaceBinding: "启用插件",
-        noWorkspaceConfig: "这个插件无需额外设置。",
-        checkboxFallback: "启用此选项",
-        secretPlaceholder: "留空则保持当前密钥",
-        testing: "测试中...",
-        test: "测试插件",
-        saving: "保存中...",
-        save: "保存配置",
-      },
-      anonymousActions: {
-        connect: "连接",
-        disconnect: "解绑",
-      },
-      permissions: {
-        networkNone: "无网络",
-        networkAll: "全部网络",
-        networkHosts: "网络：{hosts}",
-        unspecifiedHosts: "未声明主机",
-        cache: "持久缓存",
-        installScripts: "安装脚本",
-      },
-      sourceTypeGit: "GitHub",
-      sourceTypeZip: "ZIP",
-    },
   },
   prints: {
     loading: "正在加载…",
+    historyEmpty: "暂无打印记录",
     loadMore: "加载更多",
-    confirmDeleteSchedule: "确认删除这条定时任务吗？",
     recentPrints: "最近打印",
-    connectedPlugins: "已连接插件",
-    noConnectedPlugins: "还没有已启用的插件，可在设置中添加。",
     moreSettings: "更多设置",
     actions: {
       bindingTutorial: "绑定教程",
       newPrint: "新建打印",
-      newSchedule: "新建定时任务",
       confirmPrint: "确认打印",
       cancelPrint: "取消打印",
       preview: "打印预览",
@@ -695,16 +581,6 @@ const zhCN = {
       emptyAnonymous: "当前未登录时显示的是演示数据流，登录后会切到各账号自己的真实打印记录。",
       targetDevice: "目标设备",
       queuedHint: "已提交到咕咕机后不能再取消或改绑设备。",
-    },
-    schedules: {
-      title: "定时任务",
-      emptyTitle: "还没有定时任务",
-      deviceLabel: "发送设备",
-      enableTask: "开启{title}",
-      disableTask: "关闭{title}",
-      sendToDevice: "发往 {device}",
-      nextRunAt: "下次执行 {time}",
-      batchSizeHint: "每次打印 {count} 条，按已抓取内容的最早顺序递送。",
     },
     defaultSettings: {
       title: "默认打印设置",
@@ -730,82 +606,12 @@ const zhCN = {
         createFailed: "创建打印失败。",
       },
     },
-    scheduleDialog: {
-      title: "新建定时任务",
-      manualSourceFallback: "手动创建",
-      fields: {
-        title: "任务名称",
-        plugin: "来源插件",
-        frequency: "频率",
-        timezone: "时区",
-        hour: "小时",
-        minute: "分钟",
-        weekdays: "执行日期",
-        batchSize: "每次打印条数",
-        source: "内容来源",
-        time: "执行时间",
-        device: "发送设备",
-      },
-      placeholders: {
-        title: "例如：晨间提醒",
-        time: "每天 19:30",
-        plugin: "请选择一个插件",
-        timezone: "例如：Asia/Shanghai",
-        source: "例如：手动创建",
-      },
-      frequency: {
-        daily: "每天",
-        weekly: "每周",
-      },
-      emptyPlugins: "当前没有可用插件，请先去设置页安装并启用插件。",
-      pluginDetails: {
-        fetchFrequency: "抓取频率",
-        fetchEveryMinutes: "每 {minutes} 分钟抓取一次",
-        fetchHint: "插件会按上方频率获取内容，每个定时任务会选择该任务尚未打印的内容。",
-        fetchStatus: "抓取状态",
-        lastFetchedAt: "最近抓取 {time}",
-        neverFetched: "尚未抓取过",
-        nextFetchAt: "下次抓取 {time}",
-        noNextFetch: "当前未安排自动抓取",
-        batchSizeHint: "每次最多打印这里设置的条数，并优先选择较早获取的内容。",
-      },
-      emptyPluginSelection: "请选择一个已连接插件，并设置每次打印条数。",
-      submit: "创建任务",
-      errors: {
-        titleRequired: "请输入任务名称。",
-        deviceRequired: "请先绑定设备，再创建定时任务。",
-        pluginRequired: "请先选择一个已启用的插件来源。",
-        weekdayRequired: "每周任务至少选择一天。",
-        invalidBatchSize: "每次打印条数必须是正整数。",
-        createFailed: "创建定时任务失败。",
-        timeRequired: "请输入执行时间。",
-      },
-    },
-    errors: {
-      invalidBatchSize: "每次打印条数必须是正整数。",
-    },
   },
   time: {
     justNow: "刚刚",
     minutesAgo: "{count} 分钟前",
     todayAt: "今天 {time}",
     yesterdayAt: "昨天 {time}",
-  },
-  weekdays: {
-    short: {
-      0: "周日",
-      1: "周一",
-      2: "周二",
-      3: "周三",
-      4: "周四",
-      5: "周五",
-      6: "周六",
-    },
-  },
-  schedule: {
-    everyDay: "每天 {time}",
-    everyWeek: "每周{days} {time}",
-    listSeparator: "、",
   },
   statuses: {
     device: {
@@ -825,16 +631,6 @@ const zhCN = {
       error: "异常",
       disconnected: "未连接",
     },
-    pluginInstallation: {
-      installing: "安装中",
-      ready: "可用",
-      failed: "异常",
-      disabled: "已停用",
-    },
-    pluginBinding: {
-      disabled: "已停用",
-      disconnected: "未连接",
-    },
     userRole: {
       admin: "管理员",
       member: "成员",
@@ -852,6 +648,7 @@ const zhCN = {
   },
   errors: {
     api: {
+      auth_refresh_failed: "会话刷新失败，原请求已被拒绝且未执行。请稍后重试或重新登录。",
       network_error: "网络异常，请检查连接后重试。",
       request_failed: "请求失败，请稍后重试。",
       invalid_session_payload: "登录会话无效，请重新登录。",
@@ -866,6 +663,8 @@ const zhCN = {
       printer_resource_not_found: "指定的设备或打印任务不存在。",
       invalid_printer_input: "请输入有效的设备或打印信息。",
       printer_unavailable: "咕咕机服务暂时不可用，请稍后重试。",
+      print_submission_unknown:
+        "打印提交结果未知。请先核对设备是否已经打印，避免重复发送。已保存的任务可在打印记录中查看。",
       print_content_too_large:
         "内容超过打印限制，请拆分后再预览或打印（标题最多 512 字节、正文最多 64 KiB、合计最多 8000 个字符、图片高度最多 8192 像素）；请避免过多连续零宽字符。",
       workspace_conflict: "工作区已在其他位置更新，本地草稿已保留。请下载草稿或重新加载后再保存。",
@@ -873,12 +672,6 @@ const zhCN = {
       invalid_feedback_input: "请输入反馈内容。",
       feedback_recipient_missing: "当前还没有可接收反馈的管理员账号。",
       feedback_printer_missing: "管理员当前还没有可接收反馈的默认咕咕机。",
-      plugin_not_found: "指定插件不存在。",
-      plugin_secret_missing: "服务端尚未配置插件加密密钥。",
-      invalid_plugin_input: "请输入有效的插件配置。",
-      plugin_git_install_disabled: "服务端未启用从 Git 仓库安装插件。",
-      schedule_not_found: "指定定时任务不存在。",
-      schedule_conflict: "定时任务已更新，请重新加载后再修改。",
     },
   },
 } as const;

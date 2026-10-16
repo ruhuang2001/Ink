@@ -330,7 +330,10 @@ func (s *Store) SaveByUserID(
 	var revision int64
 	err = s.db.QueryRow(ctx, `
 		update workspace_snapshots
-		set state = $2, updated_at = $3, revision = revision + 1
+		set state = $2::jsonb || jsonb_build_object(
+		    'schedules', coalesce(state->'schedules', '[]'::jsonb),
+		    'sources', coalesce(state->'sources', '[]'::jsonb)
+		), updated_at = $3, revision = revision + 1
 		where user_id = $1 and revision = $4
 		returning revision
 	`, userID, payload, updatedAt, expectedRevision).Scan(&revision)

@@ -413,10 +413,6 @@
     border-radius: 0;
   }
 
-  .ink-page main fieldset > section {
-    animation: content-in 420ms var(--ease-out-quint) both;
-  }
-
   .tutorial-hero {
     background:
       linear-gradient(135deg, rgba(250, 250, 249, 0.95), rgba(245, 245, 244, 0.92)),
@@ -469,18 +465,6 @@
   }
 }
 
-@keyframes content-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @keyframes tab-settle {
   0% {
     transform: translateY(2px) scale(0.985);
@@ -491,11 +475,12 @@
   }
 }
 
-.page-swap-enter-active,
+.page-swap-enter-active {
+  transition: opacity 140ms ease-out;
+}
+
 .page-swap-leave-active {
-  transition:
-    opacity 180ms var(--ease-out-quart),
-    transform 180ms var(--ease-out-quart);
+  display: none;
 }
 
 .dialog-fade-enter-active,
@@ -505,10 +490,8 @@
     transform 180ms var(--ease-out-quart);
 }
 
-.page-swap-enter-from,
-.page-swap-leave-to {
+.page-swap-enter-from {
   opacity: 0;
-  transform: translateY(10px);
 }
 
 .dialog-fade-enter-from,

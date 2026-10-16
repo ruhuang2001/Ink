@@ -53,11 +53,12 @@ one "not yet printed" response, the stub changes to completed while no browser r
 are made. Database polling verifies eventual completion. This moves provider
 traffic to the background; it does not imply zero total provider traffic.
 
-The due-schedule experiment uses a 2 s scheduler interval for both versions and
-confirmation mode, so it measures due time to local job creation without physical
-printing. Its delay comes from PostgreSQL timestamps, independent of the observer's
-Docker/psql overhead. It is a single timing sample, not a latency distribution;
-the production schedule cadence remains 30 s.
+The current script does not execute plugin schedules. Synthetic legacy plugin rows
+remain in the database only as compatibility data, with an empty manifest and
+disabled bindings/schedules; no plugin fixture is loaded or executed. Current
+measurements cover list/workspace/status reads, pagination, PNG rendering, input
+limits and background print-status completion. Structured content blocks remain
+supported by the core renderer independently of the removed plugin feature.
 
 Rendering uses a fresh API process for each input size, one warmup, and three
 measured PNG requests. RSS is sampled with `ps` at a target 20 ms cadence; process
@@ -83,8 +84,9 @@ does not occur.
 ## Results — 2026-10-01
 
 Both experiments passed their foreground improvement gates and data-contract checks.
-The full run additionally verified rendering, schedule delivery, and background
-completion. The `--core-only` zero-delay run did not run those additional checks. The machine
+The historical full run additionally verified rendering, legacy schedule delivery, and background
+completion. Schedule measurements below describe that old revision and are not a
+1.0 capability or a current performance expectation. The `--core-only` zero-delay run did not run those additional checks. The machine
 was macOS 27 on arm64, with API binaries built by Go 1.26.6 and PostgreSQL 16.
 The host Go launcher was 1.26.5; the module automatically selected 1.26.6. Raw
 samples, the Docker image digest, and frozen source hashes are preserved in
@@ -94,13 +96,13 @@ The candidate implementation is committed as `f08952b`; measurements preceded
 the commit, so the raw metadata retains its original dirty-tree HEAD. Its server
 source fingerprint matches the committed implementation.
 
-| Metric | Baseline `4399d13` | Candidate | Change |
-| --- | ---: | ---: | ---: |
-| First-page list p95, 20 ms stub | 650.84 ms | 11.05 ms | 98.30% lower |
-| First-page list p95, zero-delay stub | 25.62 ms | 3.35 ms | 86.94% lower |
-| List response body | 4,294,849 bytes | 4,057 bytes | 99.91% smaller |
-| Workspace response with duplicated history | 4,319,218 bytes | 386 bytes | 99.991% smaller |
-| Provider calls triggered by 30 list reads | 600 | 0 | Read traffic no longer amplifies status calls |
+| Metric                                     | Baseline `4399d13` |   Candidate |                                        Change |
+| ------------------------------------------ | -----------------: | ----------: | --------------------------------------------: |
+| First-page list p95, 20 ms stub            |          650.84 ms |    11.05 ms |                                  98.30% lower |
+| First-page list p95, zero-delay stub       |           25.62 ms |     3.35 ms |                                  86.94% lower |
+| List response body                         |    4,294,849 bytes | 4,057 bytes |                                99.91% smaller |
+| Workspace response with duplicated history |    4,319,218 bytes |   386 bytes |                               99.991% smaller |
+| Provider calls triggered by 30 list reads  |                600 |           0 | Read traffic no longer amplifies status calls |
 
 The new lightweight status response for 20 IDs contained 2,324 bytes and had a
 4.26 ms p95 in the zero-delay experiment, with zero provider calls. All 1,000
@@ -118,16 +120,16 @@ browser polling; the 10 s recheck delay plus the 2 s scan cadence remains visibl
 
 The single due-to-local-job measurement was 962.43 ms before and 1,373.42 ms after
 with the same accelerated 2 s scheduler cadence. This is a timing baseline and
-does not establish a scheduling improvement. The production scheduler interval
-has not changed. Physical printer completion was simulated, so real printer
+does not establish a scheduling improvement. The 1.0 application no longer runs
+that scheduler. Physical printer completion was simulated, so real printer
 latency, printer availability, and production multi-user throughput remain unmeasured.
 
-| Render input | Version | Pre-render RSS | Observed maximum RSS | Observed increase |
-| --- | --- | ---: | ---: | ---: |
-| 486 bytes | Baseline | 24.33 MiB | 31.89 MiB | 7.56 MiB |
-| 486 bytes | Candidate | 24.23 MiB | 31.48 MiB | 7.25 MiB |
-| 4,077 bytes | Baseline | 50.19 MiB | 98.44 MiB | 48.25 MiB |
-| 4,077 bytes | Candidate | 49.81 MiB | 97.39 MiB | 47.58 MiB |
+| Render input | Version   | Pre-render RSS | Observed maximum RSS | Observed increase |
+| ------------ | --------- | -------------: | -------------------: | ----------------: |
+| 486 bytes    | Baseline  |      24.33 MiB |            31.89 MiB |          7.56 MiB |
+| 486 bytes    | Candidate |      24.23 MiB |            31.48 MiB |          7.25 MiB |
+| 4,077 bytes  | Baseline  |      50.19 MiB |            98.44 MiB |         48.25 MiB |
+| 4,077 bytes  | Candidate |      49.81 MiB |            97.39 MiB |         47.58 MiB |
 
 PNG bytes matched across versions for every measured request. These sampled
 memory figures are consistent with an unchanged renderer and justify retaining
@@ -144,11 +146,11 @@ test fakes did not catch; completion and real-database checks were rerun after
 the correction.
 
 Broader workspace convergence and snapshot version conflicts, job claims and
-leases, bounded execution concurrency, frontend domain-store separation, plugin
-batch inserts, rendering changes, and additional SQL index tuning remain separate
+leases, bounded execution concurrency, frontend domain-store separation,
+rendering changes, and additional SQL index tuning remain separate
 work. This experiment does not rank those candidates as production bottlenecks.
 The later PR #86 review implements workspace revision conflicts and recoverable
 status/submission claims; the original measurements do not validate those changes.
 Before changing them, collect production list p95 and body sizes, total provider
-calls from worker telemetry, schedule due-to-created delays, and render profiles
+calls from worker telemetry and render profiles
 on representative inputs and concurrency.

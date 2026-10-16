@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ruhuang/ink/server/internal/plugins"
+	"github.com/ruhuang/ink/server/internal/content"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
@@ -33,7 +33,7 @@ func TestRenderLimitsRejectOversizedContentWithoutTruncation(t *testing.T) {
 
 func TestRenderLimitsApplyToBlocksAndJobCreation(t *testing.T) {
 	service := NewService(nil, nil, nil, nil, "", "", time.Second)
-	_, err := service.RenderBlocksPreview(t.Context(), "title", []plugins.ContentBlock{{Type: plugins.BlockParagraph, Text: strings.Repeat("长", 4000)}})
+	_, err := service.RenderBlocksPreview(t.Context(), "title", []content.ContentBlock{{Type: content.BlockParagraph, Text: strings.Repeat("长", 4000)}})
 	if !errors.Is(err, ErrContentTooLarge) {
 		t.Fatalf("blocks bypassed limit: %v", err)
 	}
