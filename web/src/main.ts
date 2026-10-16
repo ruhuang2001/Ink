@@ -10,6 +10,7 @@ import "@/styles.css";
 import "@/structured.css";
 import "@/conversations.css";
 import "@/prints.css";
+import "@/settings.css";
 
 const app = createApp(AppRoot);
 

@@ -66,7 +66,9 @@ async function submitAddDevice() {
       </h2>
     </div>
 
-    <div class="grid border-y border-stone-200 sm:grid-cols-3 sm:divide-x sm:divide-stone-200">
+    <div
+      class="device-summary grid border-y border-stone-200 sm:grid-cols-2 sm:divide-x sm:divide-stone-200"
+    >
       <article
         v-for="item in workspaceStore.summaryCards"
         :key="item.label"
