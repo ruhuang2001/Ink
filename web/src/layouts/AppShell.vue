@@ -438,7 +438,7 @@ async function recoverSynchronization() {
         :inert="workspaceStore.workspaceLoading || !!workspaceStore.recoveredWorkspaceDraft"
       >
         <RouterView v-slot="{ Component, route: currentRoute }">
-          <Transition name="page-swap" mode="out-in">
+          <Transition name="page-swap">
             <component :is="Component" :key="currentRoute.matched[1]?.path ?? currentRoute.path" />
           </Transition>
         </RouterView>

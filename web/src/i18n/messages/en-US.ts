@@ -572,6 +572,7 @@ const enUS = {
   },
   prints: {
     loading: "Loading…",
+    historyEmpty: "No print history yet",
     loadMore: "Load more",
     recentPrints: "Recent prints",
     moreSettings: "More settings",

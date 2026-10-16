@@ -9,6 +9,7 @@ import { pinia } from "@/stores/pinia";
 import "@/styles.css";
 import "@/structured.css";
 import "@/conversations.css";
+import "@/prints.css";
 
 const app = createApp(AppRoot);
 

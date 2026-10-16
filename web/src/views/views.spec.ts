@@ -571,6 +571,10 @@ describe("workspace views", () => {
     expect(store.pendingPrintJobs.some((job) => job.status === "queued")).toBe(true);
     expect(wrapper.text()).toContain("默认设备");
     expect(wrapper.text()).toContain("书桌咕咕机");
+    expect(wrapper.text()).not.toContain("绑定教程");
+    expect(wrapper.get(".print-device-link").attributes("href")).toBe("/settings/devices");
+    store.devices = [];
+    await flushPromises();
     expect(wrapper.text()).toContain("绑定教程");
   });
 

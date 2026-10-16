@@ -143,24 +143,26 @@ async function submitPrintDialog() {
 </script>
 
 <template>
-  <section class="print-page mx-auto max-w-6xl space-y-8 pt-2 sm:space-y-10">
-    <header
-      class="ink-rule flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center sm:justify-between"
-    >
+  <section class="print-page">
+    <header class="print-toolbar">
       <div>
         <h1 class="sr-only">
           {{ t("navigation.prints.label") }}
         </h1>
-        <p class="text-sm text-stone-500">
-          {{ t("prints.defaultSettings.defaultDevice") }} ·
-          {{ workspaceStore.activeDeviceLabel || t("prints.defaultSettings.notSet") }}
-        </p>
+        <RouterLink to="/settings/devices" class="print-device-link">
+          <InkIcon name="print" />
+          <span
+            ><span class="print-device-label">{{ t("prints.defaultSettings.defaultDevice") }}</span>
+            {{ workspaceStore.activeDeviceLabel || t("prints.defaultSettings.notSet") }}</span
+          >
+        </RouterLink>
       </div>
       <div class="flex flex-wrap items-center gap-2 sm:justify-end">
         <button class="ui-btn-primary flex-1 px-4 sm:flex-none" @click="openPrintDialog">
           <InkIcon name="plus" />{{ t("prints.actions.newPrint") }}
         </button>
         <RouterLink
+          v-if="!workspaceStore.devices.length"
           to="/settings/guide"
           class="min-h-11 w-full px-1 py-2 text-center text-sm font-medium text-stone-500 transition-colors hover:text-stone-900 sm:min-h-0 sm:w-auto sm:text-left"
         >
@@ -169,21 +171,18 @@ async function submitPrintDialog() {
       </div>
     </header>
 
-    <div class="space-y-14">
-      <section class="print-pending">
-        <div class="mb-4 flex items-center justify-between gap-4">
-          <h2 class="text-xl font-semibold tracking-tight text-stone-900">
+    <div class="print-sections">
+      <section class="print-pending print-panel">
+        <div class="print-section-heading">
+          <h2 class="print-section-title">
             {{ t("prints.pending.title") }}
           </h2>
-          <span class="text-sm text-stone-500 tabular-nums">
+          <span class="print-count">
             {{ workspaceStore.pendingPrintJobs.length }}
           </span>
         </div>
 
-        <div
-          v-if="workspaceStore.pendingPrintJobs.length === 0"
-          class="ink-print-empty border-y border-stone-200 px-6 py-10 text-center"
-        >
+        <div v-if="workspaceStore.pendingPrintJobs.length === 0" class="print-empty">
           <h4 class="text-base font-semibold text-stone-900">
             {{ t("prints.pending.emptyTitle") }}
           </h4>
@@ -196,11 +195,13 @@ async function submitPrintDialog() {
           </p>
         </div>
 
-        <div v-else class="space-y-8">
-          <section v-for="group in activePrintGroups" :key="group.status">
-            <h3 class="mb-2 text-sm font-medium text-stone-500">
-              {{ group.title }} · {{ group.jobs.length }}
-            </h3>
+        <div v-else class="print-active-groups">
+          <section
+            v-for="group in activePrintGroups"
+            :key="group.status"
+            class="print-active-group"
+          >
+            <h3 class="print-group-title">{{ group.title }} · {{ group.jobs.length }}</h3>
             <div class="print-queue">
               <article v-for="item in group.jobs" :key="item.id" class="print-ticket">
                 <div class="min-w-0 flex-1">
@@ -283,18 +284,21 @@ async function submitPrintDialog() {
         </button>
       </section>
 
-      <section>
-        <div class="mb-4">
-          <h2 class="text-xl font-semibold tracking-tight text-stone-900">
+      <section class="print-panel print-history">
+        <div class="print-section-heading">
+          <h2 class="print-section-title">
             {{ t("prints.recentPrints") }}
           </h2>
         </div>
 
-        <div class="ui-list-card p-4">
-          <div class="ui-timeline">
-            <article v-for="item in historyPrintJobs" :key="item.id" class="ui-timeline-item">
-              <div class="ui-timeline-row">
-                <div class="ui-timeline-copy">
+        <p v-if="!historyPrintJobs.length" class="print-empty">
+          {{ t(workspaceStore.printJobsLoading ? "prints.loading" : "prints.historyEmpty") }}
+        </p>
+        <div v-else class="print-history-list">
+          <div>
+            <article v-for="item in historyPrintJobs" :key="item.id" class="print-history-item">
+              <div class="print-history-row">
+                <div class="print-history-copy">
                   <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
                   <p v-if="item.errorMessage" class="mt-1 text-sm text-red-700" role="alert">
                     {{ item.errorMessage }}
@@ -303,12 +307,6 @@ async function submitPrintDialog() {
                     {{ workspaceStore.getDeviceName(item.deviceId) }} ·
                     {{ workspaceStore.formatPrintTime(item.updatedAt) }}
                   </p>
-                  <button
-                    class="mt-2 text-sm text-stone-600 hover:text-stone-900"
-                    @click="openPreview(item)"
-                  >
-                    {{ t("prints.actions.preview") }}
-                  </button>
                 </div>
                 <span
                   class="ui-status-badge sm:self-center"
@@ -316,6 +314,9 @@ async function submitPrintDialog() {
                 >
                   {{ workspaceStore.getPrintStatusLabel(item.status) }}
                 </span>
+                <button class="print-history-preview" @click="openPreview(item)">
+                  {{ t("prints.actions.preview") }}
+                </button>
               </div>
             </article>
           </div>

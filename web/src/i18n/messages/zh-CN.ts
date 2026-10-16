@@ -554,6 +554,7 @@ const zhCN = {
   },
   prints: {
     loading: "正在加载…",
+    historyEmpty: "暂无打印记录",
     loadMore: "加载更多",
     recentPrints: "最近打印",
     moreSettings: "更多设置",
