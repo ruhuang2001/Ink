@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
@@ -11,6 +11,21 @@ import { useDesignStore } from "@/stores/design";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const route = useRoute();
+const viewportHeight = ref<number>();
+function updateViewportHeight() {
+  // Pinch zoom must not reflow the workspace; keyboard resize should.
+  if (window.visualViewport && window.visualViewport.scale !== 1) return;
+  viewportHeight.value = window.visualViewport?.height ?? window.innerHeight;
+}
+onMounted(() => {
+  updateViewportHeight();
+  window.visualViewport?.addEventListener("resize", updateViewportHeight);
+  window.addEventListener("resize", updateViewportHeight);
+});
+onBeforeUnmount(() => {
+  window.visualViewport?.removeEventListener("resize", updateViewportHeight);
+  window.removeEventListener("resize", updateViewportHeight);
+});
 const router = useRouter();
 const workspaceStore = useWorkspaceStore();
 const { t } = useI18n();
@@ -109,7 +124,14 @@ async function recoverSynchronization() {
 </script>
 
 <template>
-  <div :data-design="design" class="ink-page flex min-h-[100dvh] flex-col text-stone-900">
+  <div
+    :data-design="design"
+    class="ink-page flex min-h-[100dvh] flex-col text-stone-900"
+    :class="{ 'ink-conversation-shell': route.name === 'conversations' }"
+    :style="{
+      '--conversation-viewport-height': viewportHeight ? viewportHeight + 'px' : undefined,
+    }"
+  >
     <AppDialog
       :open="workspaceStore.postLoginTutorialOpen"
       :title="t('shell.postLoginTutorial.title')"

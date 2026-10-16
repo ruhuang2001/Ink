@@ -1,313 +1,269 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { RouterLink } from "vue-router";
 
+import ConversationComposer from "@/components/ConversationComposer.vue";
+import ConversationMessages from "@/components/ConversationMessages.vue";
 import InkIcon from "@/components/InkIcon.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspaceStore = useWorkspaceStore();
 const { t } = useI18n();
-
+const selecting = ref(false);
+const actions = ref<HTMLDetailsElement | null>(null);
+const messages = ref<InstanceType<typeof ConversationMessages> | null>(null);
+const saving = ref(false);
+const saveResult = ref<"idle" | "saved" | "error">("idle");
+let saveVersion = 0;
 const hasMessages = computed(() => (workspaceStore.activeConversation?.messages.length ?? 0) > 0);
-const hasConversationHistory = computed(() =>
-  workspaceStore.conversations.some((conversation) => conversation.messages.length > 0),
-);
+const selectedCount = computed(() => workspaceStore.selectedConversationMessageIds.length);
 const emptyStateHint = computed(() =>
-  hasConversationHistory.value
+  workspaceStore.conversations.some((conversation) => conversation.messages.length > 0)
     ? t("conversations.emptyState.withHistory")
     : t("conversations.emptyState.firstConversation"),
 );
-function handleDraftInput(event: Event) {
-  const target = event.target as HTMLTextAreaElement | null;
-  workspaceStore.updateCurrentDraft(target?.value ?? "");
-}
+const saveError = computed(
+  () => saveResult.value === "error" || !!workspaceStore.workspaceSyncError,
+);
+const saveStatus = computed(() => {
+  if (saveError.value) return t("conversations.save.failed");
+  if (saving.value || workspaceStore.workspaceSyncing) return t("conversations.save.saving");
+  if (saveResult.value === "saved") return t("conversations.save.saved");
+  return t("conversations.actions.saveDraft");
+});
 
-function handleConversationChange(event: Event) {
-  const target = event.target as HTMLSelectElement | null;
-  if (target?.value) workspaceStore.selectConversation(target.value);
+function closeActions() {
+  if (actions.value) actions.value.open = false;
 }
-
-function handleDeleteCurrentConversation() {
+function closeActionsWithFocus() {
+  closeActions();
+  actions.value?.querySelector("summary")?.focus();
+}
+function closeOutside(event: PointerEvent) {
+  if (event.target instanceof Node && !actions.value?.contains(event.target)) closeActions();
+}
+function exitSelection() {
+  selecting.value = false;
+  workspaceStore.selectedConversationMessageIds = [];
+}
+function toggleSelection() {
+  if (selecting.value) exitSelection();
+  else selecting.value = true;
+}
+function selectConversation(event: Event) {
+  workspaceStore.selectConversation((event.target as HTMLSelectElement).value);
+}
+function deleteConversation() {
+  closeActions();
   const current = workspaceStore.activeConversation;
-
-  if (!current) {
+  if (!current) return;
+  if (
+    (current.messages.length || current.draft.trim()) &&
+    !window.confirm(t("conversations.confirmDelete", { title: current.title }))
+  )
     return;
-  }
-
-  const hasContent = current.messages.length > 0 || current.draft.trim().length > 0;
-  if (hasContent && typeof window !== "undefined") {
-    const confirmed = window.confirm(t("conversations.confirmDelete", { title: current.title }));
-    if (!confirmed) {
-      return;
-    }
-  }
-
   workspaceStore.deleteConversation(current.id);
 }
+async function send() {
+  void nextTick(() => messages.value?.scrollToLatest());
+  await workspaceStore.sendCurrentDraft();
+}
+async function saveDraft() {
+  if (saving.value) return;
+  const version = ++saveVersion;
+  saving.value = true;
+  const saved = await workspaceStore.saveCurrentDraft();
+  if (version !== saveVersion) return;
+  saving.value = false;
+  saveResult.value = saved ? "saved" : "error";
+}
+function printConversation() {
+  closeActions();
+  void workspaceStore.createPrintFromConversation();
+}
+function regenerate() {
+  closeActions();
+  void workspaceStore.regenerateLatestReply();
+}
+watch(
+  () => [workspaceStore.activeConversationId, workspaceStore.authUser?.id],
+  () => {
+    exitSelection();
+    closeActions();
+    saveVersion++;
+    saving.value = false;
+    saveResult.value = "idle";
+  },
+);
+watch(
+  () => workspaceStore.activeConversation?.draft,
+  () => {
+    saveVersion++;
+    saving.value = false;
+    saveResult.value = "idle";
+  },
+);
+onMounted(() => document.addEventListener("pointerdown", closeOutside));
+onBeforeUnmount(() => {
+  saveVersion++;
+  document.removeEventListener("pointerdown", closeOutside);
+});
 </script>
 
 <template>
-  <section class="conversation-page mx-auto max-w-6xl space-y-8 pt-2 sm:space-y-10">
-    <div class="space-y-3 lg:hidden">
-      <div class="flex items-center justify-between gap-4">
-        <label for="recent-conversation" class="text-sm font-medium text-stone-600">
-          {{ t("conversations.recent") }}
-        </label>
+  <section class="conversation-workspace">
+    <h1 class="sr-only">{{ t("navigation.conversations.label") }}</h1>
+    <aside class="conversation-sidebar">
+      <div class="conversation-sidebar-heading">
+        <h2>{{ t("conversations.recent") }}</h2>
         <button
           type="button"
-          class="ui-btn-secondary shrink-0"
+          class="conversation-quiet-button"
           @click="workspaceStore.createConversation"
         >
           <InkIcon name="plus" />{{ t("common.actions.new") }}
         </button>
       </div>
-      <select
-        id="recent-conversation"
-        :value="workspaceStore.activeConversationId"
-        class="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-stone-900"
-        @change="handleConversationChange"
-      >
-        <option v-for="chat in workspaceStore.conversations" :key="chat.id" :value="chat.id">
-          {{ chat.title }} · {{ workspaceStore.formatPrintTime(chat.updatedAt) }}
-        </option>
-      </select>
-    </div>
+      <div class="conversation-list">
+        <button
+          v-for="chat in workspaceStore.conversations"
+          :key="chat.id"
+          type="button"
+          class="conversation-list-item"
+          :class="{ 'is-active': workspaceStore.activeConversationId === chat.id }"
+          :aria-current="workspaceStore.activeConversationId === chat.id ? 'true' : undefined"
+          @click="workspaceStore.selectConversation(chat.id)"
+        >
+          <span class="conversation-list-title">{{ chat.title }}</span>
+          <span class="conversation-list-preview">{{ chat.preview }}</span>
+          <span class="conversation-list-time">{{
+            workspaceStore.formatPrintTime(chat.updatedAt)
+          }}</span>
+        </button>
+      </div>
+    </aside>
 
-    <div class="ink-conversation-grid grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-12">
-      <h1 class="sr-only">{{ t("navigation.conversations.label") }}</h1>
-      <aside class="ink-conversation-sidebar hidden min-w-0 space-y-4 lg:block">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-base leading-6 font-semibold text-stone-900">
-              {{ t("conversations.recent") }}
-            </h2>
-          </div>
+    <div class="conversation-panel">
+      <header class="conversation-heading">
+        <div class="conversation-heading-copy">
+          <h2 class="conversation-desktop-title">
+            {{ workspaceStore.activeConversation?.title ?? t("conversations.currentConversation") }}
+          </h2>
+          <label for="recent-conversation" class="sr-only">{{ t("conversations.recent") }}</label>
+          <select
+            id="recent-conversation"
+            class="conversation-mobile-select"
+            :value="workspaceStore.activeConversationId"
+            @change="selectConversation"
+          >
+            <option v-for="chat in workspaceStore.conversations" :key="chat.id" :value="chat.id">
+              {{ chat.title }}
+            </option>
+          </select>
+          <p class="conversation-device">
+            <InkIcon name="print" />{{
+              workspaceStore.activeDeviceLabel || t("common.labels.notSet")
+            }}
+          </p>
+        </div>
+        <div class="conversation-heading-actions">
           <button
-            class="ui-btn-secondary px-3 py-1.5 text-sm"
+            type="button"
+            class="conversation-quiet-button conversation-mobile-new"
+            :aria-label="t('common.actions.new')"
             @click="workspaceStore.createConversation"
           >
-            <InkIcon name="plus" />{{ t("common.actions.new") }}
+            <InkIcon name="plus" />
           </button>
-        </div>
-
-        <div
-          v-if="workspaceStore.conversations.length"
-          class="ui-list-card max-h-[calc(100dvh-13rem)] overflow-y-auto"
-        >
           <button
-            v-for="chat in workspaceStore.conversations"
-            :key="chat.id"
             type="button"
-            class="ui-list-row block w-full cursor-pointer text-left"
-            :class="{ 'is-active': workspaceStore.activeConversationId === chat.id }"
-            @click="workspaceStore.selectConversation(chat.id)"
+            class="conversation-quiet-button"
+            :aria-pressed="selecting"
+            :disabled="!hasMessages"
+            @click="toggleSelection"
           >
-            <div class="flex items-start justify-between gap-2">
-              <p
-                class="text-sm font-medium"
-                :class="
-                  workspaceStore.activeConversationId === chat.id
-                    ? 'text-stone-900'
-                    : 'text-stone-700'
-                "
-              >
-                {{ chat.title }}
-              </p>
-              <span
-                class="text-xs"
-                :class="
-                  workspaceStore.activeConversationId === chat.id
-                    ? 'text-stone-600'
-                    : 'text-stone-600'
-                "
-              >
-                {{ workspaceStore.formatPrintTime(chat.updatedAt) }}
-              </span>
-            </div>
-            <p class="mt-1 line-clamp-2 text-sm text-stone-600">
-              {{ chat.preview }}
-            </p>
+            <InkIcon name="print" />{{
+              t(
+                selecting
+                  ? "conversations.actions.finishSelection"
+                  : "conversations.actions.selectForPrint",
+              )
+            }}
           </button>
-        </div>
-      </aside>
-
-      <div
-        class="ink-chat-panel ink-paper flex min-h-[24rem] min-w-0 flex-col p-4 sm:min-h-[28rem] sm:p-6 lg:h-[calc(100dvh-11rem)] lg:min-h-[500px]"
-      >
-        <div
-          class="ink-chat-heading mb-4 flex shrink-0 flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div>
-            <h2 class="text-base leading-6 font-semibold text-stone-900">
-              {{
-                workspaceStore.activeConversation?.title ?? t("conversations.currentConversation")
-              }}
-            </h2>
-            <p class="mt-1 text-sm text-stone-600">
-              {{
-                t("conversations.defaultDevice", {
-                  value: workspaceStore.activeDeviceLabel || t("common.labels.notSet"),
-                })
-              }}
-            </p>
-          </div>
-          <div class="flex w-full sm:w-auto">
-            <button
-              type="button"
-              class="ui-btn-secondary w-full px-3 py-1.5 text-sm sm:w-auto"
-              @click="handleDeleteCurrentConversation"
-            >
-              {{ t("conversations.actions.deleteConversation") }}
-            </button>
-          </div>
-        </div>
-
-        <div
-          v-if="!hasMessages"
-          class="flex flex-1 items-center justify-center border-y border-stone-200 px-6 text-center"
-        >
-          <div class="space-y-2">
-            <h3 class="text-base font-semibold text-stone-900">
-              {{ t("conversations.emptyState.title") }}
-            </h3>
-            <p class="text-sm leading-6 text-stone-600">
-              {{ emptyStateHint }}
-            </p>
-          </div>
-        </div>
-
-        <div v-else class="ink-messages space-y-4 lg:flex-1 lg:overflow-y-auto lg:pr-2">
-          <article
-            v-for="message in workspaceStore.activeConversation?.messages"
-            :key="message.id"
-            class="ink-message space-y-2"
+          <details
+            ref="actions"
+            class="conversation-actions"
+            @keydown.esc.prevent="closeActionsWithFocus"
           >
-            <div
-              class="flex items-center gap-3"
-              :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
+            <summary
+              class="conversation-quiet-button"
+              :aria-label="t('conversations.actions.more')"
             >
+              •••
+            </summary>
+            <div class="conversation-action-popover">
               <button
                 type="button"
-                class="block max-w-[88%] rounded-xl border px-5 py-3.5 text-left text-[15px] leading-relaxed transition-all"
-                :class="
-                  message.role === 'user'
-                    ? workspaceStore.selectedConversationMessageIds.includes(message.id)
-                      ? 'rounded-br-sm border-stone-700 bg-stone-700 text-white ring-2 ring-stone-400 ring-offset-2'
-                      : 'rounded-br-sm border-stone-800 bg-stone-800 text-white'
-                    : workspaceStore.selectedConversationMessageIds.includes(message.id)
-                      ? 'rounded-bl-sm border-stone-500 bg-stone-100 text-stone-950 ring-2 ring-stone-300 ring-offset-2'
-                      : 'rounded-bl-sm border-stone-200 bg-white text-stone-900'
-                "
-                :aria-label="
-                  workspaceStore.selectedConversationMessageIds.includes(message.id)
-                    ? t('conversations.selection.deselect')
-                    : t('conversations.selection.select')
-                "
-                :aria-pressed="workspaceStore.selectedConversationMessageIds.includes(message.id)"
-                @click="workspaceStore.toggleConversationMessageSelection(message.id)"
-              >
-                {{ message.text }}
-              </button>
-            </div>
-          </article>
-
-          <article
-            v-if="workspaceStore.isGenerating"
-            class="max-w-[85%] rounded-xl rounded-bl-sm border border-stone-200 bg-white px-5 py-3.5 text-[15px] leading-relaxed text-stone-600"
-          >
-            {{ t("conversations.generating") }}
-          </article>
-        </div>
-
-        <div class="ink-chat-tools mt-6 shrink-0 space-y-4 border-t border-stone-200 pt-4">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex flex-wrap gap-2">
-              <button
-                class="ui-btn-secondary whitespace-nowrap"
-                @click="workspaceStore.createPrintFromSelectedMessages"
-              >
-                <InkIcon name="print" />{{ t("conversations.actions.printSelected") }}
-              </button>
-              <button
-                class="ui-btn-secondary whitespace-nowrap"
-                @click="workspaceStore.createPrintFromConversation"
+                :disabled="!hasMessages || workspaceStore.isCreatingPrint"
+                @click="printConversation"
               >
                 {{ t("conversations.actions.printConversation") }}
               </button>
-            </div>
-            <div class="flex items-center gap-2">
+              <RouterLink to="/prints">{{ t("conversations.actions.viewPrintQueue") }}</RouterLink>
               <button
-                class="ui-btn-secondary whitespace-nowrap"
-                @click="workspaceStore.saveCurrentDraft"
+                type="button"
+                :disabled="!hasMessages || workspaceStore.isGenerating"
+                @click="regenerate"
               >
-                <InkIcon name="save" />{{ t("conversations.actions.saveDraft") }}
+                {{ t("conversations.actions.regenerate") }}
               </button>
-              <RouterLink to="/prints" class="ui-btn-secondary whitespace-nowrap">
-                {{ t("conversations.actions.viewPrintQueue") }}
-              </RouterLink>
+              <button type="button" class="is-danger" @click="deleteConversation">
+                {{ t("conversations.actions.deleteConversation") }}
+              </button>
             </div>
-          </div>
-
-          <p
-            v-if="workspaceStore.generationError"
-            class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
-          >
-            {{ workspaceStore.generationError }}
-          </p>
-
-          <div class="ink-composer relative rounded-md transition-all">
-            <textarea
-              :value="workspaceStore.activeConversation?.draft ?? ''"
-              rows="4"
-              :placeholder="t('conversations.draftPlaceholder')"
-              class="w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-relaxed text-stone-900 placeholder:text-stone-600 focus:ring-0 focus:outline-none"
-              @input="handleDraftInput"
-            />
-            <div
-              class="flex flex-col gap-3 rounded-b-md border-t border-stone-200 bg-stone-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div class="flex flex-wrap items-center gap-2 text-xs text-stone-600">
-                <span>
-                  {{
-                    t("conversations.selectedCount", {
-                      count: workspaceStore.selectedConversationMessageIds.length,
-                    })
-                  }}
-                </span>
-              </div>
-              <div class="flex gap-2">
-                <button
-                  class="rounded-md p-1.5 text-stone-600 transition-colors hover:bg-stone-200/50 hover:text-stone-900"
-                  :title="t('conversations.actions.regenerate')"
-                  :disabled="workspaceStore.isGenerating"
-                  @click="workspaceStore.regenerateLatestReply"
-                >
-                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                </button>
-                <button
-                  class="ui-btn-primary px-4 py-1.5"
-                  :disabled="workspaceStore.isGenerating"
-                  @click="workspaceStore.sendCurrentDraft"
-                >
-                  <InkIcon name="arrow" />
-                  {{
-                    workspaceStore.isGenerating
-                      ? t("conversations.sending")
-                      : t("conversations.actions.send")
-                  }}
-                </button>
-              </div>
-            </div>
-          </div>
+          </details>
         </div>
+      </header>
+
+      <ConversationMessages
+        ref="messages"
+        :conversation-id="workspaceStore.activeConversationId"
+        :messages="workspaceStore.activeConversation?.messages ?? []"
+        :generating="workspaceStore.isGenerating"
+        :selecting="selecting"
+        :selected-ids="workspaceStore.selectedConversationMessageIds"
+        :empty-hint="emptyStateHint"
+        @toggle="workspaceStore.toggleConversationMessageSelection"
+      />
+
+      <div class="conversation-bottom">
+        <div v-if="selecting" class="conversation-selection-bar">
+          <span role="status">{{
+            t("conversations.selectedCount", { count: selectedCount })
+          }}</span>
+          <button
+            type="button"
+            class="conversation-print-selection"
+            :disabled="!selectedCount || workspaceStore.isCreatingPrint"
+            @click="workspaceStore.createPrintFromSelectedMessages"
+          >
+            <InkIcon name="print" />{{ t("conversations.actions.printSelected") }}
+          </button>
+        </div>
+        <p v-if="workspaceStore.generationError" role="alert" class="conversation-error">
+          {{ workspaceStore.generationError }}
+        </p>
+        <ConversationComposer
+          :model-value="workspaceStore.activeConversation?.draft ?? ''"
+          :generating="workspaceStore.isGenerating"
+          :saving="saving || workspaceStore.workspaceSyncing"
+          :save-status="saveStatus"
+          :save-error="saveError"
+          @update:model-value="workspaceStore.updateCurrentDraft"
+          @send="send"
+          @save="saveDraft"
+        />
       </div>
     </div>
   </section>

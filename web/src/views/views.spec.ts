@@ -292,28 +292,76 @@ describe("workspace views", () => {
     });
 
     await wrapper.find("textarea").setValue("请帮我整理成一句适合贴在电脑旁边的提醒");
-    await wrapper.find("button.ui-btn-primary").trigger("click");
+    await wrapper.find(".conversation-send").trigger("click");
     await new Promise((resolve) => window.setTimeout(resolve, 120));
 
     expect(store.activeConversation?.messages.at(-1)?.role).toBe("assistant");
-    expect(wrapper.text()).toContain("打印选中问答");
+    expect(wrapper.text()).toContain("选择打印");
     expect(store.selectedConversationMessageIds).toEqual([]);
-
-    const assistantSelectionButton = wrapper
-      .findAll("button")
-      .filter((button) => button.attributes("aria-label") === "选择这条消息")
-      .at(-1);
-    await assistantSelectionButton?.trigger("click");
+    await wrapper.get("button[aria-pressed]").trigger("click");
+    await wrapper.findAll(".conversation-message-select input").at(-1)!.setValue(true);
     expect(store.selectedConversationMessageIds).toContain(
       store.activeConversation?.messages.at(-1)?.id,
     );
 
-    await wrapper
-      .findAll("button.ui-btn-secondary")
-      .find((button) => button.text() === "打印选中问答")
-      ?.trigger("click");
+    await wrapper.get(".conversation-print-selection").trigger("click");
 
     expect(store.pendingPrintJobs.at(0)?.source).toBe("对话选中问答");
+  });
+
+  it("reports save completion only after persistence succeeds and exposes failures", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/conversations");
+    const wrapper = mount(ConversationsView, { global: { plugins: [pinia, router] } });
+    let finish!: (saved: boolean) => void;
+    const save = vi.spyOn(store, "saveCurrentDraft").mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await wrapper.get(".conversation-save").trigger("click");
+    expect(wrapper.get(".conversation-save").text()).toBe("保存中…");
+    expect(wrapper.get(".conversation-save").attributes("disabled")).toBeDefined();
+    finish(true);
+    await flushPromises();
+    expect(wrapper.get(".conversation-save").text()).toBe("已保存");
+    save.mockResolvedValueOnce(false);
+    await wrapper.get(".conversation-save").trigger("click");
+    await flushPromises();
+    expect(wrapper.get(".conversation-save").text()).toBe("保存失败 · 重试");
+    save.mockRestore();
+  });
+
+  it("does not mark an edited draft saved when an earlier save resolves", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/conversations");
+    const wrapper = mount(ConversationsView, { global: { plugins: [pinia, router] } });
+    let finish!: (saved: boolean) => void;
+    const save = vi.spyOn(store, "saveCurrentDraft").mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await wrapper.get(".conversation-save").trigger("click");
+    await wrapper.get("textarea").setValue("新的草稿");
+    finish(true);
+    await flushPromises();
+    expect(wrapper.get(".conversation-save").text()).toBe("保存草稿");
+    save.mockRestore();
+  });
+
+  it("clears selection when switching conversations without changing the message text", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/conversations");
+    const wrapper = mount(ConversationsView, { global: { plugins: [pinia, router] } });
+    await wrapper.get(".conversation-message-text").trigger("click");
+    expect(store.selectedConversationMessageIds).toEqual([]);
+    await wrapper.get("button[aria-pressed]").trigger("click");
+    await wrapper.get(".conversation-message-select input").setValue(true);
+    expect(store.selectedConversationMessageIds).toHaveLength(1);
+    store.selectConversation(store.conversations[1]!.id);
+    await flushPromises();
+    expect(store.selectedConversationMessageIds).toEqual([]);
+    expect(wrapper.find(".conversation-selection-bar").exists()).toBe(false);
   });
 
   it("keeps feedback solicitation out of the primary conversation flow", async () => {
@@ -368,7 +416,7 @@ describe("workspace views", () => {
     expect(store.conversations).toHaveLength(1);
 
     await wrapper.find("textarea").setValue("这是第一条消息");
-    await wrapper.find("button.ui-btn-primary").trigger("click");
+    await wrapper.find(".conversation-send").trigger("click");
     await new Promise((resolve) => window.setTimeout(resolve, 120));
 
     expect(store.activeConversation?.messages[0]?.text).toBe("这是第一条消息");
@@ -384,17 +432,11 @@ describe("workspace views", () => {
       },
     });
 
-    const userMessageButton = wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("帮我整理一张温柔一点的今日提醒"));
-
-    await userMessageButton?.trigger("click");
+    await wrapper.get("button[aria-pressed]").trigger("click");
+    await wrapper.get(".conversation-message-user input").setValue(true);
     expect(store.selectedConversationMessages.at(0)?.role).toBe("user");
 
-    await wrapper
-      .findAll("button.ui-btn-secondary")
-      .find((button) => button.text() === "打印选中问答")
-      ?.trigger("click");
+    await wrapper.get(".conversation-print-selection").trigger("click");
 
     expect(vi.mocked(printerService.createPrintJob).mock.calls.at(-1)?.[1].content).toContain(
       "帮我整理一张温柔一点的今日提醒",
