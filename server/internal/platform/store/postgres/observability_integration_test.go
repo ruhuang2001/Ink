@@ -36,12 +36,12 @@ func TestBacklogSeparatesDueWorkFromLeasesAndConfirmation(t *testing.T) {
 	for _, sample := range samples {
 		queues[sample.Queue] = sample
 	}
-	for queue, count := range map[string]int64{"plugin_fetch": 1, "schedule": 0, "print_status": 1, "pending_confirmation": 1, "submitted_print": 1} {
+	for queue, count := range map[string]int64{"print_status": 1, "pending_confirmation": 1, "submitted_print": 1} {
 		if queues[queue].Count != count {
 			t.Fatalf("%s: got %+v, want count %d", queue, queues[queue], count)
 		}
 	}
-	if !queues["print_status"].Oldest.Equal(old) || !queues["schedule"].Oldest.IsZero() {
+	if !queues["print_status"].Oldest.Equal(old) || len(queues) != 3 {
 		t.Fatalf("wrong due ages: %+v", queues)
 	}
 	// Future polling is device waiting, not due work. A provider-less submission
@@ -62,7 +62,7 @@ func TestBacklogSeparatesDueWorkFromLeasesAndConfirmation(t *testing.T) {
 	for _, sample := range samples {
 		queues[sample.Queue] = sample
 	}
-	if queues["plugin_fetch"].Count != 0 || queues["schedule"].Count != 1 || queues["print_status"].Count != 1 || !queues["print_status"].Oldest.Equal(now) || queues["submitted_print"].Count != 1 {
+	if queues["print_status"].Count != 1 || !queues["print_status"].Oldest.Equal(now) || queues["submitted_print"].Count != 1 {
 		t.Fatalf("lease or provider acceptance/recovery boundary mixed: %+v", queues)
 	}
 }

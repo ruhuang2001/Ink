@@ -21,15 +21,15 @@ function isSectionActive(name: string) {
 </script>
 
 <template>
-  <section class="mx-auto max-w-6xl pt-3 sm:pt-5">
+  <section class="settings-workspace mx-auto max-w-6xl">
     <header>
-      <h1 class="text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
+      <h1 class="text-lg font-semibold tracking-tight text-stone-950">
         {{ t("navigation.settings.label") }}
       </h1>
     </header>
 
     <nav
-      class="settings-section-nav mt-8 overflow-x-auto overflow-y-hidden border-b border-stone-200"
+      class="settings-section-nav mt-4 overflow-x-auto overflow-y-hidden border-b border-stone-200"
       :aria-label="t('navigation.settings.label')"
     >
       <div class="flex min-w-max gap-7">
@@ -49,7 +49,7 @@ function isSectionActive(name: string) {
     </nav>
 
     <RouterView v-slot="{ Component, route }">
-      <Transition name="page-swap" mode="out-in">
+      <Transition name="page-swap">
         <component :is="Component" :key="route.name" />
       </Transition>
     </RouterView>

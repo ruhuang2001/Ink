@@ -17,15 +17,17 @@ responses are now bounded summaries rather than full-content history.
 
 ```json
 {
-  "printJobs": [{
-    "id": "print-example",
-    "title": "Reminder",
-    "source": "Manual",
-    "deviceId": "device-example",
-    "status": "queued",
-    "createdAt": "2026-10-01T00:00:00Z",
-    "updatedAt": "2026-10-01T00:00:00Z"
-  }],
+  "printJobs": [
+    {
+      "id": "print-example",
+      "title": "Reminder",
+      "source": "Manual",
+      "deviceId": "device-example",
+      "status": "queued",
+      "createdAt": "2026-10-01T00:00:00Z",
+      "updatedAt": "2026-10-01T00:00:00Z"
+    }
+  ],
   "nextCursor": null
 }
 ```
@@ -59,15 +61,19 @@ responses and must be ignored. The default includes metadata.
 {
   "printJobs": [],
   "counts": {
-    "pending": 0, "queued": 1, "completed": 500,
-    "failed": 0, "cancelled": 0, "todayCompleted": 2
+    "pending": 0,
+    "queued": 1,
+    "completed": 500,
+    "failed": 0,
+    "cancelled": 0,
+    "todayCompleted": 2
   },
   "latestJobId": "print-example"
 }
 ```
 
 Counts cover the whole account, independently of loaded pages. A changed
-`latestJobId` lets the browser discover schedule-created jobs. Polling with
+`latestJobId` lets the browser discover jobs created in another tab. Polling with
 no queued jobs still discovers changes; hidden pages pause polling. Clients
 must discard responses from a previous account and preserve a newer job
 version when overlapping requests finish out of order.
@@ -98,8 +104,38 @@ eligible for reconciliation.
 If a process exits before persisting the submission result, a queued job without
 a provider ID becomes failed after three minutes. Its summary and detail expose
 an optional `errorMessage` instructing the user to check the device first.
-Automatic delivery retries never resubmit these uncertain jobs. Other internal
+Uncertain jobs are never automatically resubmitted. Other internal
 provider errors remain private. Existing content and history are preserved.
+
+The same recovery instruction is persisted immediately when the final print
+POST may have reached the provider but its result is unknown: connection loss,
+timeout or request cancellation after submission starts, a truncated or invalid
+response, and an HTTP error without a complete explicit provider rejection.
+These failed jobs retain their content and are never automatically resubmitted.
+Create, submit and feedback-print requests with an uncertain submission return
+HTTP 502 with `code: "print_submission_unknown"` and a fixed instruction to
+check the device before deciding whether to create a replacement. This also
+applies when the provider accepted the request but saving its result failed.
+Clients should refresh job history, retain the draft and avoid offering an
+immediate retry for this error. Provider response details remain private.
+Errors before the print POST (configuration, rendering, or image conversion)
+and complete HTTP 200 or 4xx responses containing an explicit, valid provider
+rejection remain retryable. A status code alone does not establish rejection;
+truncated, malformed or contradictory 4xx responses and all 5xx responses remain
+uncertain. Before such a retry calls the provider, its in-flight state is
+saved as queued, so a crash or failed result save cannot restore the old retryable
+failure. Users should check the device before manually creating a replacement
+for any job whose outcome is unknown.
+
+The web client retains account-specific unknown-outcome protection across reloads
+and sign-out. A late response from a prior session records the protection for
+the originating account. Manual printing requires explicit device-check
+acknowledgement before another submission. Feedback has separate protection:
+users must verify receipt with the administrator before acknowledging that
+another feedback submission may print twice. Clearing browser site data removes
+these browser safeguards; storage failures are reported and retain the current
+session's protection where possible. A completed 401 followed by a failed token
+refresh is an authentication failure, not an uncertain print submission.
 
 In the print view, active jobs and history load independently in pages of 20.
 Each section offers **Load more** when another page exists; **Preview** retrieves
@@ -122,7 +158,7 @@ also rejected to bound layout computation. These checks happen before image
 allocation, and content is never silently truncated.
 
 Print-content limit violations return HTTP 413, `print_content_too_large`. This applies to
-plain text, flattened plugin blocks, new jobs and previously stored pending
+plain text, flattened semantic blocks, new jobs and previously stored pending
 jobs when submitted. Existing jobs rejected before submission remain pending,
 so they can still be cancelled or assigned to another device.
 

@@ -1,6 +1,6 @@
 # Self-hosting Ink
 
-This guide covers a single-instance Ink deployment. Ink currently ships source code and development infrastructure rather than a production container image, so operators build the web application and Go API from the repository.
+This guide covers a single-instance Ink 1.0 deployment with accounts, devices, AI assistance and manual printing. Operators build the web application and Go API from source; a production container image is not required. Plugin installation, execution and plugin schedules are unavailable in 1.0. Existing plugin database rows, stored workspace fields and installation files are preserved.
 
 Use the default lightweight setup for ordinary self-hosting: the API and PostgreSQL
 need no monitoring services. JSON request logs, request IDs, and health checks are
@@ -15,7 +15,6 @@ need to start its four or eight services or set a Grafana password to run Ink.
 - pnpm 10
 - Go 1.26.9 (see `server/go.mod`)
 - PostgreSQL 16
-- `uv` when installing or testing Python plugins
 - A Memobird Open Platform access key for physical printing
 - HTTPS and a reverse proxy for any deployment exposed beyond localhost
 
@@ -65,30 +64,28 @@ DATABASE_URL=postgres://ink:change-me@postgres:5432/ink?sslmode=require
 JWT_SECRET=generate-a-long-random-secret
 AI_CONFIG_ENCRYPTION_KEY=generate-a-32-byte-random-secret
 MEMOBIRD_ACCESS_KEY=your-open-platform-access-key
-PLUGIN_ROOT=/var/lib/ink/plugins
+WORKERS_ENABLED=true
 ```
 
 Important settings:
 
-| Variable                   | Purpose                                                                               |
-| -------------------------- | ------------------------------------------------------------------------------------- |
-| `DATABASE_URL`             | PostgreSQL connection string. Use TLS outside a private local network.                |
-| `JWT_SECRET`               | Signs access tokens. Rotating it invalidates existing access tokens.                  |
-| `AI_CONFIG_ENCRYPTION_KEY` | Encrypts stored AI keys and plugin binding secrets. Back it up securely.              |
-| `MEMOBIRD_ACCESS_KEY`      | Enables Memobird device binding and physical printing.                                |
-| `MEMOBIRD_BASE_URL`        | Optional provider endpoint override; leave empty for the SDK default.                 |
-| `PRINT_STATUS_SYNC_ENABLED` | Enables background completion checks (default `true`). Disable only when another process owns synchronization. |
-| `PRINT_STATUS_POLL_INTERVAL` | Interval for scanning due print jobs (default `2s`). Healthy jobs are rescheduled after `10s`; bounded batches, leases, and load can delay actual checks. |
-| `PRINT_STATUS_BATCH_SIZE` | Maximum jobs considered per synchronization round (default `20`, maximum `100`). |
-| `PRINT_STATUS_TIMEOUT` | Timeout for each provider status request (default `5s`), independent of print submission timeout. |
-| `PRINT_STATUS_RECHECK_INTERVAL` | Delay after a successful not-printed response (default `10s`); the delay backs off exponentially. |
-| `PRINT_STATUS_MAX_RECHECK_INTERVAL` | Maximum recheck delay (default `5m`); accepted jobs remain queued until completion is confirmed. |
-| `PRINT_STATUS_MAX_ATTEMPTS` | Number of unsuccessful status checks before the job is marked failed with a check-device message (default `6`); it is never automatically resubmitted. |
-| `PLUGIN_ROOT`              | Persistent plugin installation directory. It must survive API restarts.               |
-| `PLUGIN_GIT_ALLOWED_HOSTS` | Comma-separated allowlist for Git plugin installation. Keep it narrow.                |
-| `PLUGIN_ENV_ALLOWLIST`     | Explicit server environment variables passed to plugin subprocesses. Empty is safest. |
-| `TRUSTED_PROXY_CIDRS`      | CIDRs of reverse proxies allowed to supply the configured client-IP header.           |
-| `TRUSTED_PROXY_HEADER`     | Either `forwarded` or `x-forwarded-for`; configure it together with trusted CIDRs.    |
+| Variable                            | Purpose                                                                                                                                                   |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                      | PostgreSQL connection string. Use TLS outside a private local network.                                                                                    |
+| `JWT_SECRET`                        | Signs access tokens. Rotating it invalidates existing access tokens.                                                                                      |
+| `AI_CONFIG_ENCRYPTION_KEY`          | Encrypts stored AI keys and plugin binding secrets. Back it up securely.                                                                                  |
+| `MEMOBIRD_ACCESS_KEY`               | Enables Memobird device binding and physical printing.                                                                                                    |
+| `MEMOBIRD_BASE_URL`                 | Optional provider endpoint override; leave empty for the SDK default.                                                                                     |
+| `WORKERS_ENABLED`                   | Enables automatic print-status checks (default `true`). Set `false` during isolated recovery inspections; manual API actions remain enabled.              |
+| `PRINT_STATUS_SYNC_ENABLED`         | Enables background completion checks when workers are enabled (default `true`).                                                                           |
+| `PRINT_STATUS_POLL_INTERVAL`        | Interval for scanning due print jobs (default `2s`). Healthy jobs are rescheduled after `10s`; bounded batches, leases, and load can delay actual checks. |
+| `PRINT_STATUS_BATCH_SIZE`           | Maximum jobs considered per synchronization round (default `20`, maximum `100`).                                                                          |
+| `PRINT_STATUS_TIMEOUT`              | Timeout for each provider status request (default `5s`), independent of print submission timeout.                                                         |
+| `PRINT_STATUS_RECHECK_INTERVAL`     | Delay after a successful not-printed response (default `10s`); the delay backs off exponentially.                                                         |
+| `PRINT_STATUS_MAX_RECHECK_INTERVAL` | Maximum recheck delay (default `5m`); accepted jobs remain queued until completion is confirmed.                                                          |
+| `PRINT_STATUS_MAX_ATTEMPTS`         | Number of unsuccessful status checks before the job is marked failed with a check-device message (default `6`); it is never automatically resubmitted.    |
+| `TRUSTED_PROXY_CIDRS`               | CIDRs of reverse proxies allowed to supply the configured client-IP header.                                                                               |
+| `TRUSTED_PROXY_HEADER`              | Either `forwarded` or `x-forwarded-for`; configure it together with trusted CIDRs.                                                                        |
 
 Review every variable in [`server/.env.example`](../server/.env.example) before deployment.
 
@@ -112,6 +109,18 @@ cd server
 ../bin/ink-migrate up
 ../bin/ink-api
 ```
+
+The migration command uses a database advisory lock to serialize upgrades and
+checks the SHA-256 of each applied SQL file before running new migrations. An
+edited or missing recorded file stops the upgrade. Never edit a released
+migration; add a new forward migration instead.
+
+Older databases have no stored checksums. Their first upgrade records a baseline
+from the current checkout without replaying applied SQL. This cannot establish
+whether those files were modified in the past. Before that first upgrade, back
+up the database and verify the migration files against the trusted original
+release. Keep the recorded baseline and use the same immutable source files for
+later upgrades and recovery.
 
 The print-status migration adds persisted check times and pagination indexes,
 and schedules previously queued provider jobs for background reconciliation.
@@ -175,8 +184,8 @@ Preview generation does not contact Memobird. It returns a PNG rendered by the s
 
 Back up both:
 
-- PostgreSQL, which stores accounts, bindings, schedules, collected items, deliveries, and print jobs;
-- `PLUGIN_ROOT`, which stores installed plugin code and dependencies.
+- PostgreSQL, which stores accounts, sessions, workspace state, AI configuration, bindings, print jobs and retained legacy plugin data;
+- any existing legacy `PLUGIN_ROOT` directory as private archival material. The 1.0 API does not load or execute its contents.
 
 Also retain the encryption key required to decrypt stored AI and plugin secrets. A database backup without its corresponding encryption key is incomplete.
 
@@ -194,7 +203,7 @@ The repository does not yet provide automated production backup or restore tooli
 - `GET /readyz` checks PostgreSQL and enabled worker lifecycle, and returns 503 during dependency failure or shutdown.
 - Structured API logs are written to stdout.
 - Database migrations are explicit and should run once before an application rollout.
-- A single API process runs plugin fetching, schedule polling, and inbox cleanup workers.
+- A single API process runs print-status synchronization when `WORKERS_ENABLED` and `PRINT_STATUS_SYNC_ENABLED` are true. Legacy plugin fetching, schedule delivery and inbox cleanup never start.
 
 Optional Prometheus metrics are enabled only when `METRICS_ADDR` is set (for
 example, `127.0.0.1:9090`). Leaving it empty disables the registry, HTTP/worker/
@@ -212,12 +221,43 @@ and worker-progress limitations.
 
 ## Upgrade checklist
 
-1. Back up PostgreSQL and `PLUGIN_ROOT`.
+1. Back up PostgreSQL, its matching encryption key, deployment configuration and any retained legacy plugin directory.
 2. Read the release notes and migration changes.
 3. Build the new frontend and API.
 4. Run migrations once.
 5. Restart the API and publish the new frontend assets.
-6. Verify `/healthz`, `/readyz`, login, printer listing, plugin listing, and PNG preview generation.
+6. Verify `/healthz`, `/readyz`, login, printer and job listing, workspace reads, and PNG preview generation.
+
+For restoration checks, use `WORKERS_ENABLED=false`, an empty Memobird access key, disabled telemetry and outbound network isolation. Follow [Safe recovery API checks](BACKUP_RESTORE.md#safe-recovery-api-checks) before starting a restored copy.
+
+## Release candidates and version policy
+
+The 1.0 scope is single-instance self-hosting of the core printing and AI workflow.
+Plugin routes and execution are removed; their historical tables and files are
+retained. This is a documented scope change from 0.x, not a deletion of user data.
+
+Push an existing `vMAJOR.MINOR.PATCH` or prerelease tag such as `v1.0.0-rc.1`. The
+release workflow resolves that tag to a commit SHA and runs frontend audit/quality,
+Go formatting/tests/build/lint and reachable-vulnerability checks, isolated API
+database smoke, and optional monitoring contracts against that SHA. Only successful
+candidates produce a draft GitHub Release. Tags must never be moved after creation.
+
+Review the draft release notes and include the scope, compatibility/migration
+changes, exact checks, and the limits of the recorded acceptance evidence. Re-run
+the release workflow manually with its existing tag and `publish=true` to publish.
+Tags with a prerelease suffix publish as prereleases. A stable tag additionally
+requires `physical_print_verified=true`: a human declaration that real Memobird
+binding, manual printing, network recovery and completion status were checked.
+This declaration is not an automated device test and must not be selected without
+the actual evidence. Automated tests never contact a physical printer.
+
+Once published, 1.x patch/minor releases preserve the documented core `/api/v1`
+contracts and retained user data. New schema changes use new forward migrations;
+released migration files are immutable. Breaking contracts require a new major
+version and explicit migration notes. Deploy the frontend and API from the same
+revision. Operators define their production backup frequency, retention and
+recovery objectives; a source release does not establish a deployment's RPO/RTO.
+See [Security policy](../SECURITY.md) for supported versions.
 
 ## Verification
 
@@ -229,7 +269,7 @@ make check-api
 make check-local-ci
 ```
 
-`make smoke-api` creates an isolated temporary PostgreSQL container, keeps credentials and plugin artifacts in a private temporary directory, and removes them on exit. It leaves the development database, `.env`, and `.dev-admin-password` unchanged and does not contact the physical printer provider. Docker and `uv` are required. CI may reuse its own empty disposable database by setting `INK_SMOKE_BOOTSTRAP_DB=0` and an explicit `DATABASE_URL`.
+`make smoke-api` creates an isolated temporary PostgreSQL container, keeps credentials in a private temporary directory, and removes them on exit. It leaves the development database, `.env`, and `.dev-admin-password` unchanged and does not contact the physical printer provider. Docker is required. CI may reuse its own empty disposable database by setting `INK_SMOKE_BOOTSTRAP_DB=0` and an explicit `DATABASE_URL`.
 
 On macOS, local CI exposes the act cache on port `18333` through
 `host.docker.internal` so Docker can reach it even when a VPN changes the

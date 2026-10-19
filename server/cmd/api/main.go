@@ -14,9 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
-	"github.com/ruhuang/ink/server/internal/dispatch"
 	"github.com/ruhuang/ink/server/internal/feedback"
-	"github.com/ruhuang/ink/server/internal/inbox"
 	"github.com/ruhuang/ink/server/internal/platform/clock"
 	"github.com/ruhuang/ink/server/internal/platform/config"
 	"github.com/ruhuang/ink/server/internal/platform/httpapi"
@@ -26,10 +24,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/platform/secret"
 	"github.com/ruhuang/ink/server/internal/platform/store/postgres"
 	"github.com/ruhuang/ink/server/internal/platform/token"
-	"github.com/ruhuang/ink/server/internal/pluginfetch"
-	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
-	"github.com/ruhuang/ink/server/internal/schedule"
 	"github.com/ruhuang/ink/server/internal/scheduler"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
@@ -128,45 +123,6 @@ func main() {
 		printerService,
 		clock.SystemClock{},
 	)
-	pluginService := plugins.NewService(
-		store,
-		service,
-		encryptor,
-		idgen.Generator{},
-		clock.SystemClock{},
-		nil,
-		cfg.PluginRoot,
-		cfg.PluginExecTimeout,
-		cfg.PluginInstallTimeout,
-		plugins.RuntimeLimits{
-			OutputMaxBytes:        cfg.PluginOutputMaxBytes,
-			FetchMaxItems:         cfg.PluginFetchMaxItems,
-			FetchMaxBlocksPerItem: cfg.PluginFetchMaxBlocksPerItem,
-			FetchMaxTextBytes:     cfg.PluginFetchMaxTextBytes,
-			FetchMaxURLBytes:      cfg.PluginFetchMaxURLBytes,
-			EnvAllowlist:          cfg.PluginEnvAllowlist,
-		},
-		plugins.GoGitCloner{},
-		cfg.PluginGitAllowedHosts,
-	)
-	inboxService := inbox.NewService(store, idgen.Generator{}, clock.SystemClock{})
-	dispatchService := dispatch.NewService(
-		store,
-		printerService,
-		store,
-		idgen.Generator{},
-		clock.SystemClock{},
-	)
-	pluginFetchService := pluginfetch.NewService(service, pluginService, inboxService, clock.SystemClock{})
-	scheduleService := schedule.NewService(
-		store,
-		service,
-		pluginService,
-		store,
-		dispatchService,
-		idgen.Generator{},
-		clock.SystemClock{},
-	)
 	var metrics *observability.Metrics
 	var backlogDone <-chan struct{}
 	if cfg.MetricsAddr != "" {
@@ -175,52 +131,20 @@ func main() {
 		backlogDone = metrics.StartBacklog(ctx, store)
 	}
 	if metrics != nil || observability.TracingEnabled() {
-		pluginFetchService.Observer = metrics.Operation("plugin_fetch")
-		scheduleService.Observer = metrics.Operation("schedule")
-		dispatchService.Observer = metrics.Operation("delivery")
 		printerService.SubmissionObserver = metrics.Operation("print_submit")
 		printerService.StatusObserver = metrics.Operation("print_status")
 		printerService.RenderObserver = metrics.Operation("png_render")
 	}
-	var statusDone <-chan struct{}
-	if cfg.PrintStatusSyncEnabled {
+	workerDone := make(map[string]<-chan struct{})
+	startWorker(cfg.WorkersEnabled && cfg.PrintStatusSyncEnabled, "print_status_sync", workerDone, func() <-chan struct{} {
 		statusSync := printer.NewStatusSynchronizerWithPollingAndAttempts(printerService, cfg.PrintStatusTimeout, cfg.PrintStatusRecheckInterval, cfg.PrintStatusMaxRecheckInterval, cfg.PrintStatusMaxAttempts)
 		statusRunner := scheduler.NewPrintStatusRunner(statusSync, logger, cfg.PrintStatusPollInterval, cfg.PrintStatusBatchSize)
 		if metrics != nil {
 			statusRunner.Observer = metrics.Worker("print_status_sync", cfg.PrintStatusPollInterval)
 		}
-		statusDone = statusRunner.Start(ctx)
-	} else {
-		done := make(chan struct{})
-		close(done)
-		statusDone = done
-	}
+		return statusRunner.Start(ctx)
+	})
 
-	fetchRunner := scheduler.NewFetchRunner(pluginFetchService, logger, cfg.SchedulerPollInterval, 10)
-	if metrics != nil {
-		fetchRunner.Observer = metrics.Worker("plugin_fetch", cfg.SchedulerPollInterval)
-	}
-	fetchDone := fetchRunner.Start(ctx)
-
-	schedulerRunner := scheduler.NewRunner(scheduleService, logger, cfg.SchedulerPollInterval, 10)
-	if metrics != nil {
-		schedulerRunner.Observer = metrics.Worker("schedule", cfg.SchedulerPollInterval)
-	}
-	schedulerDone := schedulerRunner.Start(ctx)
-
-	inboxJanitor := scheduler.NewInboxJanitor(inboxService, clock.SystemClock{}, logger, cfg.InboxJanitorInterval, cfg.InboxRetention)
-	if metrics != nil {
-		inboxJanitor.Observer = metrics.Worker("inbox_janitor", cfg.InboxJanitorInterval)
-	}
-	janitorDone := inboxJanitor.Start(ctx)
-	workerDone := map[string]<-chan struct{}{
-		"plugin_fetch":  fetchDone,
-		"schedule":      schedulerDone,
-		"inbox_janitor": janitorDone,
-	}
-	if cfg.PrintStatusSyncEnabled {
-		workerDone["print_status_sync"] = statusDone
-	}
 	readiness := observability.NewReadiness(ctx, db.Ping, workerDone)
 
 	server := &http.Server{
@@ -231,16 +155,12 @@ func main() {
 			aiService,
 			printerService,
 			feedbackService,
-			pluginService,
-			pluginFetchService,
-			scheduleService,
 			logger,
 			cfg.RateLimitWindow,
 			cfg.RateLimitMax,
 			cfg.RateLimitMaxEntries,
 			cfg.TrustedProxyCIDRs,
 			cfg.TrustedProxyHeader,
-			cfg.PluginUploadMaxBytes,
 			httpapi.WithObservability(metrics, readiness.Check),
 		).Handler(),
 		ReadHeaderTimeout: httpReadHeaderTimeout,
@@ -302,7 +222,10 @@ func main() {
 		}
 	}
 
-	workers := []<-chan struct{}{fetchDone, schedulerDone, janitorDone, statusDone}
+	workers := make([]<-chan struct{}, 0, len(workerDone)+1)
+	for _, done := range workerDone {
+		workers = append(workers, done)
+	}
 	if backlogDone != nil {
 		workers = append(workers, backlogDone)
 	}
@@ -319,5 +242,12 @@ func main() {
 
 	if serveErr != nil {
 		panic(serveErr)
+	}
+}
+
+// startWorker registers only enabled workers for readiness and shutdown checks.
+func startWorker(enabled bool, name string, workers map[string]<-chan struct{}, start func() <-chan struct{}) {
+	if enabled {
+		workers[name] = start()
 	}
 }

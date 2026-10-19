@@ -21,9 +21,8 @@ func main() {
 	}
 	databaseURL := os.Getenv("DATABASE_URL")
 	printerID := os.Getenv("INK_SMOKE_PRINTER_ID")
-	pluginKey := os.Getenv("INK_SMOKE_PLUGIN_KEY")
-	if databaseURL == "" || printerID == "" || pluginKey == "" {
-		fmt.Fprintln(os.Stderr, "DATABASE_URL, INK_SMOKE_PRINTER_ID, and INK_SMOKE_PLUGIN_KEY are required")
+	if databaseURL == "" || printerID == "" {
+		fmt.Fprintln(os.Stderr, "DATABASE_URL and INK_SMOKE_PRINTER_ID are required")
 		os.Exit(1)
 	}
 
@@ -39,7 +38,7 @@ func main() {
 	if os.Args[1] == "setup" {
 		err = setup(ctx, db, printerID)
 	} else {
-		err = cleanup(ctx, db, printerID, pluginKey)
+		err = cleanup(ctx, db, printerID)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s smoke fixture: %v\n", os.Args[1], err)
@@ -69,16 +68,13 @@ func setup(ctx context.Context, db *pgxpool.Pool, printerID string) error {
 	return nil
 }
 
-func cleanup(ctx context.Context, db *pgxpool.Pool, printerID string, pluginKey string) error {
+func cleanup(ctx context.Context, db *pgxpool.Pool, printerID string) error {
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	if _, err := tx.Exec(ctx, `delete from print_jobs where printer_binding_id = $1`, printerID); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `delete from plugin_installations where plugin_key = $1`, pluginKey); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `delete from printer_bindings where id = $1`, printerID); err != nil {

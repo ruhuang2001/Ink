@@ -11,11 +11,9 @@ SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-30}"
 BOOTSTRAP_DB="${INK_SMOKE_BOOTSTRAP_DB:-1}"
 SMOKE_RUN_ID="$(date +%s)-$$"
 SMOKE_PRINTER_ID="printer_smoke_${SMOKE_RUN_ID}"
-SMOKE_PLUGIN_KEY="ink-smoke-source-${SMOKE_RUN_ID}"
 SMOKE_DB_CONTAINER=""
 SMOKE_DIR=""
 export INK_SMOKE_PRINTER_ID="$SMOKE_PRINTER_ID"
-export INK_SMOKE_PLUGIN_KEY="$SMOKE_PLUGIN_KEY"
 
 cleanup() {
   if [ "${SERVER_PID:-}" != "" ] && kill -0 "$SERVER_PID" >/dev/null 2>&1; then
@@ -34,11 +32,6 @@ cleanup() {
 }
 
 trap cleanup EXIT INT TERM
-
-if ! command -v uv >/dev/null 2>&1; then
-  echo "uv is required for the plugin lifecycle smoke fixture." >&2
-  exit 1
-fi
 
 python3 - "$SMOKE_PORT" "$SMOKE_BASE_URL" <<'PY'
 import socket
@@ -89,7 +82,7 @@ case "$BOOTSTRAP_DB" in
       postgres:16 >/dev/null
 
     attempt=0
-    until docker exec "$SMOKE_DB_CONTAINER" pg_isready -U postgres -d ink >/dev/null 2>&1; do
+    until docker exec "$SMOKE_DB_CONTAINER" pg_isready -h 127.0.0.1 -U postgres -d ink >/dev/null 2>&1; do
       attempt=$((attempt + 1))
       if [ "$attempt" -ge 30 ]; then
         echo "Temporary PostgreSQL did not become ready." >&2
@@ -130,7 +123,7 @@ export PRINT_STATUS_SYNC_ENABLED=false
   cd "$SERVER_DIR"
   go run ./cmd/migrate up
   INK_TEST_DATABASE_URL="$DATABASE_URL" \
-    go test ./internal/platform/store/postgres -count=1
+    go test -race ./internal/platform/store/postgres ./internal/platform/migrate -count=1
   go run ./cmd/seed dev
   go run ./cmd/smoke-fixture cleanup
   go run ./cmd/smoke-fixture setup
@@ -158,47 +151,16 @@ WORKSPACE_RESTORED="$SMOKE_DIR/workspace-restored.json"
 LOGIN_JSON="$SMOKE_DIR/login.json"
 UPDATED_PAYLOAD="$SMOKE_DIR/workspace-updated.json"
 CONFIRMATION_PAYLOAD="$SMOKE_DIR/workspace-confirmation.json"
-PLUGIN_ZIP="$SMOKE_DIR/plugin.zip"
-UPLOAD_JSON="$SMOKE_DIR/upload.json"
-BINDING_PAYLOAD="$SMOKE_DIR/binding-payload.json"
-BINDING_JSON="$SMOKE_DIR/binding.json"
-VALIDATION_JSON="$SMOKE_DIR/validation.json"
-RUN_JSON="$SMOKE_DIR/run.json"
-SCHEDULE_PAYLOAD="$SMOKE_DIR/schedule-payload.json"
-SCHEDULE_JSON="$SMOKE_DIR/schedule.json"
-SCHEDULE_RUN_JSON="$SMOKE_DIR/schedule-run.json"
-PRINT_JOBS_JSON="$SMOKE_DIR/print-jobs.json"
 PRINT_STATUS_JSON="$SMOKE_DIR/print-status.json"
 PRINT_DETAIL_JSON="$SMOKE_DIR/print-detail.json"
-SMOKE_PLUGIN_ROOT="$SMOKE_DIR/plugins"
 
 (cd "$SERVER_DIR" && go build -o "$SERVER_BINARY" ./cmd/api)
-
-python3 - "$SERVER_DIR/testdata/plugins/python-hello-plugin" "$PLUGIN_ZIP" "$SMOKE_PLUGIN_KEY" <<'PY'
-import json
-import pathlib
-import sys
-import zipfile
-
-source = pathlib.Path(sys.argv[1])
-target = pathlib.Path(sys.argv[2])
-plugin_key = sys.argv[3]
-with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-    for path in sorted(source.iterdir()):
-        if path.name == "ink-plugin.json":
-            manifest = json.loads(path.read_text(encoding="utf-8"))
-            manifest["pluginKey"] = plugin_key
-            archive.writestr(path.name, json.dumps(manifest, ensure_ascii=False))
-        else:
-            archive.write(path, path.name)
-PY
 
 (
   cd "$SERVER_DIR"
   exec env \
     PORT="$SMOKE_PORT" \
-    SCHEDULER_POLL_INTERVAL=24h \
-    PLUGIN_ROOT="$SMOKE_PLUGIN_ROOT" \
+    WORKERS_ENABLED=false \
     "$SERVER_BINARY" >"$SERVER_LOG" 2>&1
 ) &
 SERVER_PID=$!
@@ -366,125 +328,26 @@ if width != 384 or height > 8192:
     raise SystemExit("Preview dimensions exceed the printing limit")
 PY
 
-curl --silent --show-error --fail \
-  -H "$AUTH_HEADER" \
-  -F "file=@$PLUGIN_ZIP;type=application/zip" \
-  "$SMOKE_BASE_URL/api/v1/admin/plugins/upload" >"$UPLOAD_JSON"
-
-PLUGIN_INSTALLATION_ID=$(python3 - "$UPLOAD_JSON" <<'PY'
+for removed_path in /api/v1/plugins /api/v1/admin/plugins /api/v1/print-schedules; do
+  removed_status=$(curl --silent --show-error -o /dev/null -w '%{http_code}' -H "$AUTH_HEADER" "$SMOKE_BASE_URL$removed_path")
+  test "$removed_status" = 404
+done
+python3 - "$SMOKE_DIR/first-print.json" "$SMOKE_PRINTER_ID" <<'PY_JOB'
 import json
 import sys
-with open(sys.argv[1], "r", encoding="utf-8") as fh:
-    plugin = json.load(fh).get("plugin", {})
-installation = plugin.get("installation", {})
-if installation.get("status") != "ready" or not installation.get("id"):
-    raise SystemExit("uploaded plugin is not ready")
-print(installation["id"])
-PY
-)
-
-cat >"$BINDING_PAYLOAD" <<'JSON'
-{"enabled":true,"config":{"sourceName":"Smoke Source","message":"Hello from API smoke","uppercase":true},"secrets":{}}
-JSON
-
-curl --silent --show-error --fail \
-  -H "$AUTH_HEADER" -H "Content-Type: application/json" \
-  -X PUT --data-binary "@$BINDING_PAYLOAD" \
-  "$SMOKE_BASE_URL/api/v1/plugins/$PLUGIN_INSTALLATION_ID/binding" >"$BINDING_JSON"
-
-curl --silent --show-error --fail \
-  -H "$AUTH_HEADER" -H "Content-Type: application/json" \
-  -X POST --data-binary "@$BINDING_PAYLOAD" \
-  "$SMOKE_BASE_URL/api/v1/plugins/$PLUGIN_INSTALLATION_ID/test" >"$VALIDATION_JSON"
-
-curl --silent --show-error --fail \
-  -H "$AUTH_HEADER" -X POST \
-  "$SMOKE_BASE_URL/api/v1/plugins/$PLUGIN_INSTALLATION_ID/run" >"$RUN_JSON"
-
-python3 - "$BINDING_JSON" "$VALIDATION_JSON" "$RUN_JSON" <<'PY'
-import json
-import sys
-with open(sys.argv[1], "r", encoding="utf-8") as fh:
-    binding = json.load(fh).get("plugin", {}).get("binding", {})
-with open(sys.argv[2], "r", encoding="utf-8") as fh:
-    validation = json.load(fh).get("result", {})
-with open(sys.argv[3], "r", encoding="utf-8") as fh:
-    run = json.load(fh).get("result", {})
-if binding.get("status") != "connected" or not binding.get("enabled"):
-    raise SystemExit("plugin binding was not connected")
-if validation.get("valid") is not True:
-    raise SystemExit("plugin validation did not succeed")
-if run.get("fetchedCount") != 1 or run.get("ingestedCount") != 1:
-    raise SystemExit("plugin fetch did not ingest exactly one item")
-PY
-
-python3 - "$SCHEDULE_PAYLOAD" "$PLUGIN_INSTALLATION_ID" "$SMOKE_PRINTER_ID" <<'PY'
-import json
-import sys
-payload = {
-    "title": "Plugin smoke dispatch",
-    "pluginInstallationId": sys.argv[2],
-    "frequencyType": "daily",
-    "timezone": "UTC",
-    "hour": 0,
-    "minute": 0,
-    "weekdays": [],
-    "printPolicy": {"batchSize": 1},
-    "deviceId": sys.argv[3],
-    "enabled": True,
-}
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
-    json.dump(payload, fh)
-PY
-
-curl --silent --show-error --fail \
-  -H "$AUTH_HEADER" -H "Content-Type: application/json" \
-  -X POST --data-binary "@$SCHEDULE_PAYLOAD" \
-  "$SMOKE_BASE_URL/api/v1/print-schedules" >"$SCHEDULE_JSON"
-
-SCHEDULE_ID=$(python3 - "$SCHEDULE_JSON" <<'PY'
+    json.dump({"title":"First manual print","source":"Manual","content":"Synthetic preserved body","printerBindingId":sys.argv[2],"submitImmediately":False},fh)
+PY_JOB
+curl --silent --show-error --fail -H "$AUTH_HEADER" -H "Content-Type: application/json" -X POST --data-binary "@$SMOKE_DIR/first-print.json" "$SMOKE_BASE_URL/api/v1/print-jobs" >"$SMOKE_DIR/first-created.json"
+PRINT_JOB_ID=$(python3 - "$SMOKE_DIR/first-created.json" <<'PY_JOB_ID'
 import json
 import sys
-with open(sys.argv[1], "r", encoding="utf-8") as fh:
-    schedule = json.load(fh).get("schedule", {})
-if not schedule.get("id"):
-    raise SystemExit("schedule was not created")
-print(schedule["id"])
-PY
-)
-
-curl --silent --show-error --fail \
-  -H "$AUTH_HEADER" -X POST \
-  "$SMOKE_BASE_URL/api/v1/print-schedules/$SCHEDULE_ID/run" >"$SCHEDULE_RUN_JSON"
-
-curl --silent --show-error --fail \
-  -H "$AUTH_HEADER" \
-  "$SMOKE_BASE_URL/api/v1/print-jobs" >"$PRINT_JOBS_JSON"
-
-python3 - "$SCHEDULE_RUN_JSON" "$PRINT_JOBS_JSON" <<'PY'
-import json
-import sys
-with open(sys.argv[1], "r", encoding="utf-8") as fh:
-    result = json.load(fh).get("result", {})
-job_ids = result.get("printJobIds", [])
-if result.get("printedCount") != 1 or result.get("failedCount") != 0 or len(job_ids) != 1:
-    raise SystemExit("schedule did not create exactly one delivery job")
-with open(sys.argv[2], "r", encoding="utf-8") as fh:
-    page = json.load(fh)
-jobs = page.get("printJobs", [])
-if "nextCursor" not in page or len(jobs) > 20 or any("content" in job for job in jobs):
-    raise SystemExit("print list did not return bounded content-free summaries")
-matching = [job for job in jobs if job.get("id") == job_ids[0]]
-if len(matching) != 1 or matching[0].get("status") != "pending":
-    raise SystemExit("delivery job is missing or contacted the provider unexpectedly")
-PY
-
-PRINT_JOB_ID=$(python3 - "$SCHEDULE_RUN_JSON" <<'PY'
-import json
-import sys
-with open(sys.argv[1], "r", encoding="utf-8") as fh:
-    print(json.load(fh)["result"]["printJobIds"][0])
-PY
+with open(sys.argv[1],encoding="utf-8") as fh:
+    job=json.load(fh)["printJob"]
+if job["status"] != "pending":
+    raise SystemExit("Manual fixture unexpectedly contacted provider")
+print(job["id"])
+PY_JOB_ID
 )
 
 python3 - "$SMOKE_DIR/manual-print.json" "$SMOKE_PRINTER_ID" <<'PY'
@@ -583,4 +446,4 @@ if expected != restored:
     raise SystemExit("workspace state was not restored after smoke test")
 PY
 
-echo "Smoke test passed: auth, workspace persistence and conflict protection, PNG preview, plugin lifecycle, schedule delivery, and paginated print/status/detail reads succeeded."
+echo "Smoke test passed: auth, workspace persistence and conflict protection, PNG preview, removed extension endpoints, manual printing, and paginated print/status/detail reads succeeded."

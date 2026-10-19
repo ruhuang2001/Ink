@@ -1,4 +1,3 @@
-import type { FrequencyType } from "@/types/plugins";
 import type {
   DeviceStatus,
   LocaleCode,
@@ -68,39 +67,6 @@ export function formatRelativeTimestampForLocale(
   return createDateTimeFormatter(locale).format(target);
 }
 
-export function formatWeekdayList(weekdays: number[], locale: LocaleCode = getI18nLocale()) {
-  const separator = translate("schedule.listSeparator");
-  return weekdays
-    .map((weekday) => translate(`weekdays.short.${weekday}`, { locale }))
-    .join(separator);
-}
-
-export function formatScheduleLabelForLocale(
-  frequencyType: FrequencyType,
-  hour: number,
-  minute: number,
-  weekdays: number[],
-  locale: LocaleCode = getI18nLocale(),
-  fallback = "",
-) {
-  const now = new Date();
-  const sample = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0, 0);
-  const time = createTimeFormatter(locale).format(sample);
-
-  if (frequencyType === "daily") {
-    return translate("schedule.everyDay", { time });
-  }
-
-  if (frequencyType === "weekly" && weekdays.length > 0) {
-    return translate("schedule.everyWeek", {
-      days: formatWeekdayList(weekdays, locale),
-      time,
-    });
-  }
-
-  return fallback || time;
-}
-
 export function getDeviceStatusLabelForLocale(status: DeviceStatus) {
   return translate(`statuses.device.${status}`);
 }
@@ -111,10 +77,6 @@ export function getPrintStatusLabelForLocale(status: PrintStatus) {
 
 export function getSourceStatusLabelForLocale(status: SourceConnectionStatus) {
   return translate(`statuses.source.${status}`);
-}
-
-export function getPluginInstallationStatusLabelForLocale(status: string) {
-  return translate(`statuses.pluginInstallation.${status}`) || status;
 }
 
 export function getUserRoleLabelForLocale(role: UserRole) {

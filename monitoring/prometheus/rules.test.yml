@@ -8,44 +8,44 @@ tests:
       - eval_time: 3m
         alertname: InkMetricsUnavailable
         exp_alerts:
-          - exp_labels: {job: ink-api, severity: critical}
-            exp_annotations: {summary: Ink metrics scrape is unavailable}
+          - exp_labels: { job: ink-api, severity: critical }
+            exp_annotations: { summary: Ink metrics scrape is unavailable }
       - eval_time: 3m
         alertname: InkProbeFailed
         exp_alerts:
-          - exp_labels: {job: ink-probe, endpoint: healthz, severity: critical}
-            exp_annotations: {summary: Ink health or readiness probe is unavailable}
-          - exp_labels: {job: ink-probe, endpoint: readyz, severity: critical}
-            exp_annotations: {summary: Ink health or readiness probe is unavailable}
+          - exp_labels: { job: ink-probe, endpoint: healthz, severity: critical }
+            exp_annotations: { summary: Ink health or readiness probe is unavailable }
+          - exp_labels: { job: ink-probe, endpoint: readyz, severity: critical }
+            exp_annotations: { summary: Ink health or readiness probe is unavailable }
   - name: failed scrape and failed health probe retain target identity
     interval: 1m
     input_series:
       - series: 'up{job="ink-api",instance="api"}'
-        values: '0x5'
+        values: "0x5"
       - series: 'probe_success{job="ink-probe",instance="health",endpoint="healthz"}'
-        values: '0x5'
+        values: "0x5"
       - series: 'probe_success{job="ink-probe",instance="ready",endpoint="readyz"}'
-        values: '1x5'
+        values: "1x5"
     alert_rule_test:
       - eval_time: 3m
         alertname: InkMetricsUnavailable
         exp_alerts:
-          - exp_labels: {job: ink-api, instance: api, severity: critical}
-            exp_annotations: {summary: Ink metrics scrape is unavailable}
+          - exp_labels: { job: ink-api, instance: api, severity: critical }
+            exp_annotations: { summary: Ink metrics scrape is unavailable }
       - eval_time: 3m
         alertname: InkProbeFailed
         exp_alerts:
-          - exp_labels: {job: ink-probe, instance: health, endpoint: healthz, severity: critical}
-            exp_annotations: {summary: Ink health or readiness probe is unavailable}
-  - name: running worker stalls independent of six hour janitor interval
+          - exp_labels: { job: ink-probe, instance: health, endpoint: healthz, severity: critical }
+            exp_annotations: { summary: Ink health or readiness probe is unavailable }
+  - name: running print status worker stalls
     interval: 1m
     input_series:
-      - series: 'ink_worker_last_scan_started_timestamp_seconds{job="ink-api",instance="api",worker="janitor"}'
-        values: '1x12'
-      - series: 'ink_worker_scan_in_progress{job="ink-api",instance="api",worker="janitor"}'
-        values: '1x12'
-      - series: 'ink_worker_poll_interval_seconds{job="ink-api",instance="api",worker="janitor"}'
-        values: '21600x12'
+      - series: 'ink_worker_last_scan_started_timestamp_seconds{job="ink-api",instance="api",worker="print_status_sync"}'
+        values: "1x12"
+      - series: 'ink_worker_scan_in_progress{job="ink-api",instance="api",worker="print_status_sync"}'
+        values: "1x12"
+      - series: 'ink_worker_poll_interval_seconds{job="ink-api",instance="api",worker="print_status_sync"}'
+        values: "2x12"
     alert_rule_test:
       - eval_time: 5m
         alertname: InkWorkerRunningStalled
@@ -53,87 +53,85 @@ tests:
       - eval_time: 8m
         alertname: InkWorkerRunningStalled
         exp_alerts:
-          - exp_labels: {job: ink-api, instance: api, worker: janitor, severity: warning}
-            exp_annotations: {summary: Ink worker scan has run for over five minutes}
+          - exp_labels:
+              { job: ink-api, instance: api, worker: print_status_sync, severity: warning }
+            exp_annotations: { summary: Ink worker scan has run for over five minutes }
       - eval_time: 8m
         alertname: InkWorkerIdleStalled
         exp_alerts: []
-  - name: idle janitor is healthy for six hours but alerts after two missed intervals
+  - name: idle print status worker alerts after missed polling budget
     interval: 1m
     input_series:
-      - series: 'ink_worker_last_scan_completed_timestamp_seconds{job="ink-api",instance="api",worker="janitor"}'
-        values: '1x730'
-      - series: 'ink_worker_scan_in_progress{job="ink-api",instance="api",worker="janitor"}'
-        values: '0x730'
-      - series: 'ink_worker_poll_interval_seconds{job="ink-api",instance="api",worker="janitor"}'
-        values: '21600x730'
+      - series: 'ink_worker_last_scan_completed_timestamp_seconds{job="ink-api",instance="api",worker="print_status_sync"}'
+        values: "1x730"
+      - series: 'ink_worker_scan_in_progress{job="ink-api",instance="api",worker="print_status_sync"}'
+        values: "0x730"
+      - series: 'ink_worker_poll_interval_seconds{job="ink-api",instance="api",worker="print_status_sync"}'
+        values: "2x730"
     alert_rule_test:
-      - eval_time: 360m
+      - eval_time: 3m
         alertname: InkWorkerIdleStalled
         exp_alerts: []
-      - eval_time: 728m
+      - eval_time: 8m
         alertname: InkWorkerIdleStalled
         exp_alerts:
-          - exp_labels: {job: ink-api, instance: api, worker: janitor, severity: warning}
-            exp_annotations: {summary: Ink idle worker missed two poll intervals plus five minutes}
+          - exp_labels:
+              { job: ink-api, instance: api, worker: print_status_sync, severity: warning }
+            exp_annotations:
+              { summary: Ink idle worker missed two poll intervals plus five minutes }
   - name: backlog replicas are max not sum and human waiting queues never alert
     interval: 1m
     input_series:
-      - series: 'ink_backlog_items{job="ink-api",instance="a",queue="schedule"}'
-        values: '7x40'
-      - series: 'ink_backlog_items{job="ink-api",instance="b",queue="schedule"}'
-        values: '7x40'
-      - series: 'ink_backlog_oldest_due_timestamp_seconds{job="ink-api",instance="a",queue="schedule"}'
-        values: '1x40'
-      - series: 'ink_backlog_oldest_due_timestamp_seconds{job="ink-api",instance="b",queue="schedule"}'
-        values: '61x40'
+      - series: 'ink_backlog_items{job="ink-api",instance="a",queue="print_status"}'
+        values: "7x40"
+      - series: 'ink_backlog_items{job="ink-api",instance="b",queue="print_status"}'
+        values: "7x40"
+      - series: 'ink_backlog_oldest_due_timestamp_seconds{job="ink-api",instance="a",queue="print_status"}'
+        values: "1x40"
+      - series: 'ink_backlog_oldest_due_timestamp_seconds{job="ink-api",instance="b",queue="print_status"}'
+        values: "61x40"
       - series: 'ink_backlog_items{job="ink-api",queue="pending_confirmation"}'
-        values: '99x40'
+        values: "99x40"
       - series: 'ink_backlog_oldest_due_timestamp_seconds{job="ink-api",queue="pending_confirmation"}'
-        values: '1x40'
+        values: "1x40"
       - series: 'ink_backlog_items{job="ink-api",queue="submitted_print"}'
-        values: '99x40'
+        values: "99x40"
       - series: 'ink_backlog_oldest_due_timestamp_seconds{job="ink-api",queue="submitted_print"}'
-        values: '1x40'
-      - series: 'ink_backlog_items{job="ink-api",queue="plugin_fetch"}'
-        values: '3x40'
-      - series: 'ink_backlog_oldest_due_timestamp_seconds{job="ink-api",queue="plugin_fetch"}'
-        values: '0x40'
-      - series: 'ink_backlog_items{job="ink-api",queue="print_status"}'
-        values: '0x40'
-      - series: 'ink_backlog_oldest_due_timestamp_seconds{job="ink-api",queue="print_status"}'
-        values: '1x40'
+        values: "1x40"
+      - series: 'ink_backlog_items{job="ink-api",queue="ignored_empty"}'
+        values: "3x40"
     promql_expr_test:
-      - expr: 'ink:backlog_items:max{queue="schedule"}'
+      - expr: 'ink:backlog_items:max{queue="print_status"}'
         eval_time: 30m
         exp_samples:
-          - labels: 'ink:backlog_items:max{queue="schedule"}'
+          - labels: 'ink:backlog_items:max{queue="print_status"}'
             value: 7
-      - expr: 'ink:backlog_due_age_seconds:max{queue="schedule"}'
+      - expr: 'ink:backlog_due_age_seconds:max{queue="print_status"}'
         eval_time: 30m
         exp_samples:
-          - labels: 'ink:backlog_due_age_seconds:max{queue="schedule"}'
+          - labels: 'ink:backlog_due_age_seconds:max{queue="print_status"}'
             value: 1799
-      - expr: 'ink:backlog_due_age_seconds:max{queue="plugin_fetch"}'
+      - expr: 'ink:backlog_due_age_seconds:max{queue="ignored_empty"}'
         eval_time: 30m
         exp_samples: []
     alert_rule_test:
       - eval_time: 30m
         alertname: InkActionableBacklogOld
         exp_alerts:
-          - exp_labels: {queue: schedule, severity: warning}
-            exp_annotations: {summary: Actionable Ink queue has overdue work older than fifteen minutes}
+          - exp_labels: { queue: print_status, severity: warning }
+            exp_annotations:
+              { summary: Actionable Ink queue has overdue work older than fifteen minutes }
   - name: sustained API errors alert but probe errors and sparse traffic do not
     interval: 1m
     input_series:
       - series: 'ink_http_requests_total{job="ink-api",instance="busy",route="/api/prints",status="500"}'
-        values: '0+2x20'
+        values: "0+2x20"
       - series: 'ink_http_requests_total{job="ink-api",instance="busy",route="/api/prints",status="200"}'
-        values: '0+18x20'
+        values: "0+18x20"
       - series: 'ink_http_requests_total{job="ink-api",instance="sparse",route="/api/prints",status="500"}'
-        values: '0+1x20'
+        values: "0+1x20"
       - series: 'ink_http_requests_total{job="ink-api",instance="probe",route="/readyz",status="503"}'
-        values: '0+100x20'
+        values: "0+100x20"
     alert_rule_test:
       - eval_time: 3m
         alertname: InkAPIHigh5xx
@@ -141,60 +139,66 @@ tests:
       - eval_time: 10m
         alertname: InkAPIHigh5xx
         exp_alerts:
-          - exp_labels: {instance: busy, severity: warning}
-            exp_annotations: {summary: Business API 5xx exceeds 5 percent with at least 20 requests per five minutes}
+          - exp_labels: { instance: busy, severity: warning }
+            exp_annotations:
+              {
+                summary: Business API 5xx exceeds 5 percent with at least 20 requests per five minutes,
+              }
   - name: panic counter reset alone does not alert and pool pressure requires persistence
     interval: 1m
     input_series:
       - series: 'ink_http_panics_total{job="ink-api",instance="reset"}'
-        values: '5 5 0 0 0 0'
+        values: "5 5 0 0 0 0"
       - series: 'ink_http_panics_total{job="ink-api",instance="panic"}'
-        values: '0 0 1 1 1 1'
+        values: "0 0 1 1 1 1"
       - series: 'ink_db_pool_acquired_connections{job="ink-api",instance="api"}'
-        values: '9x15'
+        values: "9x15"
       - series: 'ink_db_pool_max_connections{job="ink-api",instance="api"}'
-        values: '10x15'
+        values: "10x15"
     alert_rule_test:
       - eval_time: 3m
         alertname: InkHTTPPanic
         exp_alerts:
-          - exp_labels: {job: ink-api, instance: panic, severity: critical}
-            exp_annotations: {summary: Ink HTTP handler panicked}
+          - exp_labels: { job: ink-api, instance: panic, severity: critical }
+            exp_annotations: { summary: Ink HTTP handler panicked }
       - eval_time: 5m
         alertname: InkDBPoolPressure
         exp_alerts: []
       - eval_time: 11m
         alertname: InkDBPoolPressure
         exp_alerts:
-          - exp_labels: {job: ink-api, instance: api, severity: warning}
-            exp_annotations: {summary: Ink database pool utilization exceeds 85 percent}
+          - exp_labels: { job: ink-api, instance: api, severity: warning }
+            exp_annotations: { summary: Ink database pool utilization exceeds 85 percent }
   - name: operation errors and stale sampler fire while a fresh replica prevents stale alert
     interval: 1m
     input_series:
       - series: 'ink_operations_total{job="ink-api",operation="print",result="error"}'
-        values: '0+2x25'
+        values: "0+2x25"
       - series: 'ink_operations_total{job="ink-api",operation="print",result="success"}'
-        values: '0+8x25'
+        values: "0+8x25"
       - series: 'ink_backlog_last_success_timestamp_seconds{job="ink-api",instance="old"}'
-        values: '0x25'
+        values: "0x25"
       - series: 'ink_backlog_last_success_timestamp_seconds{job="ink-api",instance="fresh"}'
-        values: '0+60x25'
+        values: "0+60x25"
       - series: 'ink_backlog_sample_errors_total{job="ink-api"}'
-        values: '0+1x25'
+        values: "0+1x25"
     alert_rule_test:
       - eval_time: 20m
         alertname: InkOperationErrors
         exp_alerts:
-          - exp_labels: {operation: print, severity: warning}
-            exp_annotations: {summary: Ink operation errors exceed 10 percent with at least ten attempts per ten minutes}
+          - exp_labels: { operation: print, severity: warning }
+            exp_annotations:
+              {
+                summary: Ink operation errors exceed 10 percent with at least ten attempts per ten minutes,
+              }
       - eval_time: 20m
         alertname: InkBacklogSamplerStale
         exp_alerts: []
       - eval_time: 20m
         alertname: InkBacklogSampleErrors
         exp_alerts:
-          - exp_labels: {severity: warning}
-            exp_annotations: {summary: Ink backlog sampling is failing}
+          - exp_labels: { severity: warning }
+            exp_annotations: { summary: Ink backlog sampling is failing }
   - name: missing sampler is unknown not healthy
     interval: 1m
     input_series: []
@@ -202,27 +206,27 @@ tests:
       - eval_time: 6m
         alertname: InkBacklogSamplerStale
         exp_alerts:
-          - exp_labels: {job: ink-api, severity: warning}
-            exp_annotations: {summary: No successful Ink backlog sample for five minutes}
+          - exp_labels: { job: ink-api, severity: warning }
+            exp_annotations: { summary: No successful Ink backlog sample for five minutes }
   - name: stale sampler and slow operation histogram
     interval: 1m
     input_series:
       - series: 'ink_backlog_last_success_timestamp_seconds{job="ink-api"}'
-        values: '1x25'
-      - series: 'ink_operation_duration_seconds_bucket{job="ink-api",operation="fetch",le="60"}'
-        values: '0+0x25'
-      - series: 'ink_operation_duration_seconds_bucket{job="ink-api",operation="fetch",le="120"}'
-        values: '0+10x25'
-      - series: 'ink_operation_duration_seconds_bucket{job="ink-api",operation="fetch",le="+Inf"}'
-        values: '0+10x25'
+        values: "1x25"
+      - series: 'ink_operation_duration_seconds_bucket{job="ink-api",operation="print_submit",le="60"}'
+        values: "0+0x25"
+      - series: 'ink_operation_duration_seconds_bucket{job="ink-api",operation="print_submit",le="120"}'
+        values: "0+10x25"
+      - series: 'ink_operation_duration_seconds_bucket{job="ink-api",operation="print_submit",le="+Inf"}'
+        values: "0+10x25"
     alert_rule_test:
       - eval_time: 20m
         alertname: InkBacklogSamplerStale
         exp_alerts:
-          - exp_labels: {severity: warning}
-            exp_annotations: {summary: No successful Ink backlog sample for five minutes}
+          - exp_labels: { severity: warning }
+            exp_annotations: { summary: No successful Ink backlog sample for five minutes }
       - eval_time: 20m
         alertname: InkOperationSlow
         exp_alerts:
-          - exp_labels: {operation: fetch, severity: warning}
-            exp_annotations: {summary: Ink operation p95 exceeds sixty seconds}
+          - exp_labels: { operation: print_submit, severity: warning }
+            exp_annotations: { summary: Ink operation p95 exceeds sixty seconds }

@@ -4,19 +4,19 @@ groups:
       - alert: InkMetricsUnavailable
         expr: up{job="ink-api"} == 0 or absent(up{job="ink-api"})
         for: 2m
-        labels: {severity: critical}
+        labels: { severity: critical }
         annotations:
           summary: Ink metrics scrape is unavailable
       - alert: InkMonitorUnavailable
         expr: up{job=~"blackbox|alertmanager"} == 0 or absent(up{job="blackbox"}) or absent(up{job="alertmanager"})
         for: 2m
-        labels: {severity: critical}
+        labels: { severity: critical }
         annotations:
           summary: A monitoring dependency is unavailable
       - alert: InkProbeFailed
         expr: probe_success{job="ink-probe"} == 0 or up{job="ink-probe"} == 0 or absent(probe_success{job="ink-probe",endpoint="healthz"}) or absent(probe_success{job="ink-probe",endpoint="readyz"})
         for: 2m
-        labels: {severity: critical}
+        labels: { severity: critical }
         annotations:
           summary: Ink health or readiness probe is unavailable
   - name: ink-runtime
@@ -27,35 +27,35 @@ groups:
           / sum by (instance) (rate(ink_http_requests_total{job="ink-api",route=~"/api/.*"}[5m])) > 0.05)
           and sum by (instance) (increase(ink_http_requests_total{job="ink-api",route=~"/api/.*"}[5m])) >= 20
         for: 5m
-        labels: {severity: warning}
+        labels: { severity: warning }
         annotations:
           summary: Business API 5xx exceeds 5 percent with at least 20 requests per five minutes
       - alert: InkHTTPPanic
         expr: increase(ink_http_panics_total{job="ink-api"}[5m]) > 0
-        labels: {severity: critical}
+        labels: { severity: critical }
         annotations:
           summary: Ink HTTP handler panicked
       - alert: InkWorkerRunningStalled
         expr: |
-          (time() - ink_worker_last_scan_started_timestamp_seconds{job="ink-api"} > 300)
-          and ink_worker_scan_in_progress{job="ink-api"} == 1
+          (time() - ink_worker_last_scan_started_timestamp_seconds{job="ink-api",worker="print_status_sync"} > 300)
+          and ink_worker_scan_in_progress{job="ink-api",worker="print_status_sync"} == 1
         for: 2m
-        labels: {severity: warning}
+        labels: { severity: warning }
         annotations:
           summary: Ink worker scan has run for over five minutes
       - alert: InkWorkerIdleStalled
         expr: |
-          (time() - ink_worker_last_scan_completed_timestamp_seconds{job="ink-api"}
-          > on (job, instance, worker) (2 * ink_worker_poll_interval_seconds{job="ink-api"} + 300))
-          and ink_worker_scan_in_progress{job="ink-api"} == 0
+          (time() - ink_worker_last_scan_completed_timestamp_seconds{job="ink-api",worker="print_status_sync"}
+          > on (job, instance, worker) (2 * ink_worker_poll_interval_seconds{job="ink-api",worker="print_status_sync"} + 300))
+          and ink_worker_scan_in_progress{job="ink-api",worker="print_status_sync"} == 0
         for: 2m
-        labels: {severity: warning}
+        labels: { severity: warning }
         annotations:
           summary: Ink idle worker missed two poll intervals plus five minutes
       - alert: InkDBPoolPressure
         expr: ink_db_pool_acquired_connections{job="ink-api"} / ink_db_pool_max_connections{job="ink-api"} > 0.85
         for: 10m
-        labels: {severity: warning}
+        labels: { severity: warning }
         annotations:
           summary: Ink database pool utilization exceeds 85 percent
   - name: ink-business
@@ -66,13 +66,13 @@ groups:
           / sum by (operation) (rate(ink_operations_total{job="ink-api"}[10m])) > 0.1)
           and sum by (operation) (increase(ink_operations_total{job="ink-api"}[10m])) >= 10
         for: 10m
-        labels: {severity: warning}
+        labels: { severity: warning }
         annotations:
           summary: Ink operation errors exceed 10 percent with at least ten attempts per ten minutes
       - alert: InkOperationSlow
         expr: histogram_quantile(0.95, sum by (operation, le) (rate(ink_operation_duration_seconds_bucket{job="ink-api"}[10m]))) > 60
         for: 10m
-        labels: {severity: warning}
+        labels: { severity: warning }
         annotations:
           summary: Ink operation p95 exceeds sixty seconds
       - record: ink:backlog_items:max
@@ -81,21 +81,21 @@ groups:
         expr: max by (queue) (clamp_min(time() - (ink_backlog_oldest_due_timestamp_seconds{job="ink-api"} > 0), 0))
       - alert: InkActionableBacklogOld
         expr: |
-          ink:backlog_due_age_seconds:max{queue=~"plugin_fetch|schedule|print_status"} > 900
+          ink:backlog_due_age_seconds:max{queue="print_status"} > 900
           and ink:backlog_items:max > 0
         for: 10m
-        labels: {severity: warning}
+        labels: { severity: warning }
         annotations:
           summary: Actionable Ink queue has overdue work older than fifteen minutes
       - alert: InkBacklogSamplerStale
         expr: time() - max(ink_backlog_last_success_timestamp_seconds{job="ink-api"}) > 300 or absent(ink_backlog_last_success_timestamp_seconds{job="ink-api"})
         for: 5m
-        labels: {severity: warning}
+        labels: { severity: warning }
         annotations:
           summary: No successful Ink backlog sample for five minutes
       - alert: InkBacklogSampleErrors
         expr: sum(increase(ink_backlog_sample_errors_total{job="ink-api"}[10m])) > 0
         for: 5m
-        labels: {severity: warning}
+        labels: { severity: warning }
         annotations:
           summary: Ink backlog sampling is failing

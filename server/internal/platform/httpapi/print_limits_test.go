@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ruhuang/ink/server/internal/plugins"
+	"github.com/ruhuang/ink/server/internal/content"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
@@ -27,7 +27,7 @@ func TestPrintRoutesRejectOversizedContent(t *testing.T) {
 	} {
 		for _, route := range []string{"/api/v1/print-preview", "/api/v1/print-jobs"} {
 			t.Run(test.name+route, func(t *testing.T) {
-				server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+				server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 				server.printer = limitCheckingPrinter{service: printer.NewService(nil, fakeAuthService{}, nil, nil, "", "", time.Second)}
 				payload := map[string]any{"title": test.title, "content": test.content}
 				if route == "/api/v1/print-jobs" {
@@ -40,7 +40,7 @@ func TestPrintRoutesRejectOversizedContent(t *testing.T) {
 }
 
 func TestFeedbackPreservesPrintLimitAndRequestBodyErrors(t *testing.T) {
-	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{err: printer.ErrContentTooLarge}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{err: printer.ErrContentTooLarge})
 	assertPrintContentTooLarge(t, server, "/api/v1/feedback/print", map[string]string{"content": "oversized feedback"})
 	body, err := json.Marshal(map[string]string{"content": strings.Repeat("a", (1<<20)+1)})
 	if err != nil {
@@ -56,11 +56,11 @@ func TestFeedbackPreservesPrintLimitAndRequestBodyErrors(t *testing.T) {
 }
 
 func TestBlocksPreviewRejectsOversizedContent(t *testing.T) {
-	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, fakePluginService{}, fakePluginRunService{}, fakeScheduleService{})
+	server := newTestServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{})
 	server.printer = limitCheckingPrinter{service: printer.NewService(nil, fakeAuthService{}, nil, nil, "", "", time.Second)}
 	assertPrintContentTooLarge(t, server, "/api/v1/print-preview", map[string]any{
 		"title":  "Title",
-		"blocks": []plugins.ContentBlock{{Type: plugins.BlockParagraph, Text: strings.Repeat("a", (64<<10)+1)}},
+		"blocks": []content.ContentBlock{{Type: content.BlockParagraph, Text: strings.Repeat("a", (64<<10)+1)}},
 	})
 }
 
@@ -88,7 +88,7 @@ func (p limitCheckingPrinter) RenderPreview(ctx context.Context, title, content 
 	return p.service.RenderPreview(ctx, title, content)
 }
 
-func (p limitCheckingPrinter) RenderBlocksPreview(ctx context.Context, title string, blocks []plugins.ContentBlock) (string, error) {
+func (p limitCheckingPrinter) RenderBlocksPreview(ctx context.Context, title string, blocks []content.ContentBlock) (string, error) {
 	return p.service.RenderBlocksPreview(ctx, title, blocks)
 }
 

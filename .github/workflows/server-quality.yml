@@ -97,9 +97,6 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
 
-      - name: install uv for plugin smoke fixture
-        run: pipx install uv==0.8.22
-
       - name: run api smoke test
         env:
           INK_SMOKE_BOOTSTRAP_DB: "0"

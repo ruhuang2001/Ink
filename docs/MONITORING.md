@@ -20,11 +20,11 @@ digest locks). It does not start Ink, PostgreSQL, or application workers.
 
 Default targets in `monitoring/prometheus/prometheus.yml`:
 
-| Signal | Target seen from containers |
-| --- | --- |
-| Metrics | `http://host.docker.internal:9091/metrics` |
-| Liveness | `http://host.docker.internal:8080/healthz` |
-| Readiness | `http://host.docker.internal:8080/readyz` |
+| Signal    | Target seen from containers                |
+| --------- | ------------------------------------------ |
+| Metrics   | `http://host.docker.internal:9091/metrics` |
+| Liveness  | `http://host.docker.internal:8080/healthz` |
+| Readiness | `http://host.docker.internal:8080/readyz`  |
 
 Run your **host-based** Go API with `PORT=8080` and enable its optional separate
 listener with `METRICS_ADDR=<private-reachable-IP>:9091`. An unset metrics address
@@ -92,21 +92,21 @@ Back up these volumes if history matters.
 
 Thresholds are starting points, not a production SLO. Tune against actual workload.
 
-| Rule | Trigger / persistence | First response |
-| --- | --- | --- |
-| Metrics unavailable | failed or absent API scrape / 2m | Check optional listener, gateway, firewall, API process |
-| Monitor unavailable | failed/absent blackbox or Alertmanager scrape / 2m | Inspect monitoring service logs |
-| Probe failed | failed scrape, missing result or non-200 health/readiness / 2m | Inspect API and dependency readiness |
-| API high 5xx | `/api/.*` only, >5% over 5m, at least 20 requests / 5m | Inspect route/status and request-ID logs; health failures cannot dilute ratio |
-| HTTP panic | any counter increase over 5m / immediate | Inspect sanitized panic/request logs |
-| Running worker stalled | scan active and start age >300s / 2m | Check blocked network/DB work; independent of poll interval |
-| Idle worker stalled | idle completion age >2 × configured poll interval +300s / 2m | Check worker progress/config; six-hour janitor gets **12h +5m**, then 2m persistence |
-| DB pool pressure | acquired/max >85% / 10m | Check slow queries, leaked connections and capacity |
-| Operation errors | `result="error"` >10% over 10m, >=10 attempts / 10m | Inspect operation logs/provider failures |
-| Operation slow | operation histogram p95 >60s over 10m / 10m | Inspect provider latency and timeouts |
-| Actionable backlog old | oldest due >900s and count >0 / 10m | Inspect `plugin_fetch`, `schedule`, or `print_status` worker/provider |
-| Sampler stale | latest success older than 300s or absent / 5m | Check DB sampling errors; backlog gauges may be stale |
-| Sample errors | any increase over 10m / 5m | Inspect DB connectivity/permissions and sampler freshness |
+| Rule                   | Trigger / persistence                                          | First response                                                                |
+| ---------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Metrics unavailable    | failed or absent API scrape / 2m                               | Check optional listener, gateway, firewall, API process                       |
+| Monitor unavailable    | failed/absent blackbox or Alertmanager scrape / 2m             | Inspect monitoring service logs                                               |
+| Probe failed           | failed scrape, missing result or non-200 health/readiness / 2m | Inspect API and dependency readiness                                          |
+| API high 5xx           | `/api/.*` only, >5% over 5m, at least 20 requests / 5m         | Inspect route/status and request-ID logs; health failures cannot dilute ratio |
+| HTTP panic             | any counter increase over 5m / immediate                       | Inspect sanitized panic/request logs                                          |
+| Running worker stalled | scan active and start age >300s / 2m                           | Check blocked network/DB work; independent of poll interval                   |
+| Idle worker stalled    | idle completion age >2 × configured poll interval +300s / 2m   | Check print-status synchronization progress/config                            |
+| DB pool pressure       | acquired/max >85% / 10m                                        | Check slow queries, leaked connections and capacity                           |
+| Operation errors       | `result="error"` >10% over 10m, >=10 attempts / 10m            | Inspect operation logs/provider failures                                      |
+| Operation slow         | operation histogram p95 >60s over 10m / 10m                    | Inspect provider latency and timeouts                                         |
+| Actionable backlog old | oldest due >900s and count >0 / 10m                            | Inspect `print_status` worker/provider                                        |
+| Sampler stale          | latest success older than 300s or absent / 5m                  | Check DB sampling errors; backlog gauges may be stale                         |
+| Sample errors          | any increase over 10m / 5m                                     | Inspect DB connectivity/permissions and sampler freshness                     |
 
 Zero worker completion timestamps indicate no scan has ever completed; an idle
 worker in that state is intentionally unhealthy after the alert persistence period.
@@ -214,7 +214,7 @@ python3 -m json.tool monitoring/grafana/dashboards/ink.json >/dev/null
 
 Rule regressions cover missing/down scrapes and probes, sustained versus sparse API
 errors and excluded readiness errors, panic reset versus actual increment, pool
-persistence, running versus six-hour idle janitor stalls, replica max count/age,
+persistence, running versus idle print-status stalls, replica max count/age,
 zero due timestamps, non-actionable queues, business error/duration thresholds,
 and missing/stale versus fresh-replica sampler state. These synthetic tests do not
 prove production routing, host-network reachability, provider success, or external

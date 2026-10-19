@@ -3,6 +3,7 @@ import { AuthApiError } from "@/services/auth";
 import { translate } from "./index";
 
 const LOCALIZED_ERROR_CODES = new Set([
+  "auth_refresh_failed",
   "ai_not_configured",
   "ai_provider_unavailable",
   "ai_secret_missing",
@@ -13,20 +14,15 @@ const LOCALIZED_ERROR_CODES = new Set([
   "invalid_ai_input",
   "invalid_credentials",
   "invalid_feedback_input",
-  "invalid_plugin_input",
   "invalid_printer_input",
   "invalid_session_payload",
   "network_error",
-  "plugin_git_install_disabled",
-  "plugin_not_found",
-  "plugin_secret_missing",
   "printer_not_configured",
   "printer_resource_not_found",
   "printer_unavailable",
   "print_content_too_large",
+  "print_submission_unknown",
   "request_failed",
-  "schedule_not_found",
-  "schedule_conflict",
   "workspace_conflict",
   "workspace_revision_required",
 ]);

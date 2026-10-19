@@ -15,7 +15,6 @@ import type {
 import * as authService from "@/services/auth";
 import type { submitFeedbackToAdmin } from "@/services/feedback";
 import { AuthApiError, request } from "@/services/http";
-import * as pluginService from "@/services/plugins";
 import type {
   bindPrinter,
   cancelPrintJob,
@@ -116,19 +115,6 @@ vi.mock("@/services/ai", () => ({
   })),
 }));
 
-vi.mock("@/services/plugins", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/plugins")>()),
-  fetchPlugins: vi.fn<typeof import("@/services/plugins").fetchPlugins>(async () => ({
-    plugins: [],
-  })),
-  fetchPrintSchedules: vi.fn<typeof import("@/services/plugins").fetchPrintSchedules>(async () => ({
-    schedules: [],
-  })),
-  fetchAdminPlugins: vi.fn<typeof import("@/services/plugins").fetchAdminPlugins>(async () => ({
-    plugins: [],
-  })),
-}));
-
 vi.mock("@/services/feedback", () => ({
   submitFeedbackToAdmin: vi.fn<typeof submitFeedbackToAdmin>(async () => undefined),
 }));
@@ -202,6 +188,22 @@ vi.mock("@/services/printers", () => ({
     }),
   ),
 }));
+
+const backupValues = () =>
+  Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))
+    .filter((key) => key?.startsWith("ink.workspace.draft.v1.user-1."))
+    .map((key) => localStorage.getItem(key!));
+function blockedStorage(): never {
+  throw new DOMException("blocked", "SecurityError");
+}
+
+function accountBackup(userId: string) {
+  const prefix = `ink.workspace.draft.v1.${encodeURIComponent(userId)}.`;
+  const key = Array.from({ length: localStorage.length }, (_, index) =>
+    localStorage.key(index),
+  ).find((candidate) => candidate?.startsWith(prefix));
+  return key ? localStorage.getItem(key) : null;
+}
 
 function authenticateStore(role: "admin" | "member" = "member") {
   const store = useWorkspaceStore();
@@ -296,6 +298,724 @@ describe("workspace store", () => {
     vi.restoreAllMocks();
   });
 
+  it("waits for the workspace PUT before announcing a saved draft", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    const pending = deferred<Awaited<ReturnType<typeof saveWorkspaceStateWithApi>>>();
+    vi.mocked(saveWorkspaceStateWithApi).mockReturnValueOnce(pending.promise);
+    store.updateCurrentDraft("save acknowledgement draft");
+    const saving = store.saveCurrentDraft();
+    expect(store.flashMessage).not.toBe(translate("store.flash.draftSaved"));
+    const snapshot = vi.mocked(saveWorkspaceStateWithApi).mock.calls.at(-1)![1];
+    pending.resolve({ ...snapshot, revision: 2 });
+    await expect(saving).resolves.toBe(true);
+    expect(store.flashMessage).toBe(translate("store.flash.draftSaved"));
+    expect(accountBackup("user-1")).toBeNull();
+    store.$dispose();
+  });
+
+  it("reports failure and keeps an account-only draft through safe logout", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    store.updateCurrentDraft("private unsynced draft");
+    vi.mocked(saveWorkspaceStateWithApi).mockRejectedValue(new Error("Synthetic outage"));
+    await expect(store.saveCurrentDraft()).resolves.toBe(false);
+    expect(store.flashTone).toBe("error");
+    await store.logout();
+    expect(store.isAuthenticated).toBe(false);
+    expect(store.conversations.some((c) => c.draft === "private unsynced draft")).toBe(false);
+    const backup = accountBackup("user-1")!;
+    expect(backup).toContain("private unsynced draft");
+    expect(backup).not.toContain("access-token");
+    expect(backup).not.toContain("refresh-token");
+    expect(localStorage.getItem("ink.workspace.v1")).not.toContain("private unsynced draft");
+    vi.mocked(saveWorkspaceStateWithApi).mockImplementation(async (_token, state) => ({
+      ...state,
+      revision: 2,
+    }));
+    await store.login("a@example.invalid", "synthetic-password");
+    expect(store.recoveredWorkspaceDraft?.conversations[0]?.draft).toBe("private unsynced draft");
+    expect(store.activeConversation?.draft).not.toBe("private unsynced draft");
+    store.updateCurrentDraft("new edit does not discard recovery");
+    expect(store.activeConversation?.draft).not.toBe("new edit does not discard recovery");
+    await expect(store.saveCurrentDraft()).resolves.toBe(false);
+    expect(store.recoveredWorkspaceDraft?.conversations[0]?.draft).toBe("private unsynced draft");
+    expect(store.restoreRecoveredWorkspaceDraft()).toBe(true);
+    expect(store.activeConversation?.draft).toBe("private unsynced draft");
+    await store.saveCurrentDraft();
+    expect(accountBackup("user-1")).toBeNull();
+    store.$dispose();
+  });
+
+  it("keeps failed-save recovery private from a different account", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    store.updateCurrentDraft("A private backup");
+    vi.mocked(saveWorkspaceStateWithApi).mockRejectedValueOnce(new Error("Synthetic outage"));
+    await store.logout();
+    vi.mocked(authService.loginWithApi).mockResolvedValueOnce({
+      user: { id: "user-b", email: "b@example.invalid", name: "B", role: "member" },
+      session: {
+        accessToken: "b-token",
+        refreshToken: "b-refresh",
+        accessTokenExpiresAt: new Date(Date.now() + 900000).toISOString(),
+      },
+    });
+    await store.login("b@example.invalid", "synthetic-password");
+    expect(store.recoveredWorkspaceDraft).toBeNull();
+    expect(store.conversations.some((c) => c.draft === "A private backup")).toBe(false);
+    expect(store.restoreRecoveredWorkspaceDraft()).toBe(false);
+    store.$dispose();
+  });
+
+  it("preserves unsynced edits when refresh invalidates the session", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    store.updateCurrentDraft("expired-session draft");
+    store.authSession = { ...store.authSession!, accessTokenExpiresAt: new Date(0).toISOString() };
+    vi.mocked(authService.refreshAuthSession).mockRejectedValueOnce(
+      new AuthApiError(401, "unauthorized", "expired"),
+    );
+    await expect(store.refreshSessionIfNeeded()).resolves.toBe(false);
+    expect(store.isAuthenticated).toBe(false);
+    expect(accountBackup("user-1")).toContain("expired-session draft");
+    expect(store.conversations.some((c) => c.draft === "expired-session draft")).toBe(false);
+    store.$dispose();
+  });
+
+  it("backs up a failed-save draft before password change invalidates the account", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    store.updateCurrentDraft("password-change draft");
+    vi.mocked(saveWorkspaceStateWithApi).mockRejectedValueOnce(new Error("Synthetic outage"));
+    await expect(store.changePassword("synthetic-old", "synthetic-new")).resolves.toBe(true);
+    expect(store.isAuthenticated).toBe(false);
+    expect(accountBackup("user-1")).toContain("password-change draft");
+    store.$dispose();
+  });
+
+  it("retains the previous reply on failure and replaces it only on regeneration success", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    store.updateCurrentDraft("question");
+    await store.sendCurrentDraft();
+    const original = store.activeConversation!.messages.at(-1)!;
+    vi.mocked(aiService.generateAIReply).mockRejectedValueOnce(
+      new Error("Synthetic provider failure"),
+    );
+    await expect(store.regenerateLatestReply()).resolves.toBe(false);
+    expect(store.activeConversation?.messages.at(-1)).toEqual(original);
+    vi.mocked(aiService.generateAIReply).mockResolvedValueOnce({
+      content: "replacement",
+      model: "synthetic",
+      providerName: "synthetic",
+    });
+    await expect(store.regenerateLatestReply()).resolves.toBe(true);
+    expect(store.activeConversation?.messages).toHaveLength(2);
+    expect(store.activeConversation?.messages.at(-1)?.text).toBe("replacement");
+    store.$dispose();
+  });
+
+  it("ignores an old AI response without clearing a new account generation", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    const old = deferred<Awaited<ReturnType<typeof aiService.generateAIReply>>>();
+    vi.mocked(aiService.generateAIReply).mockReturnValueOnce(old.promise);
+    store.updateCurrentDraft("old question");
+    const oldGeneration = store.sendCurrentDraft();
+    await store.logout();
+    await store.login("a@example.invalid", "synthetic-password");
+    const next = deferred<Awaited<ReturnType<typeof aiService.generateAIReply>>>();
+    vi.mocked(aiService.generateAIReply).mockReturnValueOnce(next.promise);
+    store.updateCurrentDraft("new question");
+    const newGeneration = store.sendCurrentDraft();
+    old.resolve({ content: "old private reply", model: "m", providerName: "p" });
+    await expect(oldGeneration).resolves.toBe(false);
+    expect(store.isGenerating).toBe(true);
+    expect(store.activeConversation?.messages.some((m) => m.text === "old private reply")).toBe(
+      false,
+    );
+    next.resolve({ content: "new reply", model: "m", providerName: "p" });
+    await expect(newGeneration).resolves.toBe(true);
+    store.$dispose();
+  });
+
+  it("round-trips legacy sources and schedules without exposing their operations", async () => {
+    const state = await fetchWorkspaceStateWithApi("synthetic");
+    const schedule = {
+      id: "old-schedule",
+      title: "Archived",
+      source: "Old source",
+      timeLabel: "old",
+      deviceId: "removed",
+      enabled: true,
+    };
+    const source = {
+      id: "old-source",
+      name: "Archived",
+      type: "legacy",
+      note: "keep",
+      status: "connected" as const,
+    };
+    vi.mocked(fetchWorkspaceStateWithApi).mockResolvedValueOnce({
+      ...state,
+      schedules: [schedule],
+      sources: [source],
+    });
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    store.updateCurrentDraft("current 1.0 edit");
+    await store.saveCurrentDraft();
+    const saved = vi.mocked(saveWorkspaceStateWithApi).mock.calls.at(-1)![1];
+    expect(saved.schedules).toEqual([schedule]);
+    expect(saved.sources).toEqual([source]);
+    expect(store).not.toHaveProperty("createSchedule");
+    expect(store).not.toHaveProperty("savePluginConfiguration");
+    store.$dispose();
+  });
+
+  it("discards an old AI configuration response and preserves the new account loading state", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    const old = deferred<Awaited<ReturnType<typeof aiService.saveAIConfig>>>();
+    vi.mocked(aiService.saveAIConfig).mockReturnValueOnce(old.promise);
+    const payload = {
+      providerName: "old",
+      providerType: "openai-compatible",
+      baseUrl: "https://old.example.invalid",
+      model: "old",
+      apiKey: "synthetic",
+    };
+    const oldSaving = store.saveAIServiceConfig(payload);
+    await store.logout();
+    await store.login("a@example.invalid", "synthetic-password");
+    const next = deferred<Awaited<ReturnType<typeof aiService.saveAIConfig>>>();
+    vi.mocked(aiService.saveAIConfig).mockReturnValueOnce(next.promise);
+    const nextSaving = store.saveAIServiceConfig({ ...payload, model: "new" });
+    old.resolve({
+      bound: true,
+      providerName: "old",
+      providerType: "openai-compatible",
+      baseUrl: payload.baseUrl,
+      model: "old",
+      keyConfigured: true,
+    });
+    await expect(oldSaving).resolves.toBe(false);
+    expect(store.aiConfigSaving).toBe(true);
+    expect(store.aiConfigSummary.model).not.toBe("old");
+    next.resolve({
+      bound: true,
+      providerName: "new",
+      providerType: "openai-compatible",
+      baseUrl: payload.baseUrl,
+      model: "new",
+      keyConfigured: true,
+    });
+    await expect(nextSaving).resolves.toBe(true);
+    expect(store.aiConfigSummary.model).toBe("new");
+    store.$dispose();
+  });
+
+  it("offers an export when account backup storage fails and still signs out safely", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    const setItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key.startsWith("ink.workspace.draft.v1."))
+        throw new DOMException("full", "QuotaExceededError");
+      return setItem.call(this, key, value);
+    });
+    const createURL = vi.fn<() => string>(() => "blob:backup");
+    vi.stubGlobal("URL", {
+      createObjectURL: createURL,
+      revokeObjectURL: vi.fn<(url: string) => void>(),
+    });
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    try {
+      store.updateCurrentDraft("backup storage failed draft");
+      expect(store.workspaceDraftStorageError).toBe(translate("store.errors.localDraftStorage"));
+      vi.mocked(saveWorkspaceStateWithApi).mockRejectedValueOnce(new Error("synthetic outage"));
+      await store.logout();
+      expect(click).toHaveBeenCalledOnce();
+      expect(createURL).toHaveBeenCalledOnce();
+      expect(store.isAuthenticated).toBe(false);
+      expect(store.conversations.some((c) => c.draft === "backup storage failed draft")).toBe(
+        false,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      store.$dispose();
+    }
+  });
+
+  it("retains other tabs' backups and edits made while an older snapshot is saving", async () => {
+    const first = useWorkspaceStore();
+    await first.login("a@example.invalid", "synthetic-password");
+    const second = useWorkspaceStore(createPinia());
+    await second.login("a@example.invalid", "synthetic-password");
+    first.updateCurrentDraft("first tab draft");
+    second.updateCurrentDraft("second tab draft");
+    const pending = deferred<Awaited<ReturnType<typeof saveWorkspaceStateWithApi>>>();
+    vi.mocked(saveWorkspaceStateWithApi).mockReturnValueOnce(pending.promise);
+    const saving = first.saveCurrentDraft();
+    const oldSnapshot = vi.mocked(saveWorkspaceStateWithApi).mock.calls.at(-1)![1];
+    first.updateCurrentDraft("first tab newer edit");
+    const latest = deferred<Awaited<ReturnType<typeof saveWorkspaceStateWithApi>>>();
+    vi.mocked(saveWorkspaceStateWithApi).mockReturnValueOnce(latest.promise);
+    pending.resolve({ ...oldSnapshot, revision: 2 });
+    await vi.waitFor(() => expect(saveWorkspaceStateWithApi).toHaveBeenCalledTimes(2));
+    expect(backupValues().some((raw) => raw?.includes("first tab newer edit"))).toBe(true);
+    expect(backupValues().some((raw) => raw?.includes("second tab draft"))).toBe(true);
+    latest.resolve({ ...vi.mocked(saveWorkspaceStateWithApi).mock.calls.at(-1)![1], revision: 3 });
+    await saving;
+    expect(backupValues()).toHaveLength(1);
+    expect(backupValues()[0]).toContain("second tab draft");
+    first.$dispose();
+    second.$dispose();
+  });
+
+  it("does not delete a recovery copy that another tab has updated", async () => {
+    const state = await fetchWorkspaceStateWithApi("synthetic");
+    const key = "ink.workspace.draft.v1.user-1.other-tab";
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        ...state,
+        conversations: [
+          {
+            id: "recovery",
+            title: "Recovery",
+            preview: "",
+            updatedAt: new Date().toISOString(),
+            draft: "old draft",
+            messages: [],
+          },
+        ],
+      }),
+    );
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    expect(store.recoveredWorkspaceDraft?.conversations[0]?.draft).toBe("old draft");
+    const updated = JSON.parse(localStorage.getItem(key)!);
+    updated.conversations[0].draft = "new draft from another tab";
+    localStorage.setItem(key, JSON.stringify(updated));
+    expect(store.discardRecoveredWorkspaceDraft()).toBe(true);
+    expect(localStorage.getItem(key)).toContain("new draft from another tab");
+    expect(store.recoveredWorkspaceDraft?.conversations[0]?.draft).toBe(
+      "new draft from another tab",
+    );
+    await store.logout();
+    expect(store.isAuthenticated).toBe(false);
+    store.$dispose();
+  });
+
+  it("refreshes saved print history after an unknown submission and prevents a blind retry", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    const printer = await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+    expect(printer).not.toBeNull();
+    vi.mocked(printerService.createPrintJob).mockRejectedValueOnce(
+      new AuthApiError(502, "print_submission_unknown", "unsafe generic retry"),
+    );
+    vi.mocked(fetchPrintJobs)
+      .mockResolvedValueOnce({ printJobs: [], nextCursor: null })
+      .mockResolvedValueOnce({
+        printJobs: [printSummary("saved-unknown", "failed")],
+        nextCursor: null,
+      });
+    await expect(
+      store.createManualPrint({ title: "Keep me", content: "Original body" }),
+    ).resolves.toBeNull();
+    expect(store.printSubmissionUnknown).toBe(true);
+    expect(store.flashMessage).toBe(translate("errors.api.print_submission_unknown"));
+    expect(store.printHistoryJobs.some((job) => job.id === "saved-unknown")).toBe(true);
+    await store.createManualPrint({ title: "Keep me", content: "Original body" });
+    expect(printerService.createPrintJob).toHaveBeenCalledTimes(1);
+    store.$dispose();
+  });
+
+  it("treats a print submission network interruption as unknown without encouraging a duplicate", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+    vi.mocked(printerService.createPrintJob).mockRejectedValueOnce(
+      new AuthApiError(0, "network_error", "timeout; retry"),
+    );
+    const before = vi.mocked(fetchPrintJobs).mock.calls.length;
+    await expect(
+      store.createManualPrint({ title: "Network interrupted", content: "Keep the body" }),
+    ).resolves.toBeNull();
+    expect(store.printSubmissionUnknown).toBe(true);
+    expect(store.flashMessage).toBe(translate("errors.api.print_submission_unknown"));
+    expect(fetchPrintJobs).toHaveBeenCalledTimes(before + 2);
+    await store.createManualPrint({ title: "Network interrupted", content: "Keep the body" });
+    expect(printerService.createPrintJob).toHaveBeenCalledTimes(1);
+    store.$dispose();
+  });
+
+  it("uses a fixed safety message for feedback with an unknown print result", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic-password");
+    const feedbackService = await import("@/services/feedback");
+    vi.mocked(feedbackService.submitFeedbackToAdmin).mockRejectedValueOnce(
+      new AuthApiError(0, "network_error", "timeout; retry"),
+    );
+    await expect(store.submitFeedback("synthetic feedback")).resolves.toBe(false);
+    expect(store.feedbackError).toBe(translate("store.errors.feedbackSubmissionUnknown"));
+    store.$dispose();
+  });
+
+  it.each([201, 502])(
+    "does not resend a print whose HTTP %s response body disconnects",
+    async (status) => {
+      const store = useWorkspaceStore();
+      await store.login("a@example.invalid", "synthetic-password");
+      await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+      const response = new Response(null, { status });
+      vi.spyOn(response, "json").mockRejectedValueOnce(
+        new TypeError("connection lost after headers"),
+      );
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+      vi.mocked(printerService.createPrintJob).mockImplementationOnce(async () =>
+        request("/api/v1/print-jobs", { method: "POST", body: "{}" }),
+      );
+      await expect(
+        store.createManualPrint({
+          title: "Accepted before disconnect",
+          content: "Original content",
+        }),
+      ).resolves.toBeNull();
+      expect(store.printSubmissionUnknown).toBe(true);
+      expect(store.flashMessage).toBe(translate("errors.api.print_submission_unknown"));
+      await store.createManualPrint({
+        title: "Accepted before disconnect",
+        content: "Original content",
+      });
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(printerService.createPrintJob).toHaveBeenCalledOnce();
+      store.$dispose();
+    },
+  );
+
+  it("persists an account print latch across relogin and requires a fresh acknowledgement for new outcomes", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic");
+    await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+    vi.mocked(printerService.createPrintJob).mockRejectedValueOnce(
+      new AuthApiError(0, "network_error", "unknown"),
+    );
+    await store.createManualPrint({ title: "unknown", content: "body" });
+    await store.logout();
+    await store.login("a@example.invalid", "synthetic");
+    expect(store.printSubmissionUnknown).toBe(true);
+    const reloaded = useWorkspaceStore(createPinia());
+    await reloaded.login("a@example.invalid", "synthetic");
+    expect(reloaded.printSubmissionUnknown).toBe(true);
+    expect(reloaded.acknowledgePrintOutcome()).toBe(true);
+    await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+    vi.mocked(printerService.createPrintJob).mockRejectedValueOnce(
+      new AuthApiError(0, "network_error", "new unknown"),
+    );
+    await store.createManualPrint({ title: "new unknown", content: "body" });
+    expect(store.printSubmissionUnknown).toBe(true);
+    expect(reloaded.acknowledgePrintOutcome()).toBe(false);
+    expect(reloaded.printSubmissionUnknown).toBe(true);
+    const calls = vi.mocked(printerService.createPrintJob).mock.calls.length;
+    await reloaded.createManualPrint({ title: "blind retry", content: "body" });
+    expect(printerService.createPrintJob).toHaveBeenCalledTimes(calls);
+    await store.logout();
+    vi.mocked(authService.loginWithApi).mockResolvedValueOnce({
+      user: { id: "user-b", email: "b@example.invalid", name: "B", role: "member" },
+      session: {
+        accessToken: "b",
+        refreshToken: "b-refresh",
+        accessTokenExpiresAt: new Date(Date.now() + 900000).toISOString(),
+      },
+    });
+    await store.login("b@example.invalid", "synthetic");
+    expect(store.printSubmissionUnknown).toBe(false);
+    store.$dispose();
+    reloaded.$dispose();
+  });
+
+  it("keeps the current live default when a recovered draft points at a removed device", async () => {
+    const state = await fetchWorkspaceStateWithApi("synthetic");
+    localStorage.setItem(
+      "ink.workspace.draft.v1.user-1.old-tab",
+      JSON.stringify({
+        ...state,
+        preferences: { ...state.preferences, defaultDeviceId: "removed" },
+      }),
+    );
+    vi.mocked(fetchWorkspaceStateWithApi).mockResolvedValueOnce({
+      ...state,
+      preferences: { ...state.preferences, defaultDeviceId: "live" },
+    });
+    vi.mocked(printerService.fetchPrinters).mockResolvedValueOnce({
+      devices: [{ id: "live", name: "Live device", note: "", status: "connected" }],
+    });
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic");
+    expect(store.restoreRecoveredWorkspaceDraft()).toBe(true);
+    expect(store.defaultDeviceId).toBe("live");
+    expect(store.devices.map((device) => device.id)).toEqual(["live"]);
+    store.$dispose();
+  });
+
+  it("retains an in-session unknown print latch when browser storage is unavailable", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic");
+    await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+    const setItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key.startsWith("ink.print.outcome.v1."))
+        throw new DOMException("full", "QuotaExceededError");
+      return setItem.call(this, key, value);
+    });
+    vi.mocked(printerService.createPrintJob).mockRejectedValueOnce(
+      new AuthApiError(0, "network_error", "unknown"),
+    );
+    await store.createManualPrint({ title: "unknown", content: "body" });
+    expect(store.printOutcomeStorageError).toBe(translate("store.errors.printOutcomeStorage"));
+    await store.createManualPrint({ title: "blind retry", content: "body" });
+    expect(printerService.createPrintJob).toHaveBeenCalledOnce();
+    expect(store.printOutcomeStorageError).toBe(translate("store.errors.printOutcomeStorage"));
+    await store.logout();
+    await store.login("a@example.invalid", "synthetic");
+    expect(store.printSubmissionUnknown).toBe(true);
+    store.$dispose();
+  });
+
+  it("keeps malformed backups downloadable without blocking a later valid draft", async () => {
+    const state = await fetchWorkspaceStateWithApi("synthetic");
+    const broken = "ink.workspace.draft.v1.user-1.broken";
+    const badShape = "ink.workspace.draft.v1.user-1.bad-shape";
+    const valid = "ink.workspace.draft.v1.user-1.valid";
+    localStorage.setItem(broken, "{broken");
+    localStorage.setItem(badShape, JSON.stringify({ ...state, conversations: "invalid" }));
+    localStorage.setItem(valid, JSON.stringify(state));
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic");
+    expect(store.damagedWorkspaceDrafts.map((draft) => draft.key)).toEqual([broken, badShape]);
+    expect(store.recoveredWorkspaceDraft).not.toBeNull();
+    expect(localStorage.getItem(broken)).toBe("{broken");
+    const createURL = vi.fn<(blob: Blob) => string>(() => "blob:damaged");
+    vi.stubGlobal("URL", {
+      createObjectURL: createURL,
+      revokeObjectURL: vi.fn<(url: string) => void>(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    try {
+      store.downloadDamagedWorkspaceDraft(broken);
+      expect(createURL).toHaveBeenCalledOnce();
+      expect(store.discardDamagedWorkspaceDraft(broken)).toBe(true);
+      expect(localStorage.getItem(broken)).toBeNull();
+      expect(localStorage.getItem(badShape)).not.toBeNull();
+      expect(store.recoveredWorkspaceDraft).not.toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+      store.$dispose();
+    }
+  });
+
+  it("persists feedback verification separately and blocks repeated physical feedback prints", async () => {
+    const service = await import("@/services/feedback");
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic");
+    vi.mocked(service.submitFeedbackToAdmin).mockRejectedValueOnce(
+      new AuthApiError(0, "network_error", "unknown"),
+    );
+    await store.submitFeedback("synthetic feedback");
+    expect(store.feedbackSubmissionUnknown).toBe(true);
+    expect(store.printSubmissionUnknown).toBe(false);
+    await store.submitFeedback("synthetic feedback");
+    expect(service.submitFeedbackToAdmin).toHaveBeenCalledOnce();
+    await store.logout();
+    await store.login("a@example.invalid", "synthetic");
+    expect(store.feedbackSubmissionUnknown).toBe(true);
+    expect(store.acknowledgeFeedbackOutcome()).toBe(true);
+    await expect(store.submitFeedback("confirmed feedback")).resolves.toBe(true);
+    expect(service.submitFeedbackToAdmin).toHaveBeenCalledTimes(2);
+    store.$dispose();
+  });
+
+  it.each(["print", "feedback"] as const)(
+    "records a late unknown %s result for the origin account without changing account B",
+    async (kind) => {
+      const service = await import("@/services/feedback");
+      const store = useWorkspaceStore();
+      await store.login("a@example.invalid", "synthetic");
+      await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+      const pending = deferred<never>();
+      if (kind === "print")
+        vi.mocked(printerService.createPrintJob).mockReturnValueOnce(pending.promise);
+      else vi.mocked(service.submitFeedbackToAdmin).mockReturnValueOnce(pending.promise);
+      const sending =
+        kind === "print"
+          ? store.createManualPrint({ title: "old", content: "body" })
+          : store.submitFeedback("old feedback");
+      await store.logout();
+      vi.mocked(authService.loginWithApi).mockResolvedValueOnce({
+        user: { id: "user-b", email: "b@example.invalid", name: "B", role: "member" },
+        session: {
+          accessToken: "b",
+          refreshToken: "b-refresh",
+          accessTokenExpiresAt: new Date(Date.now() + 900000).toISOString(),
+        },
+      });
+      await store.login("b@example.invalid", "synthetic");
+      pending.reject(new AuthApiError(0, "network_error", "late unknown"));
+      await sending;
+      expect(store.printSubmissionUnknown).toBe(false);
+      expect(store.feedbackSubmissionUnknown).toBe(false);
+      expect(localStorage.getItem(`ink.${kind}.outcome.v1.user-1`)).not.toBeNull();
+      await store.logout();
+      await store.login("a@example.invalid", "synthetic");
+      expect(
+        kind === "print" ? store.printSubmissionUnknown : store.feedbackSubmissionUnknown,
+      ).toBe(true);
+      store.$dispose();
+    },
+  );
+
+  it.each(["print", "feedback"] as const)(
+    "does not let an old acknowledgement clear a newer session %s marker",
+    async (kind) => {
+      const key = `ink.${kind}.outcome.v1.user-1`;
+      localStorage.setItem(key, "old-local");
+      const store = useWorkspaceStore();
+      await store.login("a@example.invalid", "synthetic");
+      sessionStorage.setItem(key, "new-session");
+      const acknowledge =
+        kind === "print" ? store.acknowledgePrintOutcome : store.acknowledgeFeedbackOutcome;
+      expect(acknowledge()).toBe(false);
+      expect(localStorage.getItem(key)).toBe("old-local");
+      expect(sessionStorage.getItem(key)).toBe("new-session");
+      expect(acknowledge()).toBe(true);
+      store.$dispose();
+    },
+  );
+
+  it("does not latch a rejected print when only authentication refresh fails", async () => {
+    const store = useWorkspaceStore();
+    await store.login("a@example.invalid", "synthetic");
+    await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+    vi.mocked(authService.refreshAuthSession).mockRejectedValueOnce(
+      new AuthApiError(0, "network_error", "refresh timeout"),
+    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "unauthorized" }), { status: 401 }),
+      );
+    vi.mocked(printerService.createPrintJob).mockImplementationOnce(async () =>
+      request("/api/v1/print-jobs", {
+        method: "POST",
+        headers: { Authorization: "Bearer access-token" },
+        body: "{}",
+      }),
+    );
+    await store.createManualPrint({ title: "rejected", content: "body" });
+    expect(store.printSubmissionUnknown).toBe(false);
+    expect(store.flashMessage).toBe(translate("errors.api.auth_refresh_failed"));
+    expect(fetchMock).toHaveBeenCalledOnce();
+    store.$dispose();
+  });
+
+  it.each(["print", "feedback"] as const)(
+    "keeps the current %s latch when both browser storage getters are blocked",
+    async (kind) => {
+      const service = await import("@/services/feedback");
+      const store = useWorkspaceStore();
+      await store.login("a@example.invalid", "synthetic");
+      await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+      if (kind === "print")
+        vi.mocked(printerService.createPrintJob).mockRejectedValueOnce(
+          new AuthApiError(0, "network_error", "unknown"),
+        );
+      else
+        vi.mocked(service.submitFeedbackToAdmin).mockRejectedValueOnce(
+          new AuthApiError(0, "network_error", "unknown"),
+        );
+      const send = () =>
+        kind === "print"
+          ? store.createManualPrint({ title: "unknown", content: "body" })
+          : store.submitFeedback("unknown feedback");
+      await send();
+      const local = vi.spyOn(window, "localStorage", "get").mockImplementation(blockedStorage);
+      const session = vi.spyOn(window, "sessionStorage", "get").mockImplementation(blockedStorage);
+      try {
+        await send();
+        expect(
+          kind === "print" ? store.printSubmissionUnknown : store.feedbackSubmissionUnknown,
+        ).toBe(true);
+        expect(
+          kind === "print" ? printerService.createPrintJob : service.submitFeedbackToAdmin,
+        ).toHaveBeenCalledOnce();
+        expect(
+          kind === "print" ? store.acknowledgePrintOutcome() : store.acknowledgeFeedbackOutcome(),
+        ).toBe(false);
+      } finally {
+        local.mockRestore();
+        session.mockRestore();
+        store.$dispose();
+      }
+    },
+  );
+
+  it.each(["print", "feedback"] as const)(
+    "blocks another %s when a previously persisted outcome cannot be read",
+    async (kind) => {
+      const service = await import("@/services/feedback");
+      const store = useWorkspaceStore();
+      await store.login("a@example.invalid", "synthetic");
+      await store.addDevice({ deviceId: "synthetic-device", setAsDefault: true });
+      const submission =
+        kind === "print" ? printerService.createPrintJob : service.submitFeedbackToAdmin;
+      vi.mocked(submission).mockRejectedValueOnce(new AuthApiError(0, "network_error", "unknown"));
+      const send = () =>
+        kind === "print"
+          ? store.createManualPrint({ title: "unknown", content: "body" })
+          : store.submitFeedback("unknown feedback");
+      await send();
+      const key = `ink.${kind}.outcome.v1.user-1`;
+      expect(localStorage.getItem(key)).not.toBeNull();
+      expect(sessionStorage.getItem(key)).toBeNull();
+      const originalStorage = window.localStorage;
+      const read = vi.spyOn(window, "localStorage", "get").mockReturnValue({
+        get length() {
+          return originalStorage.length;
+        },
+        clear: originalStorage.clear.bind(originalStorage),
+        key: originalStorage.key.bind(originalStorage),
+        removeItem: originalStorage.removeItem.bind(originalStorage),
+        setItem: originalStorage.setItem.bind(originalStorage),
+        getItem(itemKey: string) {
+          if (itemKey === key) throw new DOMException("blocked", "SecurityError");
+          return originalStorage.getItem(itemKey);
+        },
+      });
+      try {
+        await send();
+        expect(submission).toHaveBeenCalledOnce();
+        expect(
+          kind === "print" ? store.printSubmissionUnknown : store.feedbackSubmissionUnknown,
+        ).toBe(true);
+        expect(
+          kind === "print" ? store.printOutcomeStorageError : store.feedbackOutcomeStorageError,
+        ).not.toBe("");
+        expect(
+          kind === "print" ? store.acknowledgePrintOutcome() : store.acknowledgeFeedbackOutcome(),
+        ).toBe(false);
+      } finally {
+        read.mockRestore();
+        store.$dispose();
+      }
+    },
+  );
+
   it("exposes stable defaults and derived summaries", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 3, 7, 12, 0, 0));
@@ -312,7 +1032,6 @@ describe("workspace store", () => {
       expect(store.sendConfirmationEnabled).toBe(false);
       expect(store.tutorialTabEnabled).toBe(true);
       expect(store.pendingConfirmationCount).toBe(1);
-      expect(store.enabledSchedulesCount).toBe(2);
     } finally {
       vi.useRealTimers();
     }
@@ -355,11 +1074,6 @@ describe("workspace store", () => {
     await expect(store.removeDevice("device-bedroom")).resolves.toBe(true);
     expect(store.devices.some((device) => device.id === "device-bedroom")).toBe(false);
     expect(store.printJobs.some((job) => job.deviceId === "device-bedroom")).toBe(false);
-    expect(store.schedules.some((schedule) => schedule.deviceId === "device-bedroom")).toBe(false);
-    expect(store.printJobs.some((job) => job.deviceId === store.defaultDeviceId)).toBe(true);
-    expect(store.schedules.some((schedule) => schedule.deviceId === store.defaultDeviceId)).toBe(
-      true,
-    );
   });
 
   it("allows removing all devices and clears the default device", async () => {
@@ -441,29 +1155,18 @@ describe("workspace store", () => {
     expect(store.activeConversationId).not.toBe(currentId);
   });
 
-  it("supports print queue updates and source state cycling", async () => {
+  it("supports print queue updates and preferences without extension actions", async () => {
     const store = useWorkspaceStore();
     const pendingJob = store.pendingPrintJobs.find((job) => job.status === "pending");
-    const schedule = store.schedules[0];
-    const source = store.sources[0];
-
-    expect(pendingJob).toBeTruthy();
-
     await store.confirmPrint(pendingJob!.id);
-    store.updateScheduleDevice(schedule.id, "device-bedroom");
-    store.toggleSourceConnection(source.id);
     store.setTheme("dark");
     store.setLoginProtection(false);
     await store.logout();
-
     expect(store.printJobs.find((job) => job.id === pendingJob!.id)?.status).toBe("queued");
-    expect(store.schedules.find((item) => item.id === schedule.id)?.deviceId).toBe(
-      "device-bedroom",
-    );
-    expect(store.sources.find((item) => item.id === source.id)?.status).toBe("disconnected");
     expect(store.selectedTheme).toBe("dark");
-    expect(store.loginProtectionEnabled).toBe(false);
     expect(store.isAuthenticated).toBe(false);
+    expect(store).not.toHaveProperty("createSchedule");
+    expect(store).not.toHaveProperty("uploadPlugin");
   });
 
   it("maps the legacy soft theme to light when hydrating persisted state", () => {
@@ -520,50 +1223,28 @@ describe("workspace store", () => {
     expect(store.postLoginTutorialOpen).toBe(true);
   });
 
-  it.each(["ai", "plugins", "schedules", "adminPlugins"] as const)(
-    "retains core printer and print data when loading %s fails",
-    async (integration) => {
-      const error = new Error(`${integration} unavailable`);
-      const printer = {
-        id: "device-api-1",
-        name: "My printer",
-        status: "connected" as const,
-        note: "",
-      };
-      const job = printSummary("existing-print", "completed");
-      vi.mocked(printerService.fetchPrinters).mockResolvedValueOnce({ devices: [printer] });
-      vi.mocked(fetchPrintJobs)
-        .mockResolvedValueOnce({ printJobs: [], nextCursor: null })
-        .mockResolvedValueOnce({ printJobs: [job], nextCursor: null });
-      if (integration === "ai") {
-        vi.mocked(aiService.fetchAIConfigSummary).mockRejectedValueOnce(error);
-      } else if (integration === "plugins") {
-        vi.mocked(pluginService.fetchPlugins).mockRejectedValueOnce(error);
-      } else if (integration === "schedules") {
-        vi.mocked(pluginService.fetchPrintSchedules).mockRejectedValueOnce(error);
-      } else {
-        vi.mocked(authService.loginWithApi).mockResolvedValueOnce({
-          user: { id: "admin", email: "admin", name: "Administrator", role: "admin" },
-          session: {
-            accessToken: "access-token",
-            refreshToken: "refresh-token",
-            accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
-          },
-        });
-        vi.mocked(pluginService.fetchAdminPlugins).mockRejectedValueOnce(error);
-      }
-      const store = useWorkspaceStore();
-
-      await expect(store.login("name@example.com", "secret")).resolves.toBe(true);
-
-      expect(store.devices).toEqual([printer]);
-      expect(store.remotePrintJobs).toEqual([job]);
-      expect(store.printerSyncError).toBe("");
-      expect(store.aiConfigError).toBe(integration === "ai" ? error.message : "");
-      expect(store.pluginError).toBe(integration === "ai" ? "" : error.message);
-      expect(store.aiConfigSummary.model).toBe(integration === "ai" ? "Ink AI" : "gpt-4.1-mini");
-    },
-  );
+  it("retains core printer and print data when AI loading fails", async () => {
+    const error = new Error("AI unavailable");
+    const printer = {
+      id: "device-api-1",
+      name: "My printer",
+      status: "connected" as const,
+      note: "",
+    };
+    const job = printSummary("existing-print", "completed");
+    vi.mocked(printerService.fetchPrinters).mockResolvedValueOnce({ devices: [printer] });
+    vi.mocked(fetchPrintJobs)
+      .mockResolvedValueOnce({ printJobs: [], nextCursor: null })
+      .mockResolvedValueOnce({ printJobs: [job], nextCursor: null });
+    vi.mocked(aiService.fetchAIConfigSummary).mockRejectedValueOnce(error);
+    const store = useWorkspaceStore();
+    await expect(store.login("name@example.com", "secret")).resolves.toBe(true);
+    expect(store.devices).toEqual([printer]);
+    expect(store.remotePrintJobs).toEqual([job]);
+    expect(store.printerSyncError).toBe("");
+    expect(store.aiConfigError).toBe(error.message);
+    expect(store.aiConfigSummary.model).toBe("Ink AI");
+  });
 
   it("discards a device binding response after signing in to another account", async () => {
     vi.useFakeTimers();
@@ -690,9 +1371,9 @@ describe("workspace store", () => {
       expect(saved).not.toContain("account content that must stay private");
       expect(writes).toHaveBeenCalled();
       expect(
-        writes.mock.calls.every(
-          ([, value]) => !value.includes("account content that must stay private"),
-        ),
+        writes.mock.calls
+          .filter(([key]) => key === "ink.workspace.v1")
+          .every(([, value]) => !value.includes("account content that must stay private")),
       ).toBe(true);
     },
   );
@@ -976,7 +1657,7 @@ describe("workspace store", () => {
       );
     await expect(
       request("/test", { headers: { Authorization: "Bearer access-token" } }),
-    ).rejects.toMatchObject({ code: "network_error" });
+    ).rejects.toMatchObject({ code: "auth_refresh_failed", status: 401 });
     expect(store.isAuthenticated).toBe(true);
     expect(store.authSession?.refreshToken).toBe("refresh-token");
     expect(window.localStorage.getItem("ink.auth.session.v1")).toContain("refresh-token");
@@ -1042,7 +1723,7 @@ describe("workspace store", () => {
     await store.retrySynchronization();
     expect(aiService.fetchAIConfigSummary).not.toHaveBeenCalled();
     const savedSummary = store.aiConfigSummary;
-    store.pluginError = "extensions offline";
+    store.deviceSyncError = "printers offline";
     await store.retrySynchronization();
     expect(aiService.fetchAIConfigSummary).toHaveBeenCalledTimes(1);
     expect(store.aiConfigSummary).toBe(savedSummary);

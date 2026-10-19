@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -22,10 +21,8 @@ import (
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/platform/clock"
-	"github.com/ruhuang/ink/server/internal/platform/idgen"
 	"github.com/ruhuang/ink/server/internal/platform/migrate"
 	"github.com/ruhuang/ink/server/internal/platform/secret"
-	"github.com/ruhuang/ink/server/internal/plugins"
 )
 
 type recoveryAuthenticator struct{}
@@ -49,12 +46,9 @@ func (c *recoveryCompletion) CreateReply(_ context.Context, config ai.RuntimeCon
 
 // This opt-in test owns its database and never reads DATABASE_URL, .env, or
 // AI_CONFIG_ENCRYPTION_KEY. The random recovery keys exist only in memory.
-func TestBackupRestoresEncryptedSecretsAndPluginFiles(t *testing.T) {
+func TestBackupRestoresEncryptedSecretsAndRetainedFiles(t *testing.T) {
 	if os.Getenv("INK_TEST_BACKUP_RECOVERY") != "1" {
 		t.Skip("set INK_TEST_BACKUP_RECOVERY=1 to run isolated Docker recovery test")
-	}
-	if _, err := exec.LookPath("python3"); err != nil {
-		t.Fatal("python3 is required for the trusted fixture")
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
@@ -70,7 +64,7 @@ func TestBackupRestoresEncryptedSecretsAndPluginFiles(t *testing.T) {
 		"--env", "POSTGRES_PASSWORD=postgres", "--publish", "127.0.0.1::5432", "postgres:16")
 	ready := false
 	for range 30 {
-		if exec.CommandContext(ctx, "docker", "exec", container, "pg_isready", "-U", "postgres").Run() == nil {
+		if exec.CommandContext(ctx, "docker", "exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "postgres").Run() == nil {
 			ready = true
 			break
 		}
@@ -118,25 +112,23 @@ func TestBackupRestoresEncryptedSecretsAndPluginFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal("read trusted fixture manifest")
 	}
-	now := time.Now().UTC()
-	installation := plugins.Installation{ID: "recovery-plugin", PluginKey: "python-hello-source", SourceType: plugins.SourceTypeUpload, DisplayName: "Python Hello Source", Version: "1.0.0", RuntimeType: "python", ManifestJSON: manifest, CurrentPath: installed, Status: plugins.InstallationStatusReady, CreatedAt: now, UpdatedAt: now}
-	if err := source.SaveInstallation(ctx, installation); err != nil {
+	if _, err := sourceDB.Exec(ctx, `insert into plugin_installations
+		(id,plugin_key,source_type,display_name,version,runtime_type,manifest_json,current_path,status,created_at,updated_at)
+		values ('recovery-plugin','python-hello-source','upload','Retained source','1.0.0','python',$1,$2,'disabled',now(),now())`, manifest, installed); err != nil {
 		t.Fatal("store synthetic plugin installation")
 	}
-	newPlugin := func(store *Store, encryptor plugins.Encryptor) *plugins.Service {
-		return plugins.NewService(store, recoveryAuthenticator{}, encryptor, idgen.Generator{}, clock.SystemClock{}, nil, root, 5*time.Second, 5*time.Second, plugins.RuntimeLimits{}, nil, nil)
-	}
-	if _, err := newPlugin(source, box).SaveBinding(ctx, "synthetic-token", installation.ID, plugins.BindingInput{Enabled: true, Config: map[string]any{"sourceName": "Recovery source", "message": "Recovered fixture content", "uppercase": true}, Secrets: map[string]string{"apiToken": pluginSecret}}); err != nil {
-		t.Fatal("store encrypted plugin binding and validate trusted fixture")
-	}
-	trigger := plugins.FetchTrigger{Kind: plugins.TriggerKind("manual"), TriggeredAt: now.Format(time.RFC3339), Timezone: "UTC"}
-	sourceBinding, sourceSecrets, err := newPlugin(source, box).GetBindingForUser(ctx, installation.ID, "recovery-user")
+	secretJSON, err := json.Marshal(map[string]string{"apiToken": pluginSecret})
 	if err != nil {
-		t.Fatal("load source plugin binding")
+		t.Fatal("encode synthetic retained secret")
 	}
-	expectedFetch, err := newPlugin(source, box).ExecuteFetch(ctx, installation, sourceBinding, sourceSecrets, trigger)
-	if err != nil || len(expectedFetch.Items) != 1 {
-		t.Fatal("source trusted fixture did not fetch one item")
+	sourceCiphertext, sourceNonce, err := box.Encrypt(string(secretJSON))
+	if err != nil {
+		t.Fatal("encrypt synthetic retained secret")
+	}
+	if _, err := sourceDB.Exec(ctx, `insert into plugin_bindings
+		(id,plugin_installation_id,user_id,enabled,secret_ciphertext,secret_nonce,status,created_at,updated_at)
+		values ('recovery-binding','recovery-plugin','recovery-user',false,$1,$2,'disconnected',now(),now())`, sourceCiphertext, sourceNonce); err != nil {
+		t.Fatal("store encrypted retained binding")
 	}
 	pluginBackup := filepath.Join(root, "plugin-backup")
 	if err := os.CopyFS(pluginBackup, os.DirFS(installed)); err != nil {
@@ -164,19 +156,19 @@ func TestBackupRestoresEncryptedSecretsAndPluginFiles(t *testing.T) {
 	if err != nil || !bytes.Equal(sourceConfig.Ciphertext, restoredConfig.Ciphertext) || !bytes.Equal(sourceConfig.Nonce, restoredConfig.Nonce) {
 		t.Fatal("AI encrypted bytes changed during recovery")
 	}
-	restoredPlugin := newPlugin(restored, box)
-	binding, recoveredSecrets, err := restoredPlugin.GetBindingForUser(ctx, installation.ID, "recovery-user")
-	if err != nil || recoveredSecrets["apiToken"] != pluginSecret || !bytes.Equal(sourceBinding.Ciphertext, binding.Ciphertext) || !bytes.Equal(sourceBinding.Nonce, binding.Nonce) {
+	var ciphertext, nonce []byte
+	if err := restored.db.QueryRow(ctx, `select secret_ciphertext,secret_nonce from plugin_bindings where id='recovery-binding'`).Scan(&ciphertext, &nonce); err != nil || !bytes.Equal(sourceCiphertext, ciphertext) || !bytes.Equal(sourceNonce, nonce) {
 		t.Fatal("plugin secret changed during recovery")
 	}
-	recoveredInstallation, _, err := restoredPlugin.GetInstallation(ctx, installation.ID)
-	if err != nil || recoveredInstallation.CurrentPath != installed {
+	plaintext, err := box.Decrypt(ciphertext, nonce)
+	if err != nil || plaintext != string(secretJSON) {
+		t.Fatal("retained binding secret failed decryption after recovery")
+	}
+	var recoveredPath string
+	if err := restored.db.QueryRow(ctx, `select current_path from plugin_installations where id='recovery-plugin'`).Scan(&recoveredPath); err != nil || recoveredPath != installed {
 		t.Fatal("plugin installation reference changed during recovery")
 	}
-	recoveredFetch, err := restoredPlugin.ExecuteFetch(ctx, recoveredInstallation, binding, recoveredSecrets, trigger)
-	if err != nil || !reflect.DeepEqual(expectedFetch, recoveredFetch) {
-		t.Fatal("restored trusted fixture output changed")
-	}
+	recoveryFilesEqual(t, pluginBackup, recoveredPath)
 	input := ai.ReplyInput{Messages: []ai.ChatMessage{{Role: "user", Content: "Synthetic request"}}}
 	if _, err := newAI(restored, box).GenerateReply(ctx, "synthetic-token", input); err != nil || completion.calls != 1 {
 		t.Fatal("restored AI key did not reach the local test client")
@@ -190,31 +182,28 @@ func TestBackupRestoresEncryptedSecretsAndPluginFiles(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var aiEncryptor ai.Encryptor
-			var pluginEncryptor plugins.Encryptor
 			if test.encryptor != nil {
-				aiEncryptor, pluginEncryptor = test.encryptor, test.encryptor
+				aiEncryptor = test.encryptor
 			}
 			reply, err := newAI(restored, aiEncryptor).GenerateReply(ctx, "synthetic-token", input)
 			if !errors.Is(err, ai.ErrMissingSecret) || reply.Content != "" || completion.calls != 1 {
 				t.Fatal("invalid AI recovery key did not fail closed")
 			}
 			recoveryNoLeak(t, err.Error(), apiKey, pluginSecret)
-			_, values, err := newPlugin(restored, pluginEncryptor).GetBindingForUser(ctx, installation.ID, "recovery-user")
-			if err == nil || values != nil {
-				t.Fatal("invalid plugin recovery key produced secret values")
+			if test.encryptor != nil {
+				value, err := test.encryptor.Decrypt(ciphertext, nonce)
+				if err == nil || value != "" {
+					t.Fatal("wrong retained-data recovery key produced plaintext")
+				}
+				recoveryNoLeak(t, err.Error(), apiKey, pluginSecret)
 			}
-			recoveryNoLeak(t, err.Error(), apiKey, pluginSecret)
 		})
 	}
 	summary, err := newAI(restored, box).GetConfigSummary(ctx, "synthetic-token")
 	if err != nil {
 		t.Fatal("load recovered AI summary")
 	}
-	details, err := restoredPlugin.GetUserPlugin(ctx, "synthetic-token", installation.ID)
-	if err != nil {
-		t.Fatal("load recovered plugin summary")
-	}
-	public, err := json.Marshal([]any{summary, details})
+	public, err := json.Marshal(summary)
 	if err != nil {
 		t.Fatal("encode recovered public summaries")
 	}
@@ -225,12 +214,49 @@ func TestBackupRestoresEncryptedSecretsAndPluginFiles(t *testing.T) {
 	if reply, err := newAI(restored, box).GenerateReply(ctx, "synthetic-token", input); !errors.Is(err, ai.ErrMissingSecret) || reply.Content != "" {
 		t.Fatal("damaged AI nonce did not fail without plaintext")
 	}
-	if _, values, err := restoredPlugin.GetBindingForUser(ctx, installation.ID, "recovery-user"); err == nil || values != nil {
-		t.Fatal("damaged plugin nonce did not fail without plaintext")
+	if value, err := box.Decrypt(ciphertext, []byte{0}); err == nil || value != "" {
+		t.Fatal("damaged retained binding nonce did not fail without plaintext")
 	} else {
 		recoveryNoLeak(t, err.Error(), apiKey, pluginSecret)
 	}
-	t.Log("Restored encrypted AI/plugin values, rejected wrong/missing keys and damaged nonces, ran restored trusted plugin files; no external providers contacted.")
+	t.Log("Restored encrypted AI/retained binding values and exact archived files; rejected wrong keys and damaged nonces; no retained code executed or external providers contacted.")
+}
+
+func recoveryFilesEqual(t *testing.T, expected, actual string) {
+	t.Helper()
+	readFiles := func(root string) map[string]string {
+		files := map[string]string{}
+		if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			relative, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			files[relative] = string(content)
+			return nil
+		}); err != nil {
+			t.Fatal("read archived recovery files")
+		}
+		return files
+	}
+	original, restored := readFiles(expected), readFiles(actual)
+	if len(original) != len(restored) {
+		t.Fatal("archived recovery file count changed")
+	}
+	for name, value := range original {
+		if restored[name] != value {
+			t.Fatal("archived recovery file bytes changed")
+		}
+	}
 }
 
 func recoveryRandom(t *testing.T, size int) []byte {

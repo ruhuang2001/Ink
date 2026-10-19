@@ -1,6 +1,6 @@
 # Ink Web
 
-Vue single-page application for device management, content drafting, plugin configuration, print scheduling, and server-rendered PNG previews.
+Vue single-page application for device management, content drafting and conversations, AI assistance, manual printing, and server-rendered PNG previews. The 1.0 candidate removes plugin configuration and plugin print schedules from the UI. Existing persisted legacy fields remain available for data migration and archival recovery.
 
 The development server proxies `/api` to `http://localhost:8080`. Production deployments must serve `dist/` with an SPA fallback and proxy `/api/` to the Go API. See [Self-hosting Ink](../docs/SELF_HOSTING.md).
 
@@ -36,6 +36,7 @@ pnpm check:budget
 - Routes and page metadata are defined in `src/router`.
 - User-facing product copy is localized in `src/i18n/messages`.
 - Print preview images come from the API; the browser does not independently reproduce physical print layout.
+- Structured content blocks remain part of preview/rendering and do not imply a plugin runtime.
 
 `pnpm check:budget` runs after production builds in `pnpm check` and enforces the current release budgets: one entry JavaScript chunk at or below 150 KiB gzip, one entry stylesheet at or below 80 KiB gzip, and each emitted font asset at or below 64 KiB. Route chunks are loaded on demand. The web console uses the operating system's native Chinese font stack, avoiding a multi-megabyte web-font download while preserving native weight rendering.
 

@@ -26,7 +26,7 @@ def main():
         metrics_port = free_port()
         env = dict(os.environ, DATABASE_URL=db.url, JWT_SECRET=secret, APP_NAME="ink-print-perf",
                    METRICS_ADDR=f"127.0.0.1:{metrics_port}", MEMOBIRD_ACCESS_KEY="", AI_CONFIG_ENCRYPTION_KEY="",
-                   PRINT_STATUS_SYNC_ENABLED="false", SCHEDULER_POLL_INTERVAL="1s", PLUGIN_ROOT=str(scratch / "plugins"),
+                   WORKERS_ENABLED="true", PRINT_STATUS_SYNC_ENABLED="false",
                    OTEL_EXPORTER_OTLP_ENDPOINT="", OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="")
         command([str(migrate), "up"], cwd=scratch, env=env)
         seed(db, server, 20, 2, 100)
@@ -41,7 +41,7 @@ def main():
             return result.stdout + result.stderr
 
         def backlog_query_count():
-            return database_log().count("select 'plugin_fetch', count(*)")
+            return database_log().count("select 'print_status', count(*)")
 
         db.sql("select 1 as ink_observability_sql_log_probe;")
         deadline = time.monotonic() + 3
@@ -60,6 +60,26 @@ def main():
                     return response.status
             except urllib.error.HTTPError as error:
                 return error.code
+
+        # Recovered legacy rows must remain dormant in every 1.0 mode.
+        db.sql("update plugin_bindings set next_fetch_at=now()-interval '1 day';")
+        db.sql("update print_schedules set enabled=true,next_run_at=now()-interval '1 day';")
+        db.sql("update plugin_items set status='printed',fetched_at=now()-interval '40 days';")
+
+        def recovered_state():
+            return tuple(db.sql(f"select coalesce(jsonb_agg(to_jsonb(t) order by id)::text,'[]') from {table} t")
+                         for table in ("plugin_bindings", "plugin_items", "print_schedules", "print_jobs"))
+
+        initial_recovered_state = recovered_state()
+        recovery_env = dict(env, WORKERS_ENABLED="false", PRINT_STATUS_SYNC_ENABLED="true")
+        with API(binary, scratch, recovery_env, scratch) as recovery_api:
+            assert status(recovery_api.url + "/readyz") == 200, "Disabled workers blocked readiness"
+            request(recovery_api.url, "/api/v1/print-preview", access, {"title": "Recovery", "content": "Read-only preview"})
+            time.sleep(.3)
+            assert "ink_worker_scan_in_progress{" not in read_metrics(), "Disabled worker exported metrics"
+            assert recovered_state() == initial_recovered_state, "Recovery mode changed jobs or legacy rows"
+        assert recovery_api.process.returncode == 0, "Recovery API did not shut down cleanly"
+        initial_backlog_queries = backlog_query_count()
 
         default_env = dict(env, METRICS_ADDR="")
         with API(binary, scratch, default_env, scratch) as default_api:
@@ -115,7 +135,9 @@ def main():
                 command(["docker", "unpause", db.name])
             assert status(api.url + "/readyz") == 200
         assert api.process.returncode == 0, "API did not shut down cleanly"
+        assert recovered_state() == initial_recovered_state, "1.0 startup changed retained legacy data"
         print(json.dumps({"schema_version": 1, "success": True, "default_synthetic": default_synthetic,
+                          "recovery_workers_disabled": True, "legacy_data_unchanged": True,
                           "default_backlog_queries": 0, "default_shutdown_exit": 0, "synthetic": synthetic,
                           "database_outage_ready_seconds": round(elapsed, 3), "shutdown_exit": 0}))
 

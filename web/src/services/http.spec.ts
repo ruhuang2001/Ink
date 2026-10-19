@@ -140,7 +140,73 @@ describe("http client", () => {
     });
   });
 
-  it("cancels an abandoned 401 body and propagates a transient refresh failure", async () => {
+  it.each([new TypeError("response body disconnected"), new SyntaxError("invalid JSON")])(
+    "normalizes a successful response whose body fails with %s",
+    async (failure) => {
+      const response = new Response(null, { status: 201 });
+      vi.spyOn(response, "json").mockRejectedValueOnce(failure);
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+      await expect(request("/api/accepted", { method: "POST", body: "{}" })).rejects.toMatchObject({
+        status: 0,
+        code: "network_error",
+      });
+    },
+  );
+
+  it.each([400, 404, 429])(
+    "preserves rejected HTTP %s when its error body cannot be read",
+    async (status) => {
+      const response = new Response(null, { status });
+      vi.spyOn(response, "json").mockRejectedValueOnce(new TypeError("response body disconnected"));
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+      await expect(request("/api/rejected", { method: "POST", body: "{}" })).rejects.toMatchObject({
+        status,
+        code: "request_failed",
+      });
+    },
+  );
+
+  it.each([502, 503, 504])(
+    "normalizes unreadable HTTP %s error bodies as an uncertain network result",
+    async (status) => {
+      for (const failure of [
+        new TypeError("response body disconnected"),
+        new SyntaxError("invalid JSON"),
+      ]) {
+        const response = new Response(null, { status });
+        vi.spyOn(response, "json").mockRejectedValueOnce(failure);
+        vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+        await expect(
+          request("/api/uncertain", { method: "POST", body: "{}" }),
+        ).rejects.toMatchObject({ status: 0, code: "network_error" });
+      }
+    },
+  );
+
+  it.each([502, 503, 504])("preserves a complete HTTP %s business error", async (status) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "printer_not_configured", message: "unconfigured" }), {
+        status,
+      }),
+    );
+    await expect(
+      request("/api/configuration", { method: "POST", body: "{}" }),
+    ).rejects.toMatchObject({ status, code: "printer_not_configured" });
+  });
+
+  it("preserves explicit HTTP business errors", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "invalid_printer_input", message: "invalid title" }), {
+        status: 400,
+      }),
+    );
+    await expect(request("/api/rejected", { method: "POST", body: "{}" })).rejects.toMatchObject({
+      status: 400,
+      code: "invalid_printer_input",
+    });
+  });
+
+  it("keeps a rejected original request distinct from a transient refresh failure", async () => {
     const response = new Response("expired", { status: 401 });
     const cancel = vi.spyOn(response.body!, "cancel");
     vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
@@ -148,9 +214,9 @@ describe("http client", () => {
     configureAuthRefresh(async () => {
       throw failure;
     });
-    await expect(request("/test", { headers: { Authorization: "Bearer token" } })).rejects.toBe(
-      failure,
-    );
+    await expect(
+      request("/test", { headers: { Authorization: "Bearer token" } }),
+    ).rejects.toMatchObject({ status: 401, code: "auth_refresh_failed" });
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 });

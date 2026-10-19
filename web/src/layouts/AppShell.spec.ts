@@ -48,6 +48,53 @@ async function mountShellAt(path: string, authenticated = true) {
 }
 
 describe("AppShell", () => {
+  it("locks editing while a recovered draft awaits an explicit decision", async () => {
+    const { wrapper, store } = await mountShellAt("/conversations");
+    store.recoveredWorkspaceDraft = {
+      devices: [],
+      conversations: [],
+      activeConversationId: "",
+      printJobs: [],
+      schedules: [],
+      sources: [],
+      preferences: {
+        loginProtectionEnabled: false,
+        sendConfirmationEnabled: false,
+        tutorialTabEnabled: true,
+        theme: "light",
+        defaultDeviceId: "",
+        locale: "system",
+      },
+      serviceBinding: { providerName: null, modelName: "Ink AI", bound: false },
+    };
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const restore = vi.spyOn(store, "restoreRecoveredWorkspaceDraft").mockReturnValue(true);
+    const discard = vi.spyOn(store, "discardRecoveredWorkspaceDraft").mockReturnValue(true);
+    await flushPromises();
+    expect(wrapper.get("main fieldset").attributes("disabled")).toBeDefined();
+    expect(
+      wrapper
+        .findAll("button")
+        .some((button) => button.text() === "退出" && button.attributes("disabled") === undefined),
+    ).toBe(true);
+    const restoreButton = wrapper
+      .findAll("button")
+      .find((button) => button.text() === translate("shell.draftRecovery.restore"))!;
+    await restoreButton.trigger("click");
+    expect(restore).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    await restoreButton.trigger("click");
+    expect(restore).toHaveBeenCalledOnce();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === translate("shell.draftRecovery.discard"))!
+      .trigger("click");
+    expect(discard).toHaveBeenCalledOnce();
+    wrapper.unmount();
+    store.$dispose();
+    vi.restoreAllMocks();
+  });
+
   it("renders desktop and mobile navigation from router metadata", async () => {
     const { wrapper } = await mountShellAt("/settings/devices");
 
@@ -86,14 +133,12 @@ describe("AppShell", () => {
     store.workspaceSyncError = "草稿保存失败";
     store.printSyncError = "打印状态加载失败";
     store.aiConfigError = "AI 配置加载失败";
-    store.pluginError = "插件加载失败";
     await flushPromises();
 
     const alert = wrapper.get('[role="alert"]');
     expect(alert.text()).toContain("工作区：草稿保存失败");
     expect(alert.text()).toContain("设备与打印：打印状态加载失败");
     expect(alert.text()).toContain("AI 服务：AI 配置加载失败");
-    expect(alert.text()).toContain("扩展功能：插件加载失败");
 
     store.printSyncError = "";
     await flushPromises();
@@ -102,7 +147,6 @@ describe("AppShell", () => {
 
     store.workspaceSyncError = "";
     store.aiConfigError = "";
-    store.pluginError = "";
     await flushPromises();
     expect(wrapper.find('[role="alert"]').exists()).toBe(false);
   });

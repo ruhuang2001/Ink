@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -46,4 +48,24 @@ func newIsolatedTestDB(t *testing.T, prefix string) *pgxpool.Pool {
 	}
 	t.Cleanup(db.Close)
 	return db
+}
+
+func applyMigration(t *testing.T, ctx context.Context, db *pgxpool.Pool, version int) {
+	t.Helper()
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test file path")
+	}
+	pattern := filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "..", "migrations", fmt.Sprintf("%03d_*.sql", version))
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("find migration %03d: count=%d error=%v", version, len(matches), err)
+	}
+	sql, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatalf("read migration %03d: %v", version, err)
+	}
+	if _, err := db.Exec(ctx, string(sql)); err != nil {
+		t.Fatalf("apply migration %03d: %v", version, err)
+	}
 }

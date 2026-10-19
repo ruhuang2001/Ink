@@ -140,8 +140,7 @@ class Database:
 
 
 def seed(database, server_dir, total, queued, body_bytes):
-    manifest = json.loads((server_dir / "testdata/plugins/python-hello-plugin/ink-plugin.json").read_text())
-    manifest_sql = json.dumps(manifest).replace("'", "''")
+    # Retain synthetic legacy rows without reading or executing plugin files.
     database.sql(f"""
 insert into users (id,email,password_hash,display_name,status,role) values
  ('perf-user','perf@example.invalid','unused','Performance','active','admin');
@@ -164,10 +163,10 @@ insert into workspace_snapshots (user_id,state) select 'perf-user',jsonb_build_o
 insert into plugin_installations
  (id,plugin_key,source_type,display_name,version,runtime_type,manifest_json,current_path,status,created_at,updated_at)
  values ('perf-plugin','performance-source','upload','Performance','1.0.0','python',
- '{manifest_sql}'::jsonb,'unused','ready',now(),now());
+ '{{}}'::jsonb,'unused','ready',now(),now());
 insert into plugin_bindings
  (id,plugin_installation_id,user_id,enabled,status,next_fetch_at,created_at,updated_at)
- values ('perf-binding','perf-plugin','perf-user',true,'connected',now()+interval '1 day',now(),now());
+ values ('perf-binding','perf-plugin','perf-user',false,'connected',now()+interval '1 day',now(),now());
 insert into plugin_items
  (id,user_id,plugin_installation_id,plugin_binding_id,external_id,title,source_label,blocks_json,status,fetched_at,created_at,updated_at)
  values ('perf-item','perf-user','perf-plugin','perf-binding','unique','Due task','Performance',
@@ -302,8 +301,8 @@ def measure(source, label, candidate, args, provider, temp_dir):
         env = dict(os.environ, DATABASE_URL=database.url, JWT_SECRET=secret, APP_NAME="ink-print-perf",
                    MEMOBIRD_ACCESS_KEY="stub-key", MEMOBIRD_BASE_URL=f"http://127.0.0.1:{provider.server_port}",
                    MEMOBIRD_TIMEOUT="5s", PRINT_STATUS_TIMEOUT="5s", PRINT_STATUS_SYNC_ENABLED="false",
-                   PRINT_STATUS_POLL_INTERVAL="2s", PRINT_STATUS_BATCH_SIZE="20", SCHEDULER_POLL_INTERVAL="2s",
-                   INBOX_JANITOR_INTERVAL="24h", PLUGIN_ROOT=str(temp_dir / "unused-plugins"))
+                   PRINT_STATUS_POLL_INTERVAL="2s", PRINT_STATUS_BATCH_SIZE="20", WORKERS_ENABLED="false",
+                   METRICS_ADDR="", OTEL_EXPORTER_OTLP_ENDPOINT="", OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="")
         command(["go", "run", "./cmd/migrate", "up"], cwd=server_dir, env=env)
         seed(database, server_dir, args.jobs, args.queued, args.body_bytes)
         access_token = token(secret)
@@ -407,27 +406,10 @@ def measure(source, label, candidate, args, provider, temp_dir):
                     raise RuntimeError("Oversized preview was accepted")
             result["content_limit"] = "print_content_too_large"
 
-        with API(binary, server_dir, env, temp_dir) as api:
-            due_epoch = database.sql("update print_schedules set enabled=true,next_run_at=now()+interval '0.5 second' returning extract(epoch from next_run_at);")
-            deadline = time.monotonic() + 10
-            while time.monotonic() < deadline:
-                exists = database.sql("select count(*) from print_schedule_deliveries where print_schedule_id='perf-schedule' and status='printed';")
-                if exists == "1":
-                    break
-                time.sleep(.05)
-            else:
-                raise RuntimeError("Due schedule did not create a local print job")
-            wait_ms = database.sql("select extract(epoch from (j.created_at-(select last_run_at from print_schedules where id='perf-schedule')))*1000 from print_jobs j join print_schedule_deliveries d on d.print_job_id=j.id where d.print_schedule_id='perf-schedule';")
-            due_wait_ms = database.sql(f"select (extract(epoch from j.created_at)-{due_epoch})*1000 from print_jobs j join print_schedule_deliveries d on d.print_job_id=j.id where d.print_schedule_id='perf-schedule';")
-            result["due_schedule"] = {"scheduler_poll_interval_seconds": 2,
-                                      "due_to_job_ms": float(due_wait_ms), "samples": 1,
-                                      "claimed_to_job_ms": float(wait_ms), "confirmation_enabled": True,
-                                      "polling_sleep_ms": 50}
-
         # Once the provider has answered 'not printed', completion must be found without a read request.
         provider.printed = False
         before = provider.calls
-        sync_env = dict(env, PRINT_STATUS_SYNC_ENABLED="true")
+        sync_env = dict(env, WORKERS_ENABLED="true", PRINT_STATUS_SYNC_ENABLED="true")
         with API(binary, server_dir, sync_env, temp_dir) as sync_api:
             deadline = time.monotonic() + max(5, args.queued * (args.provider_delay_ms / 1000 + .25) + 5)
             while candidate and provider.calls < before + args.queued and time.monotonic() < deadline:

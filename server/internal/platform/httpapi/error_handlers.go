@@ -7,9 +7,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/feedback"
-	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
-	"github.com/ruhuang/ink/server/internal/schedule"
 )
 
 func (s *Server) writeAuthError(w http.ResponseWriter, requestID string, err error) {
@@ -57,6 +55,8 @@ func (s *Server) writeAIError(w http.ResponseWriter, requestID string, err error
 
 func (s *Server) writePrinterError(w http.ResponseWriter, requestID string, err error) {
 	switch {
+	case errors.Is(err, printer.ErrSubmissionOutcomeUnknown):
+		writeError(w, requestID, http.StatusBadGateway, "print_submission_unknown", "提交结果未知，请先检查设备是否已打印，确认后再决定是否手动创建新任务；请勿直接重复提交。")
 	case errors.Is(err, printer.ErrForbidden):
 		writeError(w, requestID, http.StatusForbidden, "forbidden", "当前账号没有该操作权限。")
 	case errors.Is(err, printer.ErrNotConfigured):
@@ -82,51 +82,9 @@ func (s *Server) writeFeedbackError(w http.ResponseWriter, requestID string, err
 		writeError(w, requestID, http.StatusPreconditionFailed, "feedback_recipient_missing", "当前还没有可接收反馈的管理员账号。")
 	case errors.Is(err, feedback.ErrNoAdminDevice):
 		writeError(w, requestID, http.StatusPreconditionFailed, "feedback_printer_missing", "管理员当前还没有可接收反馈的默认咕咕机。")
-	case errors.Is(err, printer.ErrNotConfigured), errors.Is(err, printer.ErrNotFound), errors.Is(err, printer.ErrInvalidInput), errors.Is(err, printer.ErrContentTooLarge), errors.Is(err, printer.ErrUnavailable), errors.Is(err, printer.ErrForbidden):
+	case errors.Is(err, printer.ErrSubmissionOutcomeUnknown), errors.Is(err, printer.ErrNotConfigured), errors.Is(err, printer.ErrNotFound), errors.Is(err, printer.ErrInvalidInput), errors.Is(err, printer.ErrContentTooLarge), errors.Is(err, printer.ErrUnavailable), errors.Is(err, printer.ErrForbidden):
 		s.writePrinterError(w, requestID, err)
 	default:
 		s.writeAuthError(w, requestID, err)
-	}
-}
-
-func (s *Server) writePluginError(w http.ResponseWriter, requestID string, err error) {
-	var validationFailure plugins.ValidationFailure
-	switch {
-	case errors.Is(err, plugins.ErrForbidden):
-		writeError(w, requestID, http.StatusForbidden, "forbidden", "当前账号没有该操作权限。")
-	case errors.Is(err, plugins.ErrNotFound):
-		writeError(w, requestID, http.StatusNotFound, "plugin_not_found", "指定插件不存在。")
-	case errors.Is(err, plugins.ErrMissingSecret):
-		writeError(w, requestID, http.StatusServiceUnavailable, "plugin_secret_missing", "服务端尚未配置插件加密密钥。")
-	case errors.As(err, &validationFailure):
-		writeError(w, requestID, http.StatusBadRequest, "invalid_plugin_config", validationFailure.Error())
-	case errors.Is(err, plugins.ErrInvalidInput):
-		writeError(w, requestID, http.StatusBadRequest, "invalid_plugin_input", "请输入有效的插件配置。")
-	case errors.Is(err, plugins.ErrInvalidPlugin):
-		writeError(w, requestID, http.StatusBadRequest, "invalid_plugin_package", err.Error())
-	case errors.Is(err, plugins.ErrGitInstallDisabled):
-		writeError(w, requestID, http.StatusServiceUnavailable, "plugin_git_install_disabled", "服务端未启用从 Git 仓库安装插件。")
-	case errors.Is(err, plugins.ErrExecutionFailed):
-		writeError(w, requestID, http.StatusBadGateway, "plugin_execution_failed", err.Error())
-	default:
-		s.writeAuthError(w, requestID, err)
-	}
-}
-
-func (s *Server) writeScheduleError(w http.ResponseWriter, requestID string, err error) {
-	switch {
-	case errors.Is(err, schedule.ErrConflict):
-		writeError(w, requestID, http.StatusConflict, "schedule_conflict", "定时任务已更新，请重新加载后再修改。")
-	case errors.Is(err, schedule.ErrNotFound):
-		writeError(w, requestID, http.StatusNotFound, "schedule_not_found", "指定定时任务不存在。")
-	case errors.Is(err, schedule.ErrInvalidInput):
-		writeError(w, requestID, http.StatusBadRequest, "invalid_schedule_input", err.Error())
-	default:
-		var validationFailure plugins.ValidationFailure
-		if errors.As(err, &validationFailure) {
-			writeError(w, requestID, http.StatusBadRequest, "invalid_schedule_config", validationFailure.Error())
-			return
-		}
-		s.writePluginError(w, requestID, err)
 	}
 }

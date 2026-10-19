@@ -1,6 +1,8 @@
-# Ink Source Plugin Guide and Spec v2
+# Archived: Ink Source Plugin Guide and Spec v2
 
-This document is both the implementation guide and the normative contract for Ink source plugins.
+This document records the historical 0.x plugin protocol. Plugin installation, binding, fetching, execution and plugin schedules are removed from the 1.0 application. The UI and endpoints described below are unavailable. Historical database records and installation files are retained for migration and archival recovery; they are not executed during normal startup or restoration. This archived document is not a supported 1.x API contract or a guide for enabling plugins.
+
+Structured content blocks remain supported by the core preview/rendering pipeline independently of plugins. The remaining sections describe the old implementation for interpreting retained data.
 
 - `schemaVersion` must be `2`
 - Plugins own data collection cadence through `fetchPolicy`
@@ -45,7 +47,7 @@ Development sequence:
 6. Install it from **Settings → Plugins**, configure the binding, validate it, and perform a manual fetch.
 7. Create a print schedule for the connected binding.
 
-The fixture at [`server/testdata/plugins/python-hello-plugin`](../server/testdata/plugins/python-hello-plugin) is a minimal working Python example used by the server's real subprocess tests.
+The fixture at [`server/testdata/plugins/python-hello-plugin`](../server/testdata/plugins/python-hello-plugin) is retained as archival file data for recovery checks; current checks do not execute it.
 
 ## Mental Model
 
