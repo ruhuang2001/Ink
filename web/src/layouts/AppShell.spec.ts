@@ -127,6 +127,21 @@ describe("AppShell", () => {
     expect(wrapper.text()).not.toContain("Paper workspace");
   });
 
+  it("shows transient feedback as a dismissible floating notice without changing page layout", async () => {
+    const { wrapper, store } = await mountShellAt("/conversations");
+    store.flashMessage = "已创建新的对话草稿。";
+    store.flashTone = "success";
+    await flushPromises();
+
+    const notice = wrapper.get('[role="status"]');
+    expect(notice.classes()).toContain("ink-toast");
+    expect(notice.text()).toContain("已创建新的对话草稿。");
+    expect(wrapper.find("header + .border-b").exists()).toBe(false);
+
+    await notice.get('button[aria-label="关闭提示"]').trigger("click");
+    expect(store.flashMessage).toBe("");
+  });
+
   it("keeps synchronization failures visible until the affected data recovers", async () => {
     const { wrapper, store } = await mountShellAt("/settings/devices");
 

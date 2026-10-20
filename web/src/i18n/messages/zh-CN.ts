@@ -44,6 +44,7 @@ const zhCN = {
       cancel: "取消",
       closeWindow: "关闭窗口",
       delete: "删除",
+      dismissNotice: "关闭提示",
       hide: "隐藏",
       login: "登录",
       logout: "退出",

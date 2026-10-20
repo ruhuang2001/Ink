@@ -1779,6 +1779,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
   }
 
+  function dismissFlash() {
+    if (flashTimer) {
+      window.clearTimeout(flashTimer);
+      flashTimer = 0;
+    }
+    flashMessage.value = "";
+  }
+
   function showFlashKey(
     key: string,
     tone: "success" | "error" | "info" = "info",
@@ -2928,6 +2936,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     acknowledgePrintOutcome,
     flashMessage,
     flashTone,
+    dismissFlash,
     postLoginTutorialOpen,
     activeConversation,
     conversationMessages,

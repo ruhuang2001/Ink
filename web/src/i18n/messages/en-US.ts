@@ -45,6 +45,7 @@ const enUS = {
       cancel: "Cancel",
       closeWindow: "Close dialog",
       delete: "Delete",
+      dismissNotice: "Dismiss notification",
       hide: "Hide",
       login: "Log in",
       logout: "Log out",

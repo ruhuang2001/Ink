@@ -265,21 +265,26 @@ async function recoverSynchronization() {
       </div>
     </header>
 
-    <div
-      v-if="workspaceStore.flashMessage"
-      class="border-b px-4 py-3 text-sm lg:px-8"
-      :class="
-        workspaceStore.flashTone === 'success'
-          ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
-          : workspaceStore.flashTone === 'error'
-            ? 'border-rose-100 bg-rose-50 text-rose-700'
-            : 'border-stone-200 bg-stone-50 text-stone-700'
-      "
-    >
-      <div class="mx-auto max-w-7xl">
-        {{ workspaceStore.flashMessage }}
+    <Transition name="toast">
+      <div
+        v-if="workspaceStore.flashMessage"
+        class="ink-toast"
+        :class="`is-${workspaceStore.flashTone}`"
+        :role="workspaceStore.flashTone === 'error' ? 'alert' : 'status'"
+        aria-live="polite"
+      >
+        <span class="ink-toast-mark" aria-hidden="true" />
+        <p>{{ workspaceStore.flashMessage }}</p>
+        <button
+          type="button"
+          class="ink-toast-dismiss"
+          :aria-label="t('common.actions.dismissNotice')"
+          @click="workspaceStore.dismissFlash"
+        >
+          ×
+        </button>
       </div>
-    </div>
+    </Transition>
 
     <div
       v-if="

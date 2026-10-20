@@ -500,12 +500,109 @@
   transform: translateY(10px) scale(0.98);
 }
 
+.ink-toast {
+  position: fixed;
+  z-index: 50;
+  top: calc(env(safe-area-inset-top) + 5.25rem);
+  right: max(1rem, env(safe-area-inset-right));
+  display: flex;
+  width: min(24rem, calc(100vw - 2rem));
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: 1px solid var(--app-border);
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.75rem 0.75rem 1rem;
+  background: color-mix(in srgb, var(--app-surface-raised) 94%, transparent);
+  box-shadow: var(--app-shadow-card);
+  color: var(--app-text);
+  backdrop-filter: blur(12px);
+}
+
+.ink-toast.is-success .ink-toast-mark {
+  background: #2f6a52;
+}
+
+.ink-toast.is-error .ink-toast-mark {
+  background: #a44a55;
+}
+
+.ink-toast.is-info .ink-toast-mark {
+  background: #a87532;
+}
+
+.ink-toast-mark {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: none;
+  margin-top: 0.35rem;
+  border-radius: 50%;
+}
+
+.ink-toast p {
+  flex: 1;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.ink-toast-dismiss {
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  place-items: center;
+  margin: -0.15rem -0.15rem 0 0;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--app-muted);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.ink-toast-dismiss:hover {
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+}
+
+.ink-toast-dismiss:focus-visible {
+  outline: 2px solid var(--app-ring);
+  outline-offset: 2px;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition:
+    opacity 180ms var(--ease-out-quart),
+    transform 180ms var(--ease-out-quart);
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-0.5rem);
+}
+
+@media (max-width: 639px) {
+  .ink-toast {
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom) + 13rem);
+  }
+
+  .toast-enter-from,
+  .toast-leave-to {
+    transform: translateY(0.5rem);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ink-page main fieldset > section,
   .page-swap-enter-active,
   .page-swap-leave-active,
   .dialog-fade-enter-active,
   .dialog-fade-leave-active,
+  .toast-enter-active,
+  .toast-leave-active,
   .ui-list-row,
   .ui-timeline-item,
   .ui-toggle,
@@ -519,7 +616,9 @@
   }
 
   .dialog-fade-enter-from,
-  .dialog-fade-leave-to {
+  .dialog-fade-leave-to,
+  .toast-enter-from,
+  .toast-leave-to {
     opacity: 1;
     transform: none;
   }
