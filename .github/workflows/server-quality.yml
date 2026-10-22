@@ -63,12 +63,15 @@ jobs:
       - name: scan reachable Go vulnerabilities
         working-directory: server
         run: |
+          go version
+          go env GOVERSION GOTOOLCHAIN
           scan_dir="$(mktemp -d)"
           trap 'rm -rf "$scan_dir"' EXIT
           GOBIN="$scan_dir" go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           for package in $(go list ./cmd/...); do
             binary="$scan_dir/${package##*/}"
             go build -o "$binary" "$package"
+            go version -m "$binary"
             "$scan_dir/govulncheck" -mode=binary "$binary"
           done
 

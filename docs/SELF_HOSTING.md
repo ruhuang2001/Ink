@@ -13,7 +13,7 @@ need to start its four or eight services or set a Grafana password to run Ink.
 
 - Node.js 22
 - pnpm 10
-- Go 1.26.9 (see `server/go.mod`)
+- Go 1.26.10 (see `server/go.mod`)
 - PostgreSQL 16
 - A Memobird Open Platform access key for physical printing
 - HTTPS and a reverse proxy for any deployment exposed beyond localhost
