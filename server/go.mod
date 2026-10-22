@@ -1,6 +1,6 @@
 module github.com/ruhuang/ink/server
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/cyphar/filepath-securejoin v0.7.0
@@ -39,7 +39,7 @@ require (
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	golang.org/x/image v0.45.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
