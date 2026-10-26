@@ -32,10 +32,6 @@ function handleSystemColorSchemeChange(event: MediaQueryListEvent) {
 }
 
 onMounted(() => {
-  if (workspaceStore.authSession && !workspaceStore.authUser && !workspaceStore.authBootstrapping) {
-    void workspaceStore.initializeAuth();
-  }
-
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return;
   }
