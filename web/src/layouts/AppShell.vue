@@ -17,8 +17,9 @@ function updateViewportHeight() {
   if (window.visualViewport && window.visualViewport.scale !== 1) return;
   viewportHeight.value = window.visualViewport?.height ?? window.innerHeight;
 }
+// Seed before first paint so the shell never renders at its 100dvh fallback first.
+updateViewportHeight();
 onMounted(() => {
-  updateViewportHeight();
   window.visualViewport?.addEventListener("resize", updateViewportHeight);
   window.addEventListener("resize", updateViewportHeight);
 });

@@ -77,6 +77,8 @@
     background: var(--app-bg);
     overflow-y: auto;
     overscroll-behavior-y: none;
+    /* Keeps the content edge fixed when a page is short enough not to scroll. */
+    scrollbar-gutter: stable;
   }
 
   body {
@@ -479,7 +481,9 @@
   transition: opacity 140ms ease-out;
 }
 
-.page-swap-leave-active {
+/* Route views declare their own display (flex/grid) in later stylesheets, which would
+   otherwise win the specificity tie and paint the leaving page reflowed at scroll 0. */
+.page-swap-leave-active.page-swap-leave-active {
   display: none;
 }
 
