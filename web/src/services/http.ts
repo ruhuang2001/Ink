@@ -64,14 +64,14 @@ export async function request<T>(input: string, init: HttpRequestInit = {}): Pro
         throw new AuthApiError(
           401,
           "auth_refresh_failed",
-          "会话刷新失败，原请求未执行，请稍后重试或重新登录。",
+          "Session refresh failed. The original request was not sent. Please try again or sign in again.",
         );
       }
       if (init.signal?.aborted) {
         throw new AuthApiError(
           401,
           "auth_refresh_failed",
-          "会话刷新期间请求已取消，原请求未执行。",
+          "The request was canceled during session refresh and was not sent.",
         );
       }
       if (nextAccessToken) {
@@ -96,7 +96,7 @@ export async function request<T>(input: string, init: HttpRequestInit = {}): Pro
       throw new AuthApiError(
         response.status,
         errorPayload?.code ?? "request_failed",
-        errorPayload?.message ?? "请求失败，请稍后重试。",
+        errorPayload?.message ?? "Request failed. Please try again later.",
         errorPayload?.requestId ?? response.headers.get("X-Request-ID") ?? undefined,
       );
     }
@@ -153,12 +153,12 @@ async function fetchWithTimeout(input: string, init: HttpRequestInit, headers: H
 function networkError(error: unknown, timedOut: boolean) {
   const message =
     error instanceof DOMException && error.name === "AbortError" && timedOut
-      ? "请求超时，请稍后重试。"
+      ? "Request timed out. Please try again later."
       : error instanceof DOMException && error.name === "AbortError" && !timedOut
-        ? "请求已取消。"
+        ? "Request was canceled."
         : error instanceof Error
-          ? `网络异常，请检查连接后重试。${error.message ? ` (${error.message})` : ""}`
-          : "网络异常，请检查连接后重试。";
+          ? `A network error occurred. Check your connection and try again.${error.message ? ` (${error.message})` : ""}`
+          : "A network error occurred. Check your connection and try again.";
   return new AuthApiError(0, "network_error", message);
 }
 

@@ -56,6 +56,10 @@ check-api:
 smoke-api:
 	./server/scripts/smoke_api.sh
 
+.PHONY: smoke-memory
+smoke-memory:
+	sh ./server/scripts/smoke_memory.sh
+
 .PHONY: check-observability
 check-observability:
 	bash ./scripts/check-observability.sh

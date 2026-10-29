@@ -17,6 +17,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/content"
 	"github.com/ruhuang/ink/server/internal/feedback"
+	"github.com/ruhuang/ink/server/internal/memory"
 	"github.com/ruhuang/ink/server/internal/platform/observability"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/session"
@@ -37,6 +38,7 @@ type Server struct {
 	auth               auth.AuthService
 	workspace          workspace.WorkspaceService
 	ai                 ai.AIService
+	memory             memory.MemoryService
 	printer            printer.PrinterService
 	feedback           FeedbackService
 	logger             *slog.Logger
@@ -52,6 +54,7 @@ func NewServer(
 	authService auth.AuthService,
 	workspaceService workspace.WorkspaceService,
 	aiService ai.AIService,
+	memoryService memory.MemoryService,
 	printerService printer.PrinterService,
 	feedbackService FeedbackService,
 	logger *slog.Logger,
@@ -66,6 +69,7 @@ func NewServer(
 		auth:               authService,
 		workspace:          workspaceService,
 		ai:                 aiService,
+		memory:             memoryService,
 		printer:            printerService,
 		feedback:           feedbackService,
 		logger:             logger,
@@ -98,6 +102,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/ai/config", s.wrap(s.handleGetAIConfig))
 	mux.HandleFunc("PUT /api/v1/admin/ai/config", s.wrap(s.handleSaveAIConfig))
 	mux.HandleFunc("POST /api/v1/ai/reply", s.wrap(s.handleGenerateAIReply))
+	mux.HandleFunc("GET /api/v1/memory/settings", s.wrap(s.handleGetMemorySettings))
+	mux.HandleFunc("PUT /api/v1/admin/memory/settings", s.wrap(s.handleSaveMemorySettings))
 	mux.HandleFunc("GET /api/v1/printers", s.wrap(s.handleListPrinters))
 	mux.HandleFunc("POST /api/v1/printers/bind", s.wrap(s.handleBindPrinter))
 	mux.HandleFunc("DELETE /api/v1/printers/{printerID}", s.wrap(s.handleDeletePrinter))
@@ -153,7 +159,8 @@ type aiConfigRequest struct {
 }
 
 type aiReplyRequest struct {
-	Messages []ai.ChatMessage `json:"messages"`
+	Messages       []ai.ChatMessage `json:"messages"`
+	ConversationID string           `json:"conversationId,omitempty"`
 }
 
 type bindPrinterRequest struct {
@@ -222,10 +229,10 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, requestID string, dst an
 func writeJSONDecodeError(w http.ResponseWriter, requestID string, err error) {
 	var maxBytesError *http.MaxBytesError
 	if errors.As(err, &maxBytesError) {
-		writeError(w, requestID, http.StatusRequestEntityTooLarge, "request_too_large", "请求体过大。")
+		writeError(w, requestID, http.StatusRequestEntityTooLarge, "request_too_large", "Request body is too large.")
 		return
 	}
-	writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	writeError(w, requestID, http.StatusBadRequest, "invalid_request", "Invalid request format.")
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
@@ -241,7 +248,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, requestID s
 
 	meta := s.clientMetaFromRequest(r)
 	if !s.rateLimiter.Allow("ip:"+meta.IPAddress, "account:"+auth.NormalizeEmail(payload.Email)) {
-		writeError(w, requestID, http.StatusTooManyRequests, "rate_limited", "登录尝试过于频繁，请稍后再试。")
+		writeError(w, requestID, http.StatusTooManyRequests, "rate_limited", "Too many login attempts. Please try again later.")
 		return
 	}
 
@@ -286,7 +293,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request, requestID
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -315,7 +322,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request, requestID 
 func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -341,7 +348,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, re
 func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -366,7 +373,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, reques
 func (s *Server) handleGetWorkspace(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -382,7 +389,7 @@ func (s *Server) handleGetWorkspace(w http.ResponseWriter, r *http.Request, requ
 func (s *Server) handleSaveWorkspace(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -395,9 +402,9 @@ func (s *Server) handleSaveWorkspace(w http.ResponseWriter, r *http.Request, req
 	if err != nil {
 		switch {
 		case errors.Is(err, workspace.ErrRevisionRequired):
-			writeError(w, requestID, http.StatusPreconditionRequired, "workspace_revision_required", "请重新加载工作区后再保存。")
+			writeError(w, requestID, http.StatusPreconditionRequired, "workspace_revision_required", "Reload the workspace before saving.")
 		case errors.Is(err, workspace.ErrConflict):
-			writeError(w, requestID, http.StatusConflict, "workspace_conflict", "工作区已在其他位置更新，请重新加载后再保存。")
+			writeError(w, requestID, http.StatusConflict, "workspace_conflict", "The workspace was updated elsewhere. Reload it before saving.")
 		default:
 			s.writeAuthError(w, requestID, err)
 		}
@@ -410,7 +417,7 @@ func (s *Server) handleSaveWorkspace(w http.ResponseWriter, r *http.Request, req
 func (s *Server) handleGetAIConfig(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -426,7 +433,7 @@ func (s *Server) handleGetAIConfig(w http.ResponseWriter, r *http.Request, reque
 func (s *Server) handleSaveAIConfig(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -453,7 +460,7 @@ func (s *Server) handleSaveAIConfig(w http.ResponseWriter, r *http.Request, requ
 func (s *Server) handleGenerateAIReply(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -462,7 +469,10 @@ func (s *Server) handleGenerateAIReply(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 
-	reply, err := s.ai.GenerateReply(r.Context(), accessToken, ai.ReplyInput{Messages: payload.Messages})
+	reply, err := s.ai.GenerateReply(r.Context(), accessToken, ai.ReplyInput{
+		Messages:       payload.Messages,
+		ConversationID: payload.ConversationID,
+	})
 	if err != nil {
 		s.writeAIError(w, requestID, err)
 		return
@@ -474,7 +484,7 @@ func (s *Server) handleGenerateAIReply(w http.ResponseWriter, r *http.Request, r
 func (s *Server) handleListPrinters(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -490,7 +500,7 @@ func (s *Server) handleListPrinters(w http.ResponseWriter, r *http.Request, requ
 func (s *Server) handleBindPrinter(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -515,7 +525,7 @@ func (s *Server) handleBindPrinter(w http.ResponseWriter, r *http.Request, reque
 func (s *Server) handleDeletePrinter(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -530,7 +540,7 @@ func (s *Server) handleDeletePrinter(w http.ResponseWriter, r *http.Request, req
 func (s *Server) handleSubmitFeedback(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -552,7 +562,7 @@ func (s *Server) handleSubmitFeedback(w http.ResponseWriter, r *http.Request, re
 func (s *Server) handleListPrintJobs(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -579,7 +589,7 @@ func (s *Server) handleListPrintJobs(w http.ResponseWriter, r *http.Request, req
 func (s *Server) handlePrintJobStatuses(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 	var input printer.JobStatusesInput
@@ -612,7 +622,7 @@ func (s *Server) handlePrintJobStatuses(w http.ResponseWriter, r *http.Request, 
 func (s *Server) handleGetPrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 	job, err := s.printer.GetPrintJob(r.Context(), accessToken, r.PathValue("jobID"))
@@ -626,7 +636,7 @@ func (s *Server) handleGetPrintJob(w http.ResponseWriter, r *http.Request, reque
 func (s *Server) handleCreatePrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -653,7 +663,7 @@ func (s *Server) handleCreatePrintJob(w http.ResponseWriter, r *http.Request, re
 func (s *Server) handlePrintPreview(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 	if _, err := s.auth.GetCurrentUser(r.Context(), accessToken); err != nil {
@@ -681,7 +691,7 @@ func (s *Server) handlePrintPreview(w http.ResponseWriter, r *http.Request, requ
 func (s *Server) handleSubmitPrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -697,7 +707,7 @@ func (s *Server) handleSubmitPrintJob(w http.ResponseWriter, r *http.Request, re
 func (s *Server) handleCancelPrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -713,7 +723,7 @@ func (s *Server) handleCancelPrintJob(w http.ResponseWriter, r *http.Request, re
 func (s *Server) handleUpdatePrintJobDevice(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
 		return
 	}
 
@@ -1036,4 +1046,79 @@ const requestIDKey contextKey = "request_id"
 // WithRequestID stores the request identifier on a context.
 func WithRequestID(ctx context.Context, requestID string) context.Context {
 	return context.WithValue(ctx, requestIDKey, requestID)
+}
+
+type memorySettingsRequest struct {
+	Enabled    bool   `json:"enabled"`
+	ZepBaseURL string `json:"zepBaseUrl"`
+	ZepAPIKey  string `json:"zepApiKey"`
+}
+
+func (s *Server) handleGetMemorySettings(w http.ResponseWriter, r *http.Request, requestID string) {
+	if s.memory == nil {
+		writeJSON(w, http.StatusOK, memory.SettingsSummary{
+			Enabled:   false,
+			Available: false,
+		})
+		return
+	}
+
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
+		return
+	}
+
+	summary, err := s.memory.GetSettings(r.Context(), accessToken)
+	if err != nil {
+		s.writeMemoryError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, summary)
+}
+
+func (s *Server) handleSaveMemorySettings(w http.ResponseWriter, r *http.Request, requestID string) {
+	if s.memory == nil {
+		writeError(w, requestID, http.StatusServiceUnavailable, "service_unavailable", "memory service not available")
+		return
+	}
+
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Authentication required. Please sign in.")
+		return
+	}
+
+	var req memorySettingsRequest
+	if !decodeJSON(w, r, requestID, &req, defaultJSONMaxBytes, false) {
+		return
+	}
+
+	input := memory.UpdateSettingsInput{
+		Enabled:    req.Enabled,
+		ZepBaseURL: req.ZepBaseURL,
+		ZepAPIKey:  req.ZepAPIKey,
+	}
+
+	summary, err := s.memory.UpdateSettings(r.Context(), accessToken, input)
+	if err != nil {
+		s.writeMemoryError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, summary)
+}
+
+func (s *Server) writeMemoryError(w http.ResponseWriter, requestID string, err error) {
+	switch {
+	case errors.Is(err, memory.ErrForbidden):
+		writeError(w, requestID, http.StatusForbidden, "forbidden", "You do not have permission to perform this action.")
+	case errors.Is(err, memory.ErrInvalidConfig):
+		writeError(w, requestID, http.StatusBadRequest, "invalid_memory_config", "Enter a valid memory service URL or API key.")
+	case errors.Is(err, memory.ErrMissingSecret), errors.Is(err, memory.ErrDecryptFailed):
+		writeError(w, requestID, http.StatusServiceUnavailable, "memory_secret_unavailable", "The server memory encryption key is missing or cannot decrypt the stored API key.")
+	default:
+		s.writeAuthError(w, requestID, err)
+	}
 }

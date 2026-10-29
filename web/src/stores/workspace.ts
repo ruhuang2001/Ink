@@ -20,6 +20,7 @@ import {
 } from "@/services/auth";
 import { submitFeedbackToAdmin } from "@/services/feedback";
 import { configureAuthRefresh } from "@/services/http";
+import { getMemorySettings, updateMemorySettings } from "@/services/memory";
 import { generateReplyWithMockService } from "@/services/mockInk";
 import {
   bindPrinter,
@@ -38,6 +39,7 @@ import {
   fetchWorkspaceStateWithApi,
   saveWorkspaceStateWithApi,
 } from "@/services/workspace";
+import type { MemorySettings } from "@/types/memory";
 import type {
   AuthSession,
   Conversation,
@@ -538,6 +540,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const aiConfigSaving = ref(false);
   const aiConfigError = ref("");
   const aiConfigSaveError = ref("");
+  const memoryConfigSaving = ref(false);
+  const memoryConfigError = ref("");
+  const memoryConfigSaveError = ref("");
   const deviceSyncError = ref("");
   const printSyncError = ref("");
   const printerSyncError = computed(() => deviceSyncError.value || printSyncError.value);
@@ -575,6 +580,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     baseUrl: "",
     model: persisted.serviceBinding.modelName,
     keyConfigured: false,
+  });
+
+  const memorySettings = ref<MemorySettings>({
+    enabled: false,
+    zepBaseUrl: "",
+    keyConfigured: false,
+    available: false,
   });
 
   const isGenerating = ref(false);
@@ -1129,6 +1141,15 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       accountCreationLoading.value = false;
       aiConfigSaving.value = false;
       workspaceSyncing.value = false;
+      memoryConfigSaving.value = false;
+      memoryConfigError.value = "";
+      memoryConfigSaveError.value = "";
+      memorySettings.value = {
+        enabled: false,
+        zepBaseUrl: "",
+        keyConfigured: false,
+        available: false,
+      };
       workspaceConflict.value = false;
       workspaceLoading.value = false;
       workspaceHydrating.value = false;
@@ -1695,8 +1716,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const accountVersion = remotePrintAccountVersion;
 
     try {
-      const [aiSummary, printerResponse, printsResponse] = await Promise.allSettled([
+      const [aiSummary, memorySummary, printerResponse, printsResponse] = await Promise.allSettled([
         fetchAIConfigSummary(accessToken),
+        getMemorySettings(accessToken),
         fetchPrinters(accessToken),
         refreshRemotePrintJobs(),
       ]);
@@ -1707,6 +1729,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       } else {
         aiConfigError.value = getErrorMessage(aiSummary.reason, "store.errors.loadIntegrations");
       }
+      if (memorySummary.status === "fulfilled") {
+        memorySettings.value = memorySummary.value;
+      }
+      // Memory config failure is non-critical, don't show error
       if (printerResponse.status === "fulfilled") {
         deviceSyncError.value = "";
         devices.value = printerResponse.value.devices.filter(
@@ -1969,6 +1995,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           ? (
               await generateAIReply(authSession.value.accessToken, {
                 messages: buildAIReplyMessages([...conversation.messages, userMessage]),
+                conversationId: conversation.id,
               })
             ).content
           : await generateReplyWithMockService({ prompt });
@@ -2035,6 +2062,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           ? (
               await generateAIReply(authSession.value.accessToken, {
                 messages: buildAIReplyMessages(messages),
+                conversationId: conversation.id,
               })
             ).content
           : await generateReplyWithMockService({ prompt: latestUserMessage.text });
@@ -2554,6 +2582,40 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
   }
 
+  async function saveMemoryConfig(config: {
+    enabled: boolean;
+    zepBaseUrl: string;
+    zepApiKey?: string;
+  }) {
+    const accountVersion = remotePrintAccountVersion;
+    const current = authSession.value;
+
+    if (!current) {
+      memoryConfigSaveError.value = translate("store.errors.authRequired");
+      return false;
+    }
+
+    memoryConfigSaving.value = true;
+    memoryConfigSaveError.value = "";
+
+    try {
+      const summary = await updateMemorySettings(current.accessToken, config);
+      if (!isCurrentAccount(accountVersion)) return false;
+      memorySettings.value = summary;
+      showFlashKey("store.flash.memoryConfigSaved", "success");
+      return true;
+    } catch (error) {
+      if (!isCurrentAccount(accountVersion)) return false;
+      memoryConfigSaveError.value = getErrorMessage(error, "store.errors.saveMemoryConfig");
+      showFlash(memoryConfigSaveError.value, "error");
+      return false;
+    } finally {
+      if (isCurrentAccount(accountVersion)) {
+        memoryConfigSaving.value = false;
+      }
+    }
+  }
+
   function setAuthState(user: User, session: AuthSession) {
     authUser.value = user;
     authSession.value = session;
@@ -2900,6 +2962,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     aiConfigSaving,
     aiConfigError,
     aiConfigSaveError,
+    memorySettings,
+    memoryConfigSaving,
+    memoryConfigError,
+    memoryConfigSaveError,
     printerSyncError,
     deviceSyncError,
     printSyncError,
@@ -2980,6 +3046,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     setTutorialTabEnabled,
     setLoginProtection,
     saveAIServiceConfig,
+    saveMemoryConfig,
     initializeAuth,
     retrySynchronization,
     reloadConflictedWorkspace,

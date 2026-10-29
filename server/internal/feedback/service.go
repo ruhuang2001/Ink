@@ -102,8 +102,8 @@ func (s *Service) Submit(ctx context.Context, accessToken string, input SubmitIn
 	}
 
 	_, err = s.jobs.CreatePrintJobForUser(ctx, adminAccount.ID, printer.CreateJobInput{
-		Title:             "用户反馈",
-		Source:            "反馈（功能/建议/吐槽）",
+		Title:             "User Feedback",
+		Source:            "Feedback (Feature / Suggestion / General)",
 		Content:           s.buildPrintContent(currentUser, content),
 		PrinterBindingID:  targetBindingID,
 		SubmitImmediately: true,
@@ -152,13 +152,13 @@ func (s *Service) buildPrintContent(sender auth.UserDTO, body string) string {
 	}
 
 	return strings.Join([]string{
-		"Ink 用户反馈",
-		fmt.Sprintf("提交人：%s", senderName),
-		fmt.Sprintf("账号：%s", sender.Email),
-		fmt.Sprintf("角色：%s", sender.Role),
-		fmt.Sprintf("时间：%s", submittedAt),
+		"Ink User Feedback",
+		fmt.Sprintf("Submitted by: %s", senderName),
+		fmt.Sprintf("Account: %s", sender.Email),
+		fmt.Sprintf("Role: %s", sender.Role),
+		fmt.Sprintf("Submitted at: %s", submittedAt),
 		"",
-		"内容：",
+		"Content:",
 		body,
 	}, "\n")
 }

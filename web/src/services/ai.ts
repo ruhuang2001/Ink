@@ -50,7 +50,7 @@ export async function saveAIConfig(accessToken: string, payload: SaveAIConfigPay
 
 export async function generateAIReply(
   accessToken: string,
-  payload: { messages: AIReplyMessage[] },
+  payload: { messages: AIReplyMessage[]; conversationId?: string },
 ) {
   return request<AIReplyResult>("/api/v1/ai/reply", {
     method: "POST",

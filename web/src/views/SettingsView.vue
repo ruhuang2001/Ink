@@ -23,7 +23,7 @@ function selectDesign(design: "paper" | "structured") {
 }
 
 const workspaceStore = useWorkspaceStore();
-const { aiConfigSummary } = storeToRefs(workspaceStore);
+const { aiConfigSummary, memorySettings } = storeToRefs(workspaceStore);
 const { t } = useI18n();
 
 const themes = computed(
@@ -60,9 +60,14 @@ const aiBaseUrl = ref("");
 const aiModel = ref("gpt-4.1-mini");
 const aiApiKey = ref("");
 const aiFormError = ref("");
+const memoryEnabled = ref(false);
+const memoryZepBaseUrl = ref("");
+const memoryZepApiKey = ref("");
+const memoryFormError = ref("");
 const passwordDialogOpen = ref(false);
 const accountCreationDialogOpen = ref(false);
 const aiConfigDialogOpen = ref(false);
+const memoryConfigDialogOpen = ref(false);
 const AI_PROVIDER_TYPE = "openai-compatible";
 const AI_PROVIDER_NAME_FALLBACK = "OpenAI Compatible";
 const AI_MODEL_FALLBACK = "gpt-4.1-mini";
@@ -76,6 +81,15 @@ watch(
     aiProviderName.value = summary.providerName || AI_PROVIDER_NAME_FALLBACK;
     aiBaseUrl.value = summary.baseUrl;
     aiModel.value = summary.model || AI_MODEL_FALLBACK;
+  },
+  { deep: true, immediate: true },
+);
+
+watch(
+  memorySettings,
+  (settings) => {
+    memoryEnabled.value = settings.enabled;
+    memoryZepBaseUrl.value = settings.zepBaseUrl;
   },
   { deep: true, immediate: true },
 );
@@ -202,6 +216,41 @@ function closeAIConfigDialog() {
   aiConfigDialogOpen.value = false;
 }
 
+async function handleMemoryConfigSubmit() {
+  memoryFormError.value = "";
+
+  if (memoryEnabled.value && !memoryZepBaseUrl.value.trim()) {
+    memoryFormError.value = t("settings.memory.dialog.errors.zepBaseUrlRequired");
+    return;
+  }
+
+  const success = await workspaceStore.saveMemoryConfig({
+    enabled: memoryEnabled.value,
+    zepBaseUrl: memoryZepBaseUrl.value.trim(),
+    zepApiKey: memoryZepApiKey.value.trim(),
+  });
+
+  if (!success) {
+    memoryFormError.value = workspaceStore.memoryConfigSaveError;
+    return;
+  }
+
+  memoryZepApiKey.value = "";
+  memoryConfigDialogOpen.value = false;
+}
+
+function openMemoryConfigDialog() {
+  memoryFormError.value = "";
+  // The store keeps the last save failure for the page-level banner; clear it
+  // so reopening the dialog does not resurrect a stale error.
+  workspaceStore.memoryConfigSaveError = "";
+  memoryConfigDialogOpen.value = true;
+}
+
+function closeMemoryConfigDialog() {
+  memoryConfigDialogOpen.value = false;
+}
+
 function resetPasswordForm() {
   currentPassword.value = "";
   newPassword.value = "";
@@ -242,6 +291,8 @@ function closeAccountCreationDialog() {
 
 void openAIConfigDialog;
 void closeAIConfigDialog;
+void openMemoryConfigDialog;
+void closeMemoryConfigDialog;
 void openPasswordDialog;
 void closePasswordDialog;
 void openAccountCreationDialog;
@@ -803,6 +854,184 @@ void closeAccountCreationDialog;
                       workspaceStore.aiConfigSaving
                         ? t("settings.ai.dialog.saving")
                         : t("settings.ai.dialog.submit")
+                    }}
+                  </button>
+                </div>
+              </form>
+            </AppDialog>
+          </div>
+        </div>
+      </article>
+
+      <!-- Memory System Configuration -->
+      <article
+        v-if="workspaceStore.isAdmin"
+        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
+      >
+        <div>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">
+            {{ t("settings.memory.title") }}
+          </h3>
+          <p class="mt-1 text-sm text-stone-500">
+            {{ t("settings.memory.description") }}
+          </p>
+        </div>
+        <div class="min-w-0">
+          <div class="ui-settings-group">
+            <div class="border-b border-stone-200 px-1 py-4">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <span
+                    class="ui-status-badge"
+                    :class="{
+                      'bg-emerald-100 text-emerald-800':
+                        memorySettings.enabled && memorySettings.available,
+                      'bg-amber-100 text-amber-800':
+                        memorySettings.enabled && !memorySettings.available,
+                      'bg-stone-100 text-stone-600': !memorySettings.enabled,
+                    }"
+                  >
+                    {{
+                      memorySettings.enabled
+                        ? memorySettings.available
+                          ? t("settings.memory.statusAvailable")
+                          : t("settings.memory.statusUnavailable")
+                        : t("settings.memory.statusDisabled")
+                    }}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  class="ui-btn-primary px-4 py-2 text-sm"
+                  @click="openMemoryConfigDialog"
+                >
+                  {{ t("settings.memory.configure") }}
+                </button>
+              </div>
+
+              <div v-if="memorySettings.enabled" class="mt-4 grid gap-4 md:grid-cols-2">
+                <div>
+                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                    {{ t("settings.memory.zepUrl") }}
+                  </p>
+                  <p class="mt-1 text-sm text-stone-900">
+                    {{ memorySettings.zepBaseUrl || t("settings.memory.notConfigured") }}
+                  </p>
+                </div>
+                <div>
+                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                    {{ t("settings.memory.apiKey") }}
+                  </p>
+                  <p class="mt-1 text-sm text-stone-900">
+                    {{
+                      memorySettings.keyConfigured
+                        ? t("settings.memory.keyConfigured")
+                        : t("settings.memory.keyNotConfigured")
+                    }}
+                  </p>
+                </div>
+              </div>
+
+              <div
+                v-if="memorySettings.enabled && !memorySettings.available"
+                class="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800"
+              >
+                {{ t("settings.memory.unavailableHint") }}
+              </div>
+            </div>
+
+            <AppDialog
+              :open="memoryConfigDialogOpen"
+              :title="t('settings.memory.dialog.title')"
+              @close="closeMemoryConfigDialog"
+            >
+              <form class="space-y-4" @submit.prevent="handleMemoryConfigSubmit">
+                <div class="space-y-4">
+                  <div
+                    class="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-4 py-3"
+                  >
+                    <div>
+                      <p class="text-sm font-medium text-stone-900">
+                        {{ t("settings.memory.dialog.enableMemory") }}
+                      </p>
+                      <p class="mt-0.5 text-xs text-stone-500">
+                        {{ t("settings.memory.dialog.enableMemoryDescription") }}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      class="ui-toggle"
+                      :class="{ 'is-on': memoryEnabled }"
+                      :aria-pressed="memoryEnabled"
+                      @click="memoryEnabled = !memoryEnabled"
+                    >
+                      <span class="ui-toggle-thumb" />
+                    </button>
+                  </div>
+
+                  <div v-if="memoryEnabled" class="space-y-4">
+                    <label class="block">
+                      <span class="mb-2 block text-sm font-medium text-stone-900">
+                        {{ t("settings.memory.dialog.zepBaseUrl") }}
+                        <span class="text-rose-600">*</span>
+                      </span>
+                      <input
+                        v-model="memoryZepBaseUrl"
+                        type="url"
+                        :placeholder="t('settings.memory.dialog.placeholders.zepBaseUrl')"
+                        class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                      />
+                      <p class="mt-1 text-xs text-stone-500">
+                        {{ t("settings.memory.dialog.zepBaseUrlHint") }}
+                      </p>
+                    </label>
+
+                    <label class="block">
+                      <span class="mb-2 block text-sm font-medium text-stone-900">
+                        {{ t("settings.memory.dialog.zepApiKey") }}
+                      </span>
+                      <input
+                        v-model="memoryZepApiKey"
+                        :placeholder="
+                          memorySettings.keyConfigured
+                            ? t('settings.memory.dialog.apiKeyPlaceholderConfigured')
+                            : t('settings.memory.dialog.apiKeyPlaceholderEmpty')
+                        "
+                        type="password"
+                        autocomplete="off"
+                        class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                      />
+                      <p class="mt-1 text-xs text-stone-500">
+                        {{ t("settings.memory.dialog.zepApiKeyHint") }}
+                      </p>
+                    </label>
+                  </div>
+                </div>
+
+                <p
+                  v-if="memoryFormError || workspaceStore.memoryConfigSaveError"
+                  class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+                >
+                  {{ memoryFormError || workspaceStore.memoryConfigSaveError }}
+                </p>
+
+                <div class="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    class="ui-btn-secondary px-4 py-2 text-sm"
+                    @click="closeMemoryConfigDialog"
+                  >
+                    {{ t("common.actions.cancel") }}
+                  </button>
+                  <button
+                    type="submit"
+                    class="ui-btn-primary px-4 py-2 text-sm"
+                    :disabled="workspaceStore.memoryConfigSaving"
+                  >
+                    {{
+                      workspaceStore.memoryConfigSaving
+                        ? t("settings.memory.dialog.saving")
+                        : t("settings.memory.dialog.submit")
                     }}
                   </button>
                 </div>

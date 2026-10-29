@@ -136,7 +136,7 @@ describe("http client", () => {
     });
     await expect(request("/slow-body", { timeoutMs: 1 })).rejects.toMatchObject({
       code: "network_error",
-      message: "请求超时，请稍后重试。",
+      message: "Request timed out. Please try again later.",
     });
   });
 

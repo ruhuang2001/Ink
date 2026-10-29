@@ -33,7 +33,11 @@ interface MeResponse {
 function buildSession(response: AuthResponse): AuthSession {
   const expiresInMs = Number(response.expiresIn) * 1000;
   if (!Number.isFinite(expiresInMs) || expiresInMs <= 0) {
-    throw new AuthApiError(500, "invalid_session_payload", "登录会话无效，请重新登录。");
+    throw new AuthApiError(
+      500,
+      "invalid_session_payload",
+      "Invalid login session. Please sign in again.",
+    );
   }
 
   return {

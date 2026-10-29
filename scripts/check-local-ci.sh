@@ -84,3 +84,6 @@ echo "==> Running api-smoke locally"
 echo "act 0.2.87 currently panics on this repo's service-container smoke job, so we run the local equivalent instead."
 echo "The smoke test uses an isolated temporary PostgreSQL container and leaves the development database untouched."
 INK_SMOKE_BOOTSTRAP_DB=1 make smoke-api
+
+echo "==> Running memory HTTP regression with isolated PostgreSQL"
+make smoke-memory

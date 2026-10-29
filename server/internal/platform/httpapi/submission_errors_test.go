@@ -28,10 +28,10 @@ func TestUnknownPrintSubmissionUsesSafePublicError(t *testing.T) {
 			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 				t.Fatal(err)
 			}
-			if response.Code != http.StatusBadGateway || body.Code != "print_submission_unknown" || !strings.Contains(body.Message, "请先检查设备") || !strings.Contains(body.Message, "请勿直接重复提交") {
+			if response.Code != http.StatusBadGateway || body.Code != "print_submission_unknown" || !strings.Contains(body.Message, "Check whether the device printed") || !strings.Contains(body.Message, "do not resubmit") {
 				t.Fatalf("unsafe unknown error: status=%d body=%+v", response.Code, body)
 			}
-			if strings.Contains(body.Message, "重试") || strings.Contains(response.Body.String(), "synthetic-provider-secret") {
+			if strings.Contains(body.Message, "retry") || strings.Contains(response.Body.String(), "synthetic-provider-secret") {
 				t.Fatal("unknown result suggested retry or exposed provider details")
 			}
 		})

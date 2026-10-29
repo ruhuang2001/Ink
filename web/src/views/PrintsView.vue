@@ -33,6 +33,21 @@ const historyPrintJobs = computed(() =>
   ),
 );
 
+// The backend persists the submission-outcome sentinel as a message string, so
+// render it through the catalog instead of leaking the English copy to zh-CN.
+const SUBMISSION_OUTCOME_UNKNOWN_MESSAGES = new Set([
+  "The submission result is unknown. Check whether the device printed the job before creating another one.",
+  "提交结果未知，请先检查设备是否已打印，再手动创建新任务。",
+]);
+
+function printJobErrorMessage(message: string | undefined) {
+  if (!message) return "";
+  if (SUBMISSION_OUTCOME_UNKNOWN_MESSAGES.has(message)) {
+    return t("errors.api.print_submission_unknown");
+  }
+  return message;
+}
+
 const printDialogOpen = ref(false);
 const printTitle = ref("");
 const printContent = ref("");
@@ -301,7 +316,7 @@ async function submitPrintDialog() {
                 <div class="print-history-copy">
                   <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
                   <p v-if="item.errorMessage" class="mt-1 text-sm text-red-700" role="alert">
-                    {{ item.errorMessage }}
+                    {{ printJobErrorMessage(item.errorMessage) }}
                   </p>
                   <p class="mt-0.5 text-sm text-stone-500">
                     {{ workspaceStore.getDeviceName(item.deviceId) }} ·

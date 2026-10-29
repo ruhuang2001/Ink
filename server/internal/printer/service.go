@@ -326,7 +326,7 @@ func (s *Service) createPrintJobForUser(ctx context.Context, userID string, inpu
 			return workspace.PrintJob{}, err
 		}
 		if existing != nil {
-			if existing.ErrorMessage != nil && *existing.ErrorMessage == SubmissionOutcomeUnknown {
+			if existing.ErrorMessage != nil && IsSubmissionOutcomeUnknown(*existing.ErrorMessage) {
 				return workspace.PrintJob{}, ErrSubmissionOutcomeUnknown
 			}
 			if input.SubmitImmediately && existing.Status == workspace.PrintStatusFailed {
@@ -398,7 +398,7 @@ func (s *Service) createPrintJobForUser(ctx context.Context, userID string, inpu
 		UserID:           userID,
 		PrinterBindingID: bindingID,
 		Title:            title,
-		Source:           chooseString(source, "手动打印"),
+		Source:           chooseString(source, "Manual print"),
 		Content:          content,
 		Status:           workspace.PrintStatusPending,
 		CreatedAt:        now,
@@ -650,10 +650,10 @@ func mapJob(job Job) workspace.PrintJob {
 func derefErrorMessage(message *string) string {
 	// Provider errors can contain request URLs and credentials. Only the
 	// fixed recovery instruction is safe to expose in print-job responses.
-	if message == nil || *message != SubmissionOutcomeUnknown {
+	if message == nil || !IsSubmissionOutcomeUnknown(*message) {
 		return ""
 	}
-	return *message
+	return SubmissionOutcomeUnknown
 }
 
 func chooseString(value string, fallback string) string {

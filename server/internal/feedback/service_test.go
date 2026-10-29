@@ -63,7 +63,7 @@ func TestSubmitUsesAdminDefaultPrinter(t *testing.T) {
 	if !jobs.input.SubmitImmediately {
 		t.Fatal("expected feedback to submit immediately")
 	}
-	if !strings.Contains(jobs.input.Content, "提交人：Member") {
+	if !strings.Contains(jobs.input.Content, "Submitted by: Member") {
 		t.Fatalf("expected sender name in print content, got %s", jobs.input.Content)
 	}
 	if !strings.Contains(jobs.input.Content, "希望支持快捷反馈") {

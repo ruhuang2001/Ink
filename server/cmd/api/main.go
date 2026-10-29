@@ -15,6 +15,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/feedback"
+	"github.com/ruhuang/ink/server/internal/memory"
 	"github.com/ruhuang/ink/server/internal/platform/clock"
 	"github.com/ruhuang/ink/server/internal/platform/config"
 	"github.com/ruhuang/ink/server/internal/platform/httpapi"
@@ -91,13 +92,28 @@ func main() {
 		cfg.RefreshTokenTTL,
 	)
 	workspaceService := workspace.NewService(store, service, clock.SystemClock{})
-	var encryptor *secret.Box
+	var encryptor memory.Encryptor
 	if cfg.AIConfigEncryptionKey != "" {
-		encryptor, err = secret.NewBox(cfg.AIConfigEncryptionKey)
+		box, err := secret.NewBox(cfg.AIConfigEncryptionKey)
 		if err != nil {
 			panic(err)
 		}
+		encryptor = box
 	}
+
+	memoryService := memory.NewService(
+		store,
+		service,
+		encryptor,
+		clock.SystemClock{},
+		cfg.MemoryAllowInsecurePrivateURL,
+	)
+
+	// Initialize memory client from database settings
+	if err := memoryService.InitializeClient(ctx); err != nil {
+		logger.Warn("failed to initialize memory client from database", "error", err)
+	}
+
 	aiService := ai.NewService(
 		store,
 		service,
@@ -106,6 +122,7 @@ func main() {
 		clock.SystemClock{},
 		cfg.AIAllowInsecurePrivateURL,
 	)
+	aiService.SetMemoryEnhancer(memory.NewEnhancer(memoryService.GetClient))
 	printerService := printer.NewService(
 		store,
 		service,
@@ -153,6 +170,7 @@ func main() {
 			service,
 			workspaceService,
 			aiService,
+			memoryService,
 			printerService,
 			feedbackService,
 			logger,

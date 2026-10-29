@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/memory"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/session"
 	"github.com/ruhuang/ink/server/internal/user"
@@ -29,6 +30,7 @@ var (
 	_ workspace.Repository   = (*Store)(nil)
 	_ ai.Repository          = (*Store)(nil)
 	_ printer.Repository     = (*Store)(nil)
+	_ memory.Repository      = (*Store)(nil)
 )
 
 // New creates a PostgreSQL-backed auth store.
@@ -682,4 +684,61 @@ func nullableBytes(value []byte) any {
 	}
 
 	return value
+}
+
+// GetMemorySettings retrieves the system memory configuration.
+func (s *Store) GetMemorySettings(ctx context.Context) (*memory.StoredSettings, error) {
+	row := s.db.QueryRow(ctx, `
+		select enabled, zep_base_url, zep_api_key_ciphertext, zep_api_key_nonce,
+			updated_by, created_at, updated_at
+		from memory_settings
+		where setting_key = 'system'
+	`)
+
+	var settings memory.StoredSettings
+	var updatedBy *string
+	if err := row.Scan(
+		&settings.Enabled,
+		&settings.ZepBaseURL,
+		&settings.Ciphertext,
+		&settings.Nonce,
+		&updatedBy,
+		&settings.CreatedAt,
+		&settings.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	settings.UpdatedByUser = updatedBy
+	return &settings, nil
+}
+
+// SaveMemorySettings persists the system memory configuration.
+func (s *Store) SaveMemorySettings(ctx context.Context, settings memory.StoredSettings) error {
+	_, err := s.db.Exec(ctx, `
+		insert into memory_settings (
+			setting_key, enabled, zep_base_url, zep_api_key_ciphertext, zep_api_key_nonce,
+			updated_by, created_at, updated_at
+		) values ('system', $1, $2, $3, $4, $5, $6, $7)
+		on conflict (setting_key)
+		do update set
+			enabled = excluded.enabled,
+			zep_base_url = excluded.zep_base_url,
+			zep_api_key_ciphertext = excluded.zep_api_key_ciphertext,
+			zep_api_key_nonce = excluded.zep_api_key_nonce,
+			updated_by = excluded.updated_by,
+			updated_at = excluded.updated_at
+	`,
+		settings.Enabled,
+		settings.ZepBaseURL,
+		settings.Ciphertext,
+		settings.Nonce,
+		settings.UpdatedByUser,
+		settings.CreatedAt,
+		settings.UpdatedAt,
+	)
+	return err
 }
