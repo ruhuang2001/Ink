@@ -19,10 +19,10 @@
   --app-text: #292927;
   --app-text-strong: #171716;
   --app-muted: #5f5f5a;
-  --app-muted-soft: #81817a;
+  --app-muted-soft: #66665f;
   --app-border: #dcdcd5;
   --app-border-strong: #c8c8c0;
-  --app-ring: rgba(41, 41, 39, 0.55);
+  --app-ring: rgba(41, 41, 39, 0.7);
   --app-overlay: rgba(27, 27, 25, 0.35);
   --app-emphasis-bg: #3c3b38;
   --app-emphasis-bg-hover: #292826;
@@ -53,7 +53,7 @@
   --app-muted-soft: #948882;
   --app-border: #3b342f;
   --app-border-strong: #514842;
-  --app-ring: rgba(251, 191, 36, 0.34);
+  --app-ring: rgba(251, 191, 36, 0.7);
   --app-overlay: rgba(2, 1, 0, 0.58);
   --app-emphasis-bg: #3a312c;
   --app-emphasis-bg-hover: #4a3e38;
@@ -151,6 +151,11 @@
     background: var(--app-bg);
   }
 
+  .ink-page :is(button, summary, a, [tabindex]):focus-visible {
+    outline: 2px solid var(--app-ring);
+    outline-offset: 3px;
+  }
+
   .ink-page[data-design="studio"] {
     --app-bg: #f1f0ea;
     --app-surface: #f7f6f1;
@@ -160,7 +165,7 @@
     --app-text: #17211d;
     --app-text-strong: #0d1713;
     --app-muted: #52605a;
-    --app-muted-soft: #78827d;
+    --app-muted-soft: #5f6b64;
     --app-border: #d8dbd4;
     --app-border-strong: #bec5bd;
     --app-emphasis-bg: #1f4b3a;
@@ -176,7 +181,7 @@
     --app-text: #20201f;
     --app-text-strong: #111110;
     --app-muted: #60605c;
-    --app-muted-soft: #85857f;
+    --app-muted-soft: #6a6a64;
     --app-border: #deded9;
     --app-border-strong: #c7c7c0;
     --app-emphasis-bg: #20201f;
@@ -600,6 +605,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   .ink-page main fieldset > section,
   .page-swap-enter-active,
   .page-swap-leave-active,
@@ -846,7 +855,7 @@
 }
 
 :root[data-color-mode="dark"] .text-stone-500 {
-  color: var(--app-muted) !important;
+  color: var(--app-muted-soft) !important;
 }
 
 :root[data-color-mode="dark"] .text-stone-400 {
@@ -994,7 +1003,8 @@
   --tw-ring-color: var(--app-ring) !important;
 }
 
-:root[data-color-mode="dark"] .placeholder\:text-stone-400::placeholder {
+:root[data-color-mode="dark"] .placeholder\:text-stone-400::placeholder,
+:root[data-color-mode="dark"] .placeholder\:text-stone-500::placeholder {
   color: var(--app-muted-soft) !important;
 }
 

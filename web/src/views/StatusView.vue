@@ -74,7 +74,7 @@ async function submitAddDevice() {
         :key="item.label"
         class="flex items-center justify-between gap-4 border-b border-stone-200 px-5 py-4 last:border-b-0 sm:block sm:border-b-0"
       >
-        <p class="text-sm text-stone-500">{{ item.label }}</p>
+        <p class="text-sm text-stone-600">{{ item.label }}</p>
         <p class="text-sm font-medium text-stone-900 sm:mt-2 sm:text-2xl">{{ item.value }}</p>
       </article>
     </div>
@@ -106,7 +106,7 @@ async function submitAddDevice() {
             <h4 class="text-base font-semibold text-stone-900">
               {{ t("status.emptyDevices.title") }}
             </h4>
-            <p class="mt-2 text-sm text-stone-500">
+            <p class="mt-2 text-sm text-stone-600">
               {{
                 workspaceStore.isAuthenticated
                   ? t("status.emptyDevices.authenticated")
@@ -129,7 +129,7 @@ async function submitAddDevice() {
                 </div>
                 <div class="min-w-0">
                   <p class="truncate text-sm font-medium text-stone-900">{{ device.name }}</p>
-                  <p class="mt-0.5 text-sm text-stone-500">
+                  <p class="mt-0.5 text-sm text-stone-600">
                     {{
                       device.id === workspaceStore.defaultDeviceId
                         ? t("status.defaultDevicePrefix")
@@ -191,7 +191,7 @@ async function submitAddDevice() {
               <div class="ui-timeline-row">
                 <div class="ui-timeline-copy">
                   <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
-                  <p class="mt-0.5 text-sm text-stone-500">
+                  <p class="mt-0.5 text-sm text-stone-600">
                     {{ workspaceStore.getDeviceName(item.deviceId) }} ·
                     {{ workspaceStore.formatPrintTime(item.updatedAt) }}
                   </p>
@@ -223,7 +223,7 @@ async function submitAddDevice() {
             v-model="deviceName"
             type="text"
             :placeholder="t('status.dialog.placeholders.name')"
-            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-500 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
 
@@ -235,7 +235,7 @@ async function submitAddDevice() {
             v-model="deviceNote"
             type="text"
             :placeholder="t('status.dialog.placeholders.note')"
-            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-500 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
 
@@ -247,7 +247,7 @@ async function submitAddDevice() {
             v-model="deviceIdentifier"
             type="text"
             :placeholder="t('status.dialog.placeholders.identifier')"
-            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-500 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
 

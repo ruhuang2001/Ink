@@ -368,14 +368,12 @@
 }
 .conversation-composer {
   position: relative;
-  border: 1px solid var(--conversation-line);
-  border-radius: 14px;
-  background: var(--app-surface);
-  box-shadow: 0 3px 12px rgb(28 25 23 / 3%);
+  border-top: 1px solid var(--conversation-line);
+  border-radius: 0;
+  background: transparent;
 }
 .conversation-composer:focus-within {
-  border-color: var(--conversation-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--conversation-accent) 12%, transparent);
+  border-top-color: var(--conversation-accent);
 }
 .conversation-composer textarea {
   display: block;
@@ -416,7 +414,7 @@
 .conversation-shortcut {
   margin: 0;
   padding: 0 16px 10px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--app-muted);
 }
 .conversation-error {

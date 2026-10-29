@@ -145,7 +145,7 @@ async function recoverSynchronization() {
           :key="step.title"
           class="border-b border-stone-200 px-1 py-4 last:border-b-0"
         >
-          <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+          <p class="text-xs font-medium tracking-[0.12em] text-stone-600 uppercase">
             {{ t("shell.postLoginTutorial.stepLabel", { index: index + 1 }) }}
           </p>
           <p class="mt-1 text-sm font-medium text-stone-900">{{ step.title }}</p>
@@ -172,14 +172,22 @@ async function recoverSynchronization() {
     </AppDialog>
 
     <header
+      data-impeccable-ignore="hard-offset-shadow"
       class="ink-topbar ink-rule sticky top-0 z-40 border-b bg-[color:var(--app-surface-floating)] px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur sm:px-5 lg:px-8 lg:py-3"
     >
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 lg:hidden">
         <div class="flex items-center gap-3">
-          <img src="/icon.png" alt="" class="h-8 w-8 rounded-md object-contain" />
+          <img
+            src="/icon.png"
+            alt=""
+            width="128"
+            height="128"
+            decoding="async"
+            class="h-8 w-8 rounded-md object-contain"
+          />
           <p class="ink-wordmark text-sm font-semibold text-stone-950">Ink</p>
           <div class="hidden sm:block">
-            <p class="text-xs text-stone-500">
+            <p class="text-xs text-stone-600">
               {{
                 route.meta.navHintKey
                   ? t(route.meta.navHintKey)
@@ -202,7 +210,7 @@ async function recoverSynchronization() {
         <RouterLink
           v-else
           :to="loginTarget"
-          class="text-sm font-medium text-stone-600 hover:text-stone-900"
+          class="inline-flex min-h-11 items-center px-2 text-sm font-medium text-stone-600 hover:text-stone-900"
         >
           {{ t("common.actions.login") }}
         </RouterLink>
@@ -211,7 +219,14 @@ async function recoverSynchronization() {
       <div class="mx-auto hidden max-w-7xl items-center justify-between lg:flex">
         <div class="flex items-center gap-8">
           <div class="flex items-center gap-3">
-            <img src="/icon.png" alt="" class="h-8 w-8 rounded-md object-contain" />
+            <img
+              src="/icon.png"
+              alt=""
+              width="128"
+              height="128"
+              decoding="async"
+              class="h-8 w-8 rounded-md object-contain"
+            />
             <p class="ink-wordmark text-sm font-semibold text-stone-950">Ink</p>
           </div>
 
@@ -225,7 +240,7 @@ async function recoverSynchronization() {
               :class="
                 isNavigationItemActive(item.path)
                   ? 'text-stone-950 after:scale-x-100'
-                  : 'text-stone-500 hover:text-stone-900'
+                  : 'text-stone-600 hover:text-stone-900'
               "
             >
               <InkIcon
@@ -246,7 +261,7 @@ async function recoverSynchronization() {
 
         <div class="flex items-center gap-4">
           <template v-if="workspaceStore.isAuthenticated">
-            <p class="text-sm text-stone-500">{{ workspaceStore.authUser?.email }}</p>
+            <p class="text-sm text-stone-600">{{ workspaceStore.authUser?.email }}</p>
             <button
               type="button"
               class="text-sm font-medium text-stone-600 hover:text-stone-900"
@@ -467,7 +482,7 @@ async function recoverSynchronization() {
           :class="
             isNavigationItemActive(item.path)
               ? 'text-stone-950 after:scale-x-100'
-              : 'text-stone-500 hover:text-stone-900'
+              : 'text-stone-600 hover:text-stone-900'
           "
         >
           <InkIcon

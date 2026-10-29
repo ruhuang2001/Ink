@@ -97,7 +97,7 @@ async function handleFeedbackSubmit() {
             v-model="feedbackDraft"
             rows="6"
             :placeholder="t('feedback.dialog.placeholder')"
-            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm leading-7 text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm leading-7 text-stone-900 placeholder:text-stone-500 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
 
@@ -132,7 +132,7 @@ async function handleFeedbackSubmit() {
     <div class="border-b border-stone-200 pb-8">
       <div class="space-y-7">
         <div class="space-y-4">
-          <p class="text-sm font-medium tracking-[0.2em] text-stone-500 uppercase">
+          <p class="text-sm font-medium tracking-[0.2em] text-stone-600 uppercase">
             {{ t("tutorial.hero.eyebrow") }}
           </p>
           <div class="space-y-3">
@@ -184,7 +184,7 @@ async function handleFeedbackSubmit() {
     <div class="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_0.85fr]">
       <article class="border-t border-stone-200 py-6 sm:py-7">
         <div class="max-w-2xl">
-          <p class="text-sm font-medium tracking-[0.18em] text-stone-500 uppercase">
+          <p class="text-sm font-medium tracking-[0.18em] text-stone-600 uppercase">
             {{ t("tutorial.stepsSection.eyebrow") }}
           </p>
           <h3 class="mt-3 text-2xl font-semibold tracking-tight text-stone-900">
@@ -230,7 +230,7 @@ async function handleFeedbackSubmit() {
 
       <div class="space-y-6">
         <article class="border-y border-stone-200 py-6 sm:py-7">
-          <p class="text-sm font-medium tracking-[0.18em] text-stone-500 uppercase">
+          <p class="text-sm font-medium tracking-[0.18em] text-stone-600 uppercase">
             {{ t("tutorial.mobile.eyebrow") }}
           </p>
           <h3 class="mt-3 text-2xl font-semibold tracking-tight text-stone-900">

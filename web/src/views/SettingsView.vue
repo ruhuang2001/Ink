@@ -266,7 +266,7 @@ void closeAccountCreationDialog;
                 <p class="text-sm font-medium text-stone-900">
                   {{ t("settings.account.currentAccount") }}
                 </p>
-                <p class="mt-0.5 text-sm text-stone-500">
+                <p class="mt-0.5 text-sm text-stone-600">
                   {{ workspaceStore.authUser?.email ?? t("settings.account.signedOut") }}
                 </p>
               </div>
@@ -291,7 +291,7 @@ void closeAccountCreationDialog;
                 <p class="text-sm font-medium text-stone-900">
                   {{ t("settings.account.loginProtection") }}
                 </p>
-                <p class="mt-0.5 text-sm text-stone-500">
+                <p class="mt-0.5 text-sm text-stone-600">
                   {{
                     workspaceStore.loginProtectionEnabled
                       ? t("settings.account.loginProtectionEnabled")
@@ -361,7 +361,7 @@ void closeAccountCreationDialog;
                       />
                       <button
                         type="button"
-                        class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
+                        class="shrink-0 text-xs font-medium text-stone-600 hover:text-stone-900"
                         @click="currentPasswordVisible = !currentPasswordVisible"
                       >
                         {{
@@ -387,7 +387,7 @@ void closeAccountCreationDialog;
                       />
                       <button
                         type="button"
-                        class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
+                        class="shrink-0 text-xs font-medium text-stone-600 hover:text-stone-900"
                         @click="newPasswordVisible = !newPasswordVisible"
                       >
                         {{
@@ -411,7 +411,7 @@ void closeAccountCreationDialog;
                       />
                       <button
                         type="button"
-                        class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
+                        class="shrink-0 text-xs font-medium text-stone-600 hover:text-stone-900"
                         @click="confirmPasswordVisible = !confirmPasswordVisible"
                       >
                         {{
@@ -499,7 +499,7 @@ void closeAccountCreationDialog;
                       />
                       <button
                         type="button"
-                        class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
+                        class="shrink-0 text-xs font-medium text-stone-600 hover:text-stone-900"
                         @click="newAccountPasswordVisible = !newAccountPasswordVisible"
                       >
                         {{
@@ -695,7 +695,7 @@ void closeAccountCreationDialog;
 
               <div class="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
-                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                  <p class="text-xs font-medium tracking-[0.12em] text-stone-600 uppercase">
                     {{ t("settings.ai.provider") }}
                   </p>
                   <p class="mt-1 text-sm text-stone-900">
@@ -707,7 +707,7 @@ void closeAccountCreationDialog;
                   </p>
                 </div>
                 <div>
-                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                  <p class="text-xs font-medium tracking-[0.12em] text-stone-600 uppercase">
                     {{ t("settings.ai.model") }}
                   </p>
                   <p class="mt-1 text-sm text-stone-900">

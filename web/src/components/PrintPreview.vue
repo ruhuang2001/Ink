@@ -53,6 +53,8 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
           class="print-preview-image"
           :src="`data:image/png;base64,${image}`"
           :alt="t('prints.preview.imageAlt', { title })"
+          width="384"
+          decoding="async"
           @error="imageFailed = true"
         />
         <div v-else role="img" :aria-label="t('prints.preview.imageAlt', { title })">

@@ -164,7 +164,7 @@ async function submitPrintDialog() {
         <RouterLink
           v-if="!workspaceStore.devices.length"
           to="/settings/guide"
-          class="min-h-11 w-full px-1 py-2 text-center text-sm font-medium text-stone-500 transition-colors hover:text-stone-900 sm:min-h-0 sm:w-auto sm:text-left"
+          class="min-h-11 w-full px-1 py-2 text-center text-sm font-medium text-stone-600 transition-colors hover:text-stone-900 sm:min-h-0 sm:w-auto sm:text-left"
         >
           {{ t("prints.actions.bindingTutorial") }}
         </RouterLink>
@@ -183,10 +183,10 @@ async function submitPrintDialog() {
         </div>
 
         <div v-if="workspaceStore.pendingPrintJobs.length === 0" class="print-empty">
-          <h4 class="text-base font-semibold text-stone-900">
+          <h3 class="text-base font-semibold text-stone-900">
             {{ t("prints.pending.emptyTitle") }}
-          </h4>
-          <p class="mt-2 text-sm text-stone-500">
+          </h3>
+          <p class="mt-2 text-sm text-stone-600">
             {{
               workspaceStore.isAuthenticated
                 ? t("prints.pending.emptyAuthenticated")
@@ -206,7 +206,7 @@ async function submitPrintDialog() {
               <article v-for="item in group.jobs" :key="item.id" class="print-ticket">
                 <div class="min-w-0 flex-1">
                   <p class="text-base font-medium text-stone-900">{{ item.title }}</p>
-                  <p class="mt-1 text-sm text-stone-500">
+                  <p class="mt-1 text-sm text-stone-600">
                     {{ item.source }} · {{ workspaceStore.getDeviceName(item.deviceId) }} ·
                     {{ workspaceStore.formatPrintTime(item.updatedAt) }}
                   </p>
@@ -249,7 +249,7 @@ async function submitPrintDialog() {
                       </button>
                       <button
                         v-if="!workspaceStore.isAuthenticated || item.status === 'pending'"
-                        class="text-sm text-stone-500 transition-colors hover:text-rose-700"
+                        class="text-sm text-stone-600 transition-colors hover:text-rose-700"
                         @click="workspaceStore.cancelPrint(item.id)"
                       >
                         {{ t("prints.actions.cancelPrint") }}
@@ -265,7 +265,7 @@ async function submitPrintDialog() {
                   </div>
                   <p
                     v-if="workspaceStore.isAuthenticated && item.status === 'queued'"
-                    class="mt-3 text-xs leading-5 text-stone-400"
+                    class="mt-3 text-xs leading-5 text-stone-600"
                   >
                     {{ t("prints.pending.queuedHint") }}
                   </p>
@@ -303,7 +303,7 @@ async function submitPrintDialog() {
                   <p v-if="item.errorMessage" class="mt-1 text-sm text-red-700" role="alert">
                     {{ item.errorMessage }}
                   </p>
-                  <p class="mt-0.5 text-sm text-stone-500">
+                  <p class="mt-0.5 text-sm text-stone-600">
                     {{ workspaceStore.getDeviceName(item.deviceId) }} ·
                     {{ workspaceStore.formatPrintTime(item.updatedAt) }}
                   </p>
@@ -346,7 +346,7 @@ async function submitPrintDialog() {
             v-model="printTitle"
             type="text"
             :placeholder="t('prints.printDialog.placeholders.title')"
-            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-500 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
 
@@ -358,7 +358,7 @@ async function submitPrintDialog() {
             v-model="printContent"
             rows="4"
             :placeholder="t('prints.printDialog.placeholders.content')"
-            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 placeholder:text-stone-500 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
 
@@ -395,8 +395,8 @@ async function submitPrintDialog() {
       size="wide"
       @close="closePreview"
     >
-      <p class="px-6 pt-14 text-sm text-stone-500">{{ t("prints.preview.hint") }}</p>
-      <p v-if="previewLoading" role="status" class="py-8 text-center text-sm text-stone-500">
+      <p class="px-6 pt-14 text-sm text-stone-600">{{ t("prints.preview.hint") }}</p>
+      <p v-if="previewLoading" role="status" class="py-8 text-center text-sm text-stone-600">
         {{ t("prints.loading") }}
       </p>
       <p v-else-if="previewError" role="alert" class="text-sm text-rose-700">{{ previewError }}</p>

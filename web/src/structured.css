@@ -6,7 +6,6 @@
   --sl-edge: #111;
   --sl-accent: #e5aa70;
   --sl-shadow: 5px 5px 0 #111;
-  --sl-grid: rgba(17, 17, 17, 0.045);
   --sl-mono: "SFMono-Regular", ui-monospace, monospace;
 }
 .ink-page[data-design="structured"],
@@ -23,10 +22,8 @@
   --app-emphasis-bg: var(--sl-accent);
   --app-emphasis-bg-hover: #cf935b;
   --app-emphasis-text: #111;
-  background-image:
-    linear-gradient(var(--sl-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--sl-grid) 1px, transparent 1px);
-  background-size: 64px 64px;
+  /* Grid overlay removed: it read as decoration rather than structure. The
+     committed world carries hierarchy through borders and offset shadows. */
 }
 .ink-page[data-design="structured"] .ink-topbar {
   margin: 1rem clamp(1rem, 4vw, 3.5rem) 0;
@@ -44,8 +41,8 @@
   align-items: center;
   gap: 0.45rem;
   font-family: var(--sl-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .ink-page[data-design="structured"] .ink-icon {
@@ -131,10 +128,7 @@
   border-bottom: 2px solid var(--sl-edge);
 }
 .ink-login[data-design="structured"] {
-  background-image:
-    linear-gradient(var(--sl-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--sl-grid) 1px, transparent 1px);
-  background-size: 64px 64px;
+  /* Grid overlay removed: it read as decoration rather than structure. */
 }
 .ink-page[data-design="structured"] .ink-login-card {
   border: 2px solid var(--sl-edge);
@@ -154,9 +148,21 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ink-page[data-design="structured"] * {
+  .ink-page[data-design="structured"] :is(button, a, [tabindex], summary) {
+    transition-duration: 0.01ms !important;
+  }
+  .ink-page[data-design="structured"] .ui-btn-primary,
+  .ink-page[data-design="structured"] .ui-btn-secondary,
+  .ink-page[data-design="structured"] .ui-toggle,
+  .ink-page[data-design="structured"] .ui-toggle-thumb,
+  .ink-page[data-design="structured"] .ui-list-row,
+  .ink-page[data-design="structured"] .ui-tab-link,
+  .ink-page[data-design="structured"] .conversation-activity-dot {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+  .ink-page[data-design="structured"] .conversation-activity-dot {
+    animation: none !important;
   }
 }
 .ink-page[data-design="structured"] .ui-btn-primary,
@@ -164,7 +170,7 @@
   gap: 0.5rem;
 }
 .ink-page[data-design="structured"] :is(button, input, select, textarea, a):focus-visible {
-  outline: 3px solid var(--sl-accent);
+  outline: 3px solid var(--sl-ink);
   outline-offset: 3px;
 }
 .ink-page[data-design="structured"] .ui-btn-primary:active {

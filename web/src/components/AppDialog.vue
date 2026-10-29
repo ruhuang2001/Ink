@@ -132,6 +132,7 @@ onBeforeUnmount(() => {
       >
         <section
           ref="dialogRef"
+          data-impeccable-ignore="hard-offset-shadow"
           class="max-h-[calc(100dvh-env(safe-area-inset-top)-0.5rem)] w-full overflow-y-auto rounded-t-[1.75rem] border border-stone-200 bg-[var(--app-surface)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl shadow-stone-900/10 sm:max-h-[min(42rem,calc(100dvh-3rem))] sm:rounded-3xl"
           :class="size === 'wide' ? 'preview-dialog sm:max-w-xl' : 'sm:max-w-md sm:p-6'"
           role="dialog"
@@ -152,12 +153,12 @@ onBeforeUnmount(() => {
           <div v-else class="flex items-start justify-between gap-4">
             <div class="min-w-0">
               <h3 class="text-lg font-semibold text-stone-900">{{ title }}</h3>
-              <p v-if="description" class="mt-1 text-sm text-stone-500">{{ description }}</p>
+              <p v-if="description" class="mt-1 text-sm text-stone-600">{{ description }}</p>
             </div>
             <button
               ref="closeButtonRef"
               type="button"
-              class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-500 transition-colors hover:border-stone-300 hover:text-stone-900"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-600 transition-colors hover:border-stone-300 hover:text-stone-900"
               :aria-label="t('common.actions.closeWindow')"
               @click="emit('close')"
             >

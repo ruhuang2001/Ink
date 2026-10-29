@@ -37,7 +37,7 @@ function isSectionActive(name: string) {
           v-for="section in sections"
           :key="section.name"
           :to="section.path"
-          class="relative pb-3 text-sm font-medium text-stone-500 transition-colors hover:text-stone-900"
+          class="relative pb-3 text-sm font-medium text-stone-600 transition-colors hover:text-stone-900"
           :class="{
             'text-stone-950 after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-amber-600':
               isSectionActive(section.name),

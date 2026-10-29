@@ -60,7 +60,7 @@ async function handleSubmit() {
   >
     <button
       type="button"
-      class="absolute top-[calc(env(safe-area-inset-top)+1rem)] left-5 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-stone-500 transition-colors hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-700 focus-visible:ring-offset-4 focus-visible:outline-none sm:top-8 sm:left-8"
+      class="absolute top-[calc(env(safe-area-inset-top)+1rem)] left-5 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-stone-600 transition-colors hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-700 focus-visible:ring-offset-4 focus-visible:outline-none sm:top-8 sm:left-8"
       @click="handleBack"
     >
       <span aria-hidden="true">←</span>
@@ -69,13 +69,21 @@ async function handleSubmit() {
 
     <main class="mx-auto flex w-full max-w-2xl flex-1 items-center py-20 sm:py-16">
       <div
+        data-impeccable-ignore="hard-offset-shadow"
         class="ink-login-card grid w-full lg:grid-cols-[15rem_minmax(0,1fr)] lg:overflow-hidden lg:border lg:border-stone-200 lg:bg-[color:var(--app-surface-raised)] lg:shadow-[0_18px_50px_rgba(28,25,23,0.06)]"
       >
         <section
           class="hidden min-h-[28rem] items-center justify-center border-r border-stone-200 bg-[color:var(--app-surface-soft)] lg:flex"
         >
           <div class="text-center">
-            <img src="/icon.png" alt="" class="mx-auto h-16 w-16 rounded-lg object-contain" />
+            <img
+              src="/icon.png"
+              alt=""
+              width="128"
+              height="128"
+              decoding="async"
+              class="mx-auto h-16 w-16 rounded-lg object-contain"
+            />
             <p class="ink-login-wordmark mt-5 text-xl font-semibold tracking-tight text-stone-950">
               Ink
             </p>
@@ -85,7 +93,14 @@ async function handleSubmit() {
         <section class="w-full max-w-sm justify-self-center lg:max-w-none lg:p-12">
           <header>
             <div class="flex items-center gap-3 lg:hidden">
-              <img src="/icon.png" alt="" class="h-10 w-10 rounded-md object-contain" />
+              <img
+                src="/icon.png"
+                alt=""
+                width="128"
+                height="128"
+                decoding="async"
+                class="h-10 w-10 rounded-md object-contain"
+              />
               <p class="text-sm font-semibold text-stone-700">Ink</p>
             </div>
             <h1 class="mt-8 text-3xl font-semibold tracking-tight text-stone-950 lg:mt-0">
@@ -112,7 +127,7 @@ async function handleSubmit() {
                   type="text"
                   autocomplete="username"
                   :placeholder="t('login.form.accountPlaceholder')"
-                  class="mt-2 w-full border-0 border-b border-stone-300 bg-transparent px-0 py-3 text-base text-stone-950 transition-colors placeholder:text-stone-400 focus:border-stone-700 focus:ring-0 focus:outline-none"
+                  class="mt-2 w-full border-0 border-b border-stone-300 bg-transparent px-0 py-3 text-base text-stone-950 transition-colors placeholder:text-stone-500 focus:border-stone-700 focus:ring-0 focus:outline-none"
                 />
               </div>
               <div>
@@ -128,11 +143,11 @@ async function handleSubmit() {
                     :type="passwordVisible ? 'text' : 'password'"
                     autocomplete="current-password"
                     :placeholder="t('login.form.passwordPlaceholder')"
-                    class="min-w-0 flex-1 border-0 bg-transparent px-0 py-3 text-base text-stone-950 placeholder:text-stone-400 focus:ring-0 focus:outline-none"
+                    class="min-w-0 flex-1 border-0 bg-transparent px-0 py-3 text-base text-stone-950 placeholder:text-stone-500 focus:ring-0 focus:outline-none"
                   />
                   <button
                     type="button"
-                    class="min-h-10 shrink-0 px-1 text-sm font-medium text-stone-500 transition-colors hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-700 focus-visible:outline-none"
+                    class="min-h-10 shrink-0 px-1 text-sm font-medium text-stone-600 transition-colors hover:text-stone-950 focus-visible:ring-2 focus-visible:ring-stone-700 focus-visible:outline-none"
                     @click="passwordVisible = !passwordVisible"
                   >
                     {{ passwordVisible ? t("common.actions.hide") : t("common.actions.show") }}
@@ -150,6 +165,7 @@ async function handleSubmit() {
 
               <button
                 type="submit"
+                data-impeccable-ignore="hard-offset-shadow"
                 class="ui-btn-primary min-h-12 w-full px-6 text-base"
                 :disabled="workspaceStore.authLoading"
               >
