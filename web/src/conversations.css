@@ -247,11 +247,6 @@
 .conversation-message-user .conversation-message-author {
   justify-content: flex-end;
 }
-.conversation-assistant-mark {
-  color: var(--conversation-accent);
-  font-size: 20px;
-  line-height: 1;
-}
 .conversation-message-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

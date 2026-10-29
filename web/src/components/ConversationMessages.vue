@@ -100,12 +100,6 @@ defineExpose({ scrollToLatest });
           </label>
           <div class="conversation-message-body">
             <p class="conversation-message-author">
-              <span
-                v-if="message.role === 'assistant'"
-                class="conversation-assistant-mark"
-                aria-hidden="true"
-                >✳</span
-              >
               {{
                 t(
                   message.role === "user"
