@@ -13,41 +13,41 @@ import (
 func (s *Server) writeAuthError(w http.ResponseWriter, requestID string, err error) {
 	switch {
 	case errors.Is(err, auth.ErrInvalidCredentials):
-		writeError(w, requestID, http.StatusUnauthorized, "invalid_credentials", "账号或密码不正确。")
+		writeError(w, requestID, http.StatusUnauthorized, "invalid_credentials", "Invalid email or password.")
 	case errors.Is(err, auth.ErrCurrentPassword):
-		writeError(w, requestID, http.StatusUnauthorized, "current_password_incorrect", "当前密码不正确。")
+		writeError(w, requestID, http.StatusUnauthorized, "current_password_incorrect", "The current password is incorrect.")
 	case errors.Is(err, auth.ErrInvalidRefreshToken), errors.Is(err, auth.ErrInvalidAccessToken):
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "登录状态已失效，请重新登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "Your session has expired. Please sign in again.")
 	case errors.Is(err, auth.ErrWeakPassword):
-		writeError(w, requestID, http.StatusBadRequest, "invalid_password", "密码至少 8 位。")
+		writeError(w, requestID, http.StatusBadRequest, "invalid_password", "The password must be at least 8 characters long.")
 	case errors.Is(err, auth.ErrInvalidProfile):
-		writeError(w, requestID, http.StatusBadRequest, "invalid_profile", "请输入有效的账号信息。")
+		writeError(w, requestID, http.StatusBadRequest, "invalid_profile", "Enter valid account information.")
 	case errors.Is(err, auth.ErrEmailTaken):
-		writeError(w, requestID, http.StatusConflict, "email_taken", "该账号已存在。")
+		writeError(w, requestID, http.StatusConflict, "email_taken", "This account already exists.")
 	case errors.Is(err, auth.ErrForbidden):
-		writeError(w, requestID, http.StatusForbidden, "forbidden", "当前账号没有该操作权限。")
+		writeError(w, requestID, http.StatusForbidden, "forbidden", "You do not have permission to perform this action.")
 	case errors.Is(err, auth.ErrUserDisabled):
-		writeError(w, requestID, http.StatusLocked, "user_disabled", "账号已被禁用。")
+		writeError(w, requestID, http.StatusLocked, "user_disabled", "This account has been disabled.")
 	default:
 		s.logger.Error("auth handler failed", "request_id", requestID, "error", err)
-		writeError(w, requestID, http.StatusInternalServerError, "internal_error", "服务暂时不可用，请稍后重试。")
+		writeError(w, requestID, http.StatusInternalServerError, "internal_error", "The service is temporarily unavailable. Please try again later.")
 	}
 }
 
 func (s *Server) writeAIError(w http.ResponseWriter, requestID string, err error) {
 	switch {
 	case errors.Is(err, ai.ErrForbidden):
-		writeError(w, requestID, http.StatusForbidden, "forbidden", "当前账号没有该操作权限。")
+		writeError(w, requestID, http.StatusForbidden, "forbidden", "You do not have permission to perform this action.")
 	case errors.Is(err, ai.ErrNotConfigured):
-		writeError(w, requestID, http.StatusPreconditionFailed, "ai_not_configured", "当前还没有配置 AI 服务。")
+		writeError(w, requestID, http.StatusPreconditionFailed, "ai_not_configured", "The AI service has not been configured.")
 	case errors.Is(err, ai.ErrMissingSecret):
-		writeError(w, requestID, http.StatusServiceUnavailable, "ai_secret_missing", "服务端尚未配置 AI 加密密钥。")
+		writeError(w, requestID, http.StatusServiceUnavailable, "ai_secret_missing", "The server has not configured an AI encryption key.")
 	case errors.Is(err, ai.ErrInvalidConfig):
-		writeError(w, requestID, http.StatusBadRequest, "invalid_ai_config", "请输入有效的 AI 服务配置。")
+		writeError(w, requestID, http.StatusBadRequest, "invalid_ai_config", "Enter valid AI service settings.")
 	case errors.Is(err, ai.ErrInvalidInput):
-		writeError(w, requestID, http.StatusBadRequest, "invalid_ai_input", "请输入有效的对话内容。")
+		writeError(w, requestID, http.StatusBadRequest, "invalid_ai_input", "Enter valid conversation content.")
 	case errors.Is(err, ai.ErrProviderUnavailable):
-		writeError(w, requestID, http.StatusBadGateway, "ai_provider_unavailable", "AI 服务暂时不可用，请稍后重试。")
+		writeError(w, requestID, http.StatusBadGateway, "ai_provider_unavailable", "The AI service is temporarily unavailable. Please try again later.")
 	default:
 		s.writeAuthError(w, requestID, err)
 	}
@@ -56,19 +56,19 @@ func (s *Server) writeAIError(w http.ResponseWriter, requestID string, err error
 func (s *Server) writePrinterError(w http.ResponseWriter, requestID string, err error) {
 	switch {
 	case errors.Is(err, printer.ErrSubmissionOutcomeUnknown):
-		writeError(w, requestID, http.StatusBadGateway, "print_submission_unknown", "提交结果未知，请先检查设备是否已打印，确认后再决定是否手动创建新任务；请勿直接重复提交。")
+		writeError(w, requestID, http.StatusBadGateway, "print_submission_unknown", "The submission result is unknown. Check whether the device printed the job before creating another one; do not resubmit without checking.")
 	case errors.Is(err, printer.ErrForbidden):
-		writeError(w, requestID, http.StatusForbidden, "forbidden", "当前账号没有该操作权限。")
+		writeError(w, requestID, http.StatusForbidden, "forbidden", "You do not have permission to perform this action.")
 	case errors.Is(err, printer.ErrNotConfigured):
-		writeError(w, requestID, http.StatusPreconditionFailed, "printer_not_configured", "当前还没有配置 Memobird 服务。")
+		writeError(w, requestID, http.StatusPreconditionFailed, "printer_not_configured", "The Memobird service has not been configured.")
 	case errors.Is(err, printer.ErrContentTooLarge):
-		writeError(w, requestID, http.StatusRequestEntityTooLarge, "print_content_too_large", "内容超过打印限制，请拆分后再预览或打印（标题最多 512 字节、正文最多 64 KiB、合计最多 8000 个字符、图片高度最多 8192 像素）；请避免过多连续零宽字符。")
+		writeError(w, requestID, http.StatusRequestEntityTooLarge, "print_content_too_large", "Content exceeds the print limits. Split it before previewing or printing (title: 512 bytes max; body: 64 KiB max; total: 8,000 characters max; image height: 8,192 pixels max). Avoid long runs of zero-width characters.")
 	case errors.Is(err, printer.ErrNotFound):
-		writeError(w, requestID, http.StatusNotFound, "printer_resource_not_found", "指定的设备或打印任务不存在。")
+		writeError(w, requestID, http.StatusNotFound, "printer_resource_not_found", "The specified device or print job does not exist.")
 	case errors.Is(err, printer.ErrInvalidInput):
-		writeError(w, requestID, http.StatusBadRequest, "invalid_printer_input", "请输入有效的设备或打印信息。")
+		writeError(w, requestID, http.StatusBadRequest, "invalid_printer_input", "Enter valid device or print-job information.")
 	case errors.Is(err, printer.ErrUnavailable):
-		writeError(w, requestID, http.StatusBadGateway, "printer_unavailable", "咕咕机服务暂时不可用，请稍后重试。")
+		writeError(w, requestID, http.StatusBadGateway, "printer_unavailable", "The Memobird service is temporarily unavailable. Please try again later.")
 	default:
 		s.writeAuthError(w, requestID, err)
 	}
@@ -77,11 +77,11 @@ func (s *Server) writePrinterError(w http.ResponseWriter, requestID string, err 
 func (s *Server) writeFeedbackError(w http.ResponseWriter, requestID string, err error) {
 	switch {
 	case errors.Is(err, feedback.ErrInvalidInput):
-		writeError(w, requestID, http.StatusBadRequest, "invalid_feedback_input", "请输入反馈内容。")
+		writeError(w, requestID, http.StatusBadRequest, "invalid_feedback_input", "Enter feedback.")
 	case errors.Is(err, feedback.ErrNoAdminRecipient):
-		writeError(w, requestID, http.StatusPreconditionFailed, "feedback_recipient_missing", "当前还没有可接收反馈的管理员账号。")
+		writeError(w, requestID, http.StatusPreconditionFailed, "feedback_recipient_missing", "There is no administrator account available to receive feedback.")
 	case errors.Is(err, feedback.ErrNoAdminDevice):
-		writeError(w, requestID, http.StatusPreconditionFailed, "feedback_printer_missing", "管理员当前还没有可接收反馈的默认咕咕机。")
+		writeError(w, requestID, http.StatusPreconditionFailed, "feedback_printer_missing", "The administrator has not configured a default Memobird to receive feedback.")
 	case errors.Is(err, printer.ErrSubmissionOutcomeUnknown), errors.Is(err, printer.ErrNotConfigured), errors.Is(err, printer.ErrNotFound), errors.Is(err, printer.ErrInvalidInput), errors.Is(err, printer.ErrContentTooLarge), errors.Is(err, printer.ErrUnavailable), errors.Is(err, printer.ErrForbidden):
 		s.writePrinterError(w, requestID, err)
 	default:

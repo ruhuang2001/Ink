@@ -67,7 +67,15 @@ type UpdateConfigInput struct {
 }
 
 type ReplyInput struct {
-	Messages []ChatMessage `json:"messages"`
+	Messages       []ChatMessage `json:"messages"`
+	ConversationID string        `json:"conversationId,omitempty"`
+}
+
+// MemoryEnhancer optionally augments replies with recalled conversation memory.
+// Implementations must degrade silently; memory is never critical to a reply.
+type MemoryEnhancer interface {
+	EnhanceMessages(ctx context.Context, userID, conversationID string, messages []ChatMessage) ([]ChatMessage, error)
+	StoreConversation(ctx context.Context, userID, conversationID string, messages []ChatMessage, assistantReply string) error
 }
 
 type Service struct {
@@ -77,6 +85,7 @@ type Service struct {
 	encryptor               Encryptor
 	clock                   Clock
 	allowInsecurePrivateURL bool
+	memory                  MemoryEnhancer
 }
 
 type AIService interface {
@@ -189,8 +198,15 @@ func (s *Service) UpdateSystemConfig(ctx context.Context, accessToken string, in
 	return summaryFromStored(config), nil
 }
 
+// SetMemoryEnhancer wires optional conversation memory into replies. It is
+// separate from NewService so tests and deployments without memory stay simple.
+func (s *Service) SetMemoryEnhancer(enhancer MemoryEnhancer) {
+	s.memory = enhancer
+}
+
 func (s *Service) GenerateReply(ctx context.Context, accessToken string, input ReplyInput) (ReplyResult, error) {
-	if _, err := s.auth.GetCurrentUser(ctx, accessToken); err != nil {
+	currentUser, err := s.auth.GetCurrentUser(ctx, accessToken)
+	if err != nil {
 		return ReplyResult{}, err
 	}
 
@@ -204,7 +220,24 @@ func (s *Service) GenerateReply(ctx context.Context, accessToken string, input R
 		return ReplyResult{}, err
 	}
 
-	return s.client.CreateReply(ctx, runtimeConfig, messages)
+	if s.memory != nil && input.ConversationID != "" {
+		enhanced, err := s.memory.EnhanceMessages(ctx, currentUser.ID, input.ConversationID, messages)
+		if err == nil && len(enhanced) > 0 {
+			messages = enhanced
+		}
+	}
+
+	reply, err := s.client.CreateReply(ctx, runtimeConfig, messages)
+	if err != nil {
+		return ReplyResult{}, err
+	}
+
+	if s.memory != nil && input.ConversationID != "" {
+		// Stored history is useful but never worth failing a delivered reply.
+		_ = s.memory.StoreConversation(ctx, currentUser.ID, input.ConversationID, messages, reply.Content)
+	}
+
+	return reply, nil
 }
 
 func (s *Service) loadRuntimeConfig(ctx context.Context) (RuntimeConfig, error) {

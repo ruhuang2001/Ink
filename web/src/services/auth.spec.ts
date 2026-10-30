@@ -106,7 +106,7 @@ describe("auth service", () => {
         new Response(
           JSON.stringify({
             code: "invalid_credentials",
-            message: "账号或密码不正确。",
+            message: "Invalid email or password.",
             requestId: "req-1",
           }),
           { status: 401 },
@@ -131,7 +131,9 @@ describe("auth service", () => {
         email: "name@example.com",
         password: "wrong",
       }),
-    ).rejects.toEqual(new AuthApiError(401, "invalid_credentials", "账号或密码不正确。", "req-1"));
+    ).rejects.toEqual(
+      new AuthApiError(401, "invalid_credentials", "Invalid email or password.", "req-1"),
+    );
 
     fetchMock.mockRejectedValueOnce(new Error("network error"));
 

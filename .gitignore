@@ -18,3 +18,5 @@ AGENTS.md
 CLAUDE.md
 
 /1ms-helper
+.playwright-cli/
+output/

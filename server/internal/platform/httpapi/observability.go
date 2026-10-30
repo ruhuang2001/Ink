@@ -96,7 +96,7 @@ func (s *Server) observeHTTP(next http.Handler) http.Handler {
 			if panicked && status == 0 {
 				// Panic values may contain credentials or user content. Never log them.
 				wrapped.Header().Del("Content-Length")
-				writeError(wrapped, requestID, http.StatusInternalServerError, "internal_error", "服务暂时不可用。")
+				writeError(wrapped, requestID, http.StatusInternalServerError, "internal_error", "The service is temporarily unavailable.")
 				aborted = false
 			}
 			if status == 0 && !aborted {

@@ -17,5 +17,8 @@ services:
       timeout: 3s
       retries: 20
 
+  # Optional Zep CE v1.0.2 runs as a separate four-service stack.
+  # Follow docs/MEMORY_SYSTEM.md for the source-pinned upstream deployment.
+
 volumes:
   ink-postgres-data:

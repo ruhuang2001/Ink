@@ -17,6 +17,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/content"
 	"github.com/ruhuang/ink/server/internal/feedback"
+	"github.com/ruhuang/ink/server/internal/memory"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
@@ -32,6 +33,7 @@ func newTestServer(
 		authService,
 		workspaceService,
 		aiService,
+		fakeMemoryService{},
 		printerService,
 		feedbackService,
 		slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)),
@@ -156,7 +158,7 @@ func TestLoginRateLimit(t *testing.T) {
 				AccessTokenExpiresAt: time.Now().UTC().Add(15 * time.Minute),
 			},
 		},
-	}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakeFeedbackService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 1, 100, nil, "")
+	}, fakeWorkspaceService{}, fakeAIService{}, fakeMemoryService{}, fakePrinterService{}, fakeFeedbackService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 1, 100, nil, "")
 
 	first := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"email":"name@example.com","password":"demo-password"}`))
 	first.RemoteAddr = "127.0.0.1:1234"
@@ -733,6 +735,22 @@ func (f fakePrinterService) UpdatePrintJobDevice(_ context.Context, _ string, _ 
 
 var _ ai.AIService = fakeAIService{}
 var _ printer.PrinterService = fakePrinterService{}
+
+type fakeMemoryService struct{}
+
+func (f fakeMemoryService) GetSettings(_ context.Context, _ string) (memory.SettingsSummary, error) {
+	return memory.SettingsSummary{}, nil
+}
+
+func (f fakeMemoryService) UpdateSettings(_ context.Context, _ string, _ memory.UpdateSettingsInput) (memory.SettingsSummary, error) {
+	return memory.SettingsSummary{}, nil
+}
+
+func (f fakeMemoryService) GetClient() memory.Client {
+	return memory.NewNullClient()
+}
+
+var _ memory.MemoryService = fakeMemoryService{}
 
 type fakeFeedbackService struct {
 	err error

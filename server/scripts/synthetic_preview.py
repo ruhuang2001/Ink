@@ -27,7 +27,7 @@ def main():
     results = []
     # Fixed allowlist deliberately excludes create, submit, retry and device routes.
     for path, payload in [("/healthz", None), ("/readyz", None), ("/api/v1/workspace", None),
-                          ("/api/v1/print-preview", {"title": "Synthetic preview", "content": "Ink 合成监测：仅预览，不打印。"})]:
+                          ("/api/v1/print-preview", {"title": "Synthetic preview", "content": "Ink synthetic monitoring: preview only, no printing."})]:
         data = None if payload is None else json.dumps(payload).encode()
         request = urllib.request.Request(base + path, data=data, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
         started = time.monotonic()

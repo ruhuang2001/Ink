@@ -17,6 +17,13 @@ import (
 	memobirdapi "github.com/ruhuang2001/memobird-go/memobird"
 )
 
+func TestLegacySubmissionOutcomeUnknownMapsToEnglish(t *testing.T) {
+	legacy := "\u63d0\u4ea4\u7ed3\u679c\u672a\u77e5\uff0c\u8bf7\u5148\u68c0\u67e5\u8bbe\u5907\u662f\u5426\u5df2\u6253\u5370\uff0c\u518d\u624b\u52a8\u521b\u5efa\u65b0\u4efb\u52a1\u3002"
+	if got := derefErrorMessage(&legacy); got != SubmissionOutcomeUnknown {
+		t.Fatalf("legacy message was not translated: %q", got)
+	}
+}
+
 func TestRenderPreviewReturnsPNG(t *testing.T) {
 	service := NewService(nil, nil, nil, nil, "", "", time.Second)
 	image, err := service.RenderPreview(context.Background(), "标题", "正文内容")

@@ -36,7 +36,9 @@ func (s *Store) ListJobSummaries(ctx context.Context, userID string, query print
 		if err := rows.Scan(&job.ID, &job.Title, &job.Source, &job.DeviceID, &job.Status, &job.CreatedAt, &job.UpdatedAt, &job.ErrorMessage); err != nil {
 			return nil, err
 		}
-		if job.ErrorMessage != printer.SubmissionOutcomeUnknown {
+		if printer.IsSubmissionOutcomeUnknown(job.ErrorMessage) {
+			job.ErrorMessage = printer.SubmissionOutcomeUnknown
+		} else {
 			job.ErrorMessage = ""
 		}
 		jobs = append(jobs, job)

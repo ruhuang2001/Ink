@@ -1,46 +1,46 @@
-# 基础功能维护范围
+# Core Maintenance Scope
 
-更新：2026-10-14。1.0 范围为单实例自部署的核心打印、账号、设备、草稿/对话和 AI 功能。插件与插件定时任务从运行应用移除，旧数据和安装文件保留用于迁移、备份与历史恢复。
+Updated: 2026-10-14. Version 1.0 covers the core printing, account, device, draft/conversation, and AI features for a single self-hosted instance. Plugins and scheduled plugin jobs have been removed from the running application. Legacy data and installation files are retained for migration, backup, and historical recovery.
 
-## 当前核心流程
+## Core Workflow
 
-登录 → 绑定设备 → 编写内容 → 预览 → 确认并提交打印 → 查看状态与历史。
+Log in → bind a device → compose content → preview → confirm and submit a print job → view its status and history.
 
-- 登录、退出、会话过期和账号切换应隔离各账号的数据。
-- 草稿与偏好保存失败应明确提示，不能让用户误以为已同步。
-- 手动打印与设备管理应能独立于 AI 工作。
-- 预览需要有效会话，不创建打印任务，也不调用物理打印服务。
-- 打印提交失败应保留可解释的状态；已接受任务通过后台状态同步更新。
-- 保留现有数据库迁移、用户数据、已验证的打印优化和顶部作者链接。
+- Data must remain isolated across logins, logouts, expired sessions, and account switches.
+- Failures to save drafts or preferences must be clearly reported; users must not be led to believe unsaved data has synced.
+- Manual printing and device management must work independently of AI features.
+- Preview requires a valid session, creates no print job, and does not call the physical printing service.
+- Print submission failures must retain an explainable status; accepted jobs are updated through background status synchronization.
+- Preserve existing database migrations, user data, verified printing optimizations, and the author link in the header.
 
-## 暂缓扩展
+## Deferred Expansion
 
-以下扩展不属于 1.0 的完成条件：
+The following expansions are not required for the 1.0 release:
 
-- 插件市场、公开安装不可信插件。
-- 新版插件协议、独立 SDK、复杂安装审批与版本管理体系。
-- 独立 worker、通用事件总线、多种运行时和分布式调度。
-- 更多 AI 提供商、对话能力和新的内容来源。
+- A plugin marketplace or public installation of untrusted plugins.
+- A new plugin protocol, standalone SDK, or complex installation approval and version-management system.
+- A standalone worker, general-purpose event bus, multiple runtimes, or distributed scheduling.
+- Additional AI providers, conversation capabilities, or content sources.
 
-本机 `todo.md` 是早期插件重设计方案，且未纳入 Git 跟踪。它保留为历史参考，不作为当前发布的完成条件。需求明确前，不按该清单继续扩展架构。
+The local `todo.md` contains an early plugin redesign proposal and is not tracked by Git. It is retained as historical reference, not as a release requirement. Do not extend the architecture based on that list until requirements are clarified.
 
-## 下一批维护事项
+## Next Maintenance Items
 
-按数据正确性优先，保持每批改动范围小、可验证：
+Prioritize data correctness and keep each change small and verifiable:
 
-- [x] 工作区保存使用 revision 原子比较；过期版本返回冲突，保留当前页面草稿并暂停自动保存，确认后可重新加载。见 [工作区 API](WORKSPACE_API.md)。
-- [x] 移除设备改为标记离线，保留打印和 delivery 历史，并停用关联计划。重新绑定复用原身份；1.0 不执行旧计划。
-- [x] 预览和打印共用内容与输出尺寸检查，超限返回 413，避免生成过大的 PNG 或静默截断。
-- [ ] 在真实 Memobird 上验证绑定、手动打印、断网恢复和完成状态。
-- [x] 在独立 PostgreSQL 测试库验证备份恢复，13 张表逐行一致。见 [复现实验](BACKUP_RESTORE.md)。
-- [x] 用随机测试密钥和合成数据验证加密配置及插件目录恢复，错误/缺失密钥和损坏 nonce 均明确失败；当前恢复检查只比较保留文件字节，不执行插件。
-- [ ] 在实际部署的隔离副本上验证真实密钥、运行时版本和配置恢复；历史插件文件仅保留，不由 1.0 API 执行。
+- [x] Workspace saves use atomic revision comparisons. Stale revisions return a conflict, preserve the current page's draft, and pause autosaving until the user confirms a reload. See the [Workspace API](WORKSPACE_API.md).
+- [x] Device removal now marks a device offline, preserves print and delivery history, and disables associated schedules. Rebinding reuses the existing identity; version 1.0 does not run old schedules.
+- [x] Preview and printing share content and output-size validation. Oversized requests return 413 to prevent oversized PNG generation or silent truncation.
+- [ ] Verify binding, manual printing, offline recovery, and completion status on a physical Memobird.
+- [x] Verify backup restoration in an isolated PostgreSQL test database, with all 13 tables matching row by row. See the [reproduction procedure](BACKUP_RESTORE.md).
+- [x] Verify encrypted configuration and plugin-directory restoration using random test keys and synthetic data. Invalid or missing keys and corrupted nonces fail explicitly. The current restore check compares only the bytes of retained files; it does not run plugins.
+- [ ] Verify restoration of real keys, runtime versions, and configuration in an isolated copy of an actual deployment. Legacy plugin files are retained but are not run by the 1.0 API.
 
-发布候选必须通过固定提交的前后端质量、API 冒烟、安全扫描和可选监控检查。真实设备验收未完成前可提供 RC 或草稿，不能把 CI 通过或发布表单中的人工声明当作实机验证。
+Release candidates must pass frontend and backend quality checks, API smoke tests, security scans, and optional monitoring checks against a fixed commit. An RC or draft may be shared before physical-device acceptance is complete, but CI results or manual declarations in a release form must not be treated as hardware verification.
 
-前端 store 拆分可以在相关维护工作触及时逐步进行，先处理影响数据正确性的边界，不做一次性重写。
+Frontend store decomposition can proceed incrementally when related maintenance work touches those areas. Address data-correctness boundaries first; do not rewrite everything at once.
 
-## 验收方式
+## Verification
 
 ```bash
 make check-web
@@ -48,6 +48,6 @@ make check-api
 make smoke-api
 ```
 
-`make smoke-api` 默认使用临时 PostgreSQL 容器和临时账号凭据，测试结束后清理，不覆盖本机开发数据库、`.env` 或管理员凭据文件，也不调用物理打印服务。
+By default, `make smoke-api` uses a temporary PostgreSQL container and temporary account credentials. It cleans them up after the test, does not overwrite the local development database, `.env`, or administrator credential file, and does not call the physical printing service.
 
-提交或推送前仍执行 `make check-local-ci`，不能跳过仓库 hooks。单测和冒烟通过不等于已验证真实设备或生产部署。
+Run `make check-local-ci` before committing or pushing, and do not bypass repository hooks. Passing unit and smoke tests does not verify a physical device or production deployment.

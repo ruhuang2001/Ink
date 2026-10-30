@@ -1,13 +1,13 @@
-# 对话交互本地验证（2026-10-15）
+# Local Conversation Interaction Verification (2026-10-15)
 
-本次在已有工作区优化基础上核查，未提交或推送。
+This verification builds on the existing workspace improvements. No changes were committed or pushed.
 
-- `make check-web` 通过：18 个测试文件、212 项测试，lint、格式、类型、构建与性能预算通过。
-- 浏览器访客模式：1280×633 桌面与 390×844 手机截图见本目录。
-- 手机选择模式：页面宽 390px，无横向溢出；输入区底部约 756px。
-- 打印选择：复选框选中后数量为 1，打印按钮启用；退出选择后清除。
-- 多行草稿保存后显示“已保存”；聚焦输入框后 Ctrl+Enter 发送成功并清空输入。
-- 正文计算样式 white-space 为 pre-wrap；浏览器未报告脚本错误。
-- 滚动跟随、阅读历史保持位置与回到最新由 ConversationMessages.spec.ts 覆盖。
+- `make check-web` passed: 18 test files and 212 tests; lint, formatting, type checks, build, and performance budgets all passed.
+- Guest mode in the browser: desktop screenshots at 1280×633 and mobile screenshots at 390×844 are in this directory.
+- Mobile selection mode: at 390px wide, the page has no horizontal overflow; the input area's bottom is around 756px.
+- Print selection: selecting the checkbox sets the count to 1 and enables the print button; exiting selection clears it.
+- A saved multiline draft shows “Saved”; focusing the input and pressing Ctrl+Enter sends successfully and clears it.
+- The computed `white-space` style for message content is `pre-wrap`; the browser reported no script errors.
+- `ConversationMessages.spec.ts` covers scroll following, preserving position in reading history, and returning to the latest message.
 
-未验证真实打印设备、登录后的 AI、真实手机软键盘。截图使用本地访客演示数据。
+Physical printers, AI after login, and the real mobile soft keyboard were not tested. Screenshots use local guest-demo data.

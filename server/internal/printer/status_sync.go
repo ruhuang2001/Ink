@@ -11,8 +11,15 @@ const (
 	statusCheckInterval      = 10 * time.Second
 	statusBatchBudget        = 15 * time.Second
 	defaultStatusMaxAttempts = 6
-	SubmissionOutcomeUnknown = "提交结果未知，请先检查设备是否已打印，再手动创建新任务。"
+	SubmissionOutcomeUnknown = "The submission result is unknown. Check whether the device printed the job before creating another one."
+	// Preserve the legacy marker so existing uncertain jobs cannot be resubmitted accidentally.
+	legacySubmissionOutcomeUnknown = "\u63d0\u4ea4\u7ed3\u679c\u672a\u77e5\uff0c\u8bf7\u5148\u68c0\u67e5\u8bbe\u5907\u662f\u5426\u5df2\u6253\u5370\uff0c\u518d\u624b\u52a8\u521b\u5efa\u65b0\u4efb\u52a1\u3002"
 )
+
+// IsSubmissionOutcomeUnknown recognizes both current and legacy persisted markers.
+func IsSubmissionOutcomeUnknown(message string) bool {
+	return message == SubmissionOutcomeUnknown || message == legacySubmissionOutcomeUnknown
+}
 
 // StatusSyncJob excludes the rendered content and carries the version checked
 // by SaveStatusCheck, so a delayed provider response cannot overwrite a retry.

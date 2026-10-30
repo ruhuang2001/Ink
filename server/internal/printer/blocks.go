@@ -44,7 +44,7 @@ func renderBlock(block content.ContentBlock) (string, error) {
 	case content.BlockImage:
 		alt := strings.TrimSpace(block.Alt)
 		if alt == "" {
-			alt = "图片"
+			alt = "Image"
 		}
 		return fmt.Sprintf("[%s] %s", alt, strings.TrimSpace(block.URL)), nil
 	case content.BlockLink:

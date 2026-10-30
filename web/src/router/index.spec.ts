@@ -154,6 +154,17 @@ describe("router configuration", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            enabled: false,
+            zepBaseUrl: "",
+            keyConfigured: false,
+            available: false,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
             devices: [],
           }),
           { status: 200 },

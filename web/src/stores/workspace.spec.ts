@@ -15,6 +15,7 @@ import type {
 import * as authService from "@/services/auth";
 import type { submitFeedbackToAdmin } from "@/services/feedback";
 import { AuthApiError, request } from "@/services/http";
+import type { getMemorySettings, updateMemorySettings } from "@/services/memory";
 import type {
   bindPrinter,
   cancelPrintJob,
@@ -112,6 +113,21 @@ vi.mock("@/services/ai", () => ({
     baseUrl: payload.baseUrl,
     model: payload.model,
     keyConfigured: true,
+  })),
+}));
+
+vi.mock("@/services/memory", () => ({
+  getMemorySettings: vi.fn<typeof getMemorySettings>(async () => ({
+    enabled: false,
+    zepBaseUrl: "",
+    keyConfigured: false,
+    available: false,
+  })),
+  updateMemorySettings: vi.fn<typeof updateMemorySettings>(async (_input) => ({
+    enabled: false,
+    zepBaseUrl: "",
+    keyConfigured: false,
+    available: false,
   })),
 }));
 

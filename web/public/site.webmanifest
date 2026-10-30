@@ -1,7 +1,7 @@
 {
   "name": "Ink",
   "short_name": "Ink",
-  "description": "把灵感整理成纸条，并把内容发到你的咕咕机。",
+  "description": "Turn your ideas into notes and send them to your Memobird printer.",
   "start_url": "./status",
   "scope": "./",
   "display": "standalone",

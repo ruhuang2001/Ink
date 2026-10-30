@@ -29,6 +29,7 @@ type Config struct {
 	AIConfigEncryptionKey         string
 	AIAllowInsecurePrivateURL     bool
 	AIProviderTimeout             time.Duration
+	MemoryAllowInsecurePrivateURL bool
 	MemobirdAccessKey             string
 	MemobirdBaseURL               string
 	MemobirdTimeout               time.Duration
@@ -141,6 +142,7 @@ func Load() (Config, error) {
 		AIConfigEncryptionKey:         os.Getenv("AI_CONFIG_ENCRYPTION_KEY"),
 		AIAllowInsecurePrivateURL:     envBool("AI_ALLOW_INSECURE_PRIVATE_URL", false),
 		AIProviderTimeout:             aiProviderTimeout,
+		MemoryAllowInsecurePrivateURL: envBool("MEMORY_ALLOW_INSECURE_PRIVATE_URL", false),
 		MemobirdAccessKey:             os.Getenv("MEMOBIRD_ACCESS_KEY"),
 		MemobirdBaseURL:               os.Getenv("MEMOBIRD_BASE_URL"),
 		MemobirdTimeout:               memobirdTimeout,
