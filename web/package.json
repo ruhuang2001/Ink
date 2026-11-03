@@ -52,11 +52,5 @@
       "pnpm exec oxfmt -c .oxfmtrc.json --no-error-on-unmatched-pattern"
     ]
   },
-  "packageManager": "pnpm@10.28.0",
-  "pnpm": {
-    "overrides": {
-      "js-beautify>glob": "14.0.2",
-      "editorconfig>minimatch": "11.0.1"
-    }
-  }
+  "packageManager": "pnpm@10.28.0"
 }
