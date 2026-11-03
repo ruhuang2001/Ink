@@ -1,0 +1,19 @@
+./server/scripts/smoke_api.sh
+applied 001_init_auth.sql
+applied 002_workspace_and_roles.sql
+applied 003_ai_and_printers.sql
+applied 004_plugins_and_schedules.sql
+applied 005_plugin_items.sql
+applied 006_plugin_installations_git_source.sql
+applied 007_plugin_v2_fetch_and_deliveries.sql
+applied 008_atomic_delivery_claims.sql
+applied 009_print_status_sync.sql
+applied 010_workspace_revision.sql
+applied 011_print_submission_recovery.sql
+ok  	github.com/ruhuang/ink/server/internal/platform/store/postgres	6.780s
+ok  	github.com/ruhuang/ink/server/internal/platform/migrate	1.860s
+seeded development admin account
+admin login: admin
+credentials saved to: /tmp/ink-smoke.IBbkIh/admin-credentials
+read the initial password from the credentials file
+Smoke test passed: auth, workspace persistence and conflict protection, PNG preview, removed extension endpoints, manual printing, and paginated print/status/detail reads succeeded.

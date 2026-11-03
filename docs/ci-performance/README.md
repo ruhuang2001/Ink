@@ -75,3 +75,7 @@ pre-push run was not completed. Pushes used `HUSKY=0` for this investigation so
 GitHub could execute the complete real workflow; the stored hook is unchanged.
 There are no release tags in this repository, so release job topology was checked
 statically, without creating or publishing a release.
+
+Final warm-cache comparison and evidence: [comparison.md](comparison.md). Both live
+iterations passed all nine jobs. The second smoke run took 48 s, govulncheck 14 s,
+and monitoring 32 s; no scan/test result cache was introduced.
