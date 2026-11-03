@@ -9,8 +9,8 @@ Medians below include successful jobs only; raw evidence retains failures/cancel
 |---|---:|---:|---:|---:|
 | Dependabot | 3 | 4 | 4 | 148 |
 | analysis | 3 | 4 | 7 | 32 |
-| analyze-go | 12 | 3 | 7 | 69 |
-| analyze-javascript-typescript | 12 | 3 | 7 | 63 |
+| analyze-go | 12 | 3 | 22 | 52.5 |
+| analyze-javascript-typescript | 12 | 3 | 24 | 45.5 |
 | api-smoke | 7 | 3 | 30 | 50 |
 | dependency-review | 7 | 2 | 5 | 1 |
 | golangci-lint | 7 | 3 | 19 | 4 |

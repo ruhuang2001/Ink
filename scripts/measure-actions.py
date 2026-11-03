@@ -23,7 +23,8 @@ def seconds(start, end):
 def is_setup(name):
     return any(token in name.lower() for token in (
         'set up job', 'checkout', 'setup-', 'setup pnpm', 'initialize containers',
-        'install --frozen-lockfile', 'post ', 'complete job', 'stop containers'))
+        'install --frozen-lockfile', 'initialize codeql', 'actions/cache@',
+        'upload-artifact@', 'post ', 'complete job', 'stop containers'))
 
 
 def main():

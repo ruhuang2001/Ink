@@ -1,0 +1,262 @@
+bash ./scripts/check-observability.sh
+v0.28.1: Pulling from prom/alertmanager
+6ce8b87a9754: Pulling fs layer
+d2f8aae8d80e: Pulling fs layer
+de945409924b: Pulling fs layer
+81f115908e32: Pulling fs layer
+24e8d7e9d087: Pulling fs layer
+77b3946d0a9c: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+24e8d7e9d087: Waiting
+77b3946d0a9c: Waiting
+81f115908e32: Waiting
+4f4fb700ef54: Waiting
+v3.5.0: Pulling from prom/prometheus
+v1.10.2: Pulling from grafana/alloy
+v0.27.0: Pulling from prom/blackbox-exporter
+3.5.5: Pulling from grafana/loki
+6ce8b87a9754: Pulling fs layer
+d2f8aae8d80e: Pulling fs layer
+d932d57a546b: Pulling fs layer
+7fb55c4e976b: Pulling fs layer
+feadeb862692: Pulling fs layer
+76619c1908eb: Pulling fs layer
+2dfc70ad9941: Pulling fs layer
+fd1d3a5a5f79: Pulling fs layer
+95d87e5ba19a: Pulling fs layer
+197a814c6a2c: Pulling fs layer
+d932d57a546b: Waiting
+7fb55c4e976b: Waiting
+feadeb862692: Waiting
+76619c1908eb: Waiting
+2dfc70ad9941: Waiting
+fd1d3a5a5f79: Waiting
+95d87e5ba19a: Waiting
+197a814c6a2c: Waiting
+d2f8aae8d80e: Verifying Checksum
+d2f8aae8d80e: Verifying Checksum
+d2f8aae8d80e: Download complete
+d2f8aae8d80e: Download complete
+0.135.0: Pulling from otel/opentelemetry-collector-contrib
+49a8ca9a328e: Pulling fs layer
+4c82f2a305a4: Pulling fs layer
+31b2fa519578: Pulling fs layer
+1559878e7061: Pulling fs layer
+aa852a9dccd2: Pulling fs layer
+4c82f2a305a4: Waiting
+31b2fa519578: Waiting
+1559878e7061: Waiting
+aa852a9dccd2: Waiting
+49a8ca9a328e: Waiting
+6ce8b87a9754: 6ce8b87a9754: Verifying Checksum
+Verifying Checksum
+6ce8b87a9754: Download complete
+6ce8b87a9754: Download complete
+6ce8b87a9754: Pull complete
+6ce8b87a9754: Pull complete
+d2f8aae8d80e: Pull complete
+d2f8aae8d80e: Pull complete
+6ce8b87a9754: Already exists
+d2f8aae8d80e: Already exists
+a29690d664d1: Pulling fs layer
+6ad28d605649: Pulling fs layer
+a29690d664d1: Waiting
+6ad28d605649: Waiting
+49e5f77b20e6: Pulling fs layer
+2e4cf50eeb92: Pulling fs layer
+56ce5a7a0a8c: Pulling fs layer
+e1089d61b200: Pulling fs layer
+0f8b424aa0b9: Pulling fs layer
+d557676654e5: Pulling fs layer
+d82bc7a76a83: Pulling fs layer
+d858cbc252ad: Pulling fs layer
+1069fc2daed1: Pulling fs layer
+b40161cd83fc: Pulling fs layer
+3f4e2c586348: Pulling fs layer
+eb8f5749650b: Pulling fs layer
+ffeccacd1a73: Pulling fs layer
+29852e282777: Pulling fs layer
+17f3dd0d85e8: Pulling fs layer
+38066e8d70f6: Pulling fs layer
+f04daeaed6c9: Pulling fs layer
+49e5f77b20e6: Waiting
+b40161cd83fc: Waiting
+3f4e2c586348: Waiting
+eb8f5749650b: Waiting
+ffeccacd1a73: Waiting
+29852e282777: Waiting
+2e4cf50eeb92: Waiting
+17f3dd0d85e8: Waiting
+56ce5a7a0a8c: Waiting
+e1089d61b200: Waiting
+38066e8d70f6: Waiting
+0f8b424aa0b9: Waiting
+d557676654e5: Waiting
+f04daeaed6c9: Waiting
+d82bc7a76a83: Waiting
+d858cbc252ad: Waiting
+1069fc2daed1: Waiting
+e431bff99ece: Pulling fs layer
+df85c9d0ca2e: Pulling fs layer
+eae93a3313d3: Pulling fs layer
+e431bff99ece: Waiting
+df85c9d0ca2e: Waiting
+eae93a3313d3: Waiting
+24e8d7e9d087: Verifying Checksum
+24e8d7e9d087: Download complete
+77b3946d0a9c: Verifying Checksum
+77b3946d0a9c: Download complete
+4f4fb700ef54: Download complete
+de945409924b: Verifying Checksum
+de945409924b: Download complete
+de945409924b: Pull complete
+81f115908e32: Verifying Checksum
+81f115908e32: Download complete
+81f115908e32: Pull complete
+24e8d7e9d087: Pull complete
+77b3946d0a9c: Pull complete
+4f4fb700ef54: Pull complete
+Digest: sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba
+Status: Downloaded newer image for prom/alertmanager:v0.28.1
+docker.io/prom/alertmanager:v0.28.1
+feadeb862692: Verifying Checksum
+feadeb862692: Download complete
+76619c1908eb: Verifying Checksum
+76619c1908eb: Download complete
+2dfc70ad9941: Verifying Checksum
+2dfc70ad9941: Download complete
+fd1d3a5a5f79: Verifying Checksum
+fd1d3a5a5f79: Download complete
+7fb55c4e976b: Verifying Checksum
+7fb55c4e976b: Download complete
+95d87e5ba19a: Verifying Checksum
+95d87e5ba19a: Download complete
+197a814c6a2c: Verifying Checksum
+197a814c6a2c: Download complete
+49a8ca9a328e: Verifying Checksum
+49a8ca9a328e: Download complete
+49a8ca9a328e: Pull complete
+4c82f2a305a4: Verifying Checksum
+4c82f2a305a4: Download complete
+4c82f2a305a4: Pull complete
+1559878e7061: Verifying Checksum
+1559878e7061: Download complete
+aa852a9dccd2: Verifying Checksum
+aa852a9dccd2: Download complete
+d932d57a546b: Verifying Checksum
+d932d57a546b: Download complete
+d932d57a546b: Pull complete
+7fb55c4e976b: Pull complete
+feadeb862692: Pull complete
+76619c1908eb: Pull complete
+2dfc70ad9941: Pull complete
+fd1d3a5a5f79: Pull complete
+95d87e5ba19a: Pull complete
+197a814c6a2c: Pull complete
+Digest: sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+Status: Downloaded newer image for prom/prometheus:v3.5.0
+docker.io/prom/prometheus:v3.5.0
+a29690d664d1: Verifying Checksum
+a29690d664d1: Download complete
+6ad28d605649: Verifying Checksum
+6ad28d605649: Download complete
+a29690d664d1: Pull complete
+6ad28d605649: Pull complete
+Digest: sha256:a50c4c0eda297baa1678cd4dc4712a67fdea713b832d43ce7fcc5f9bea05094d
+Status: Downloaded newer image for prom/blackbox-exporter:v0.27.0
+docker.io/prom/blackbox-exporter:v0.27.0
+31b2fa519578: Verifying Checksum
+31b2fa519578: Download complete
+31b2fa519578: Pull complete
+1559878e7061: Pull complete
+aa852a9dccd2: Pull complete
+Digest: sha256:bcf27f18c4402869af112fb39e35e1db3804a404686f4caa20bdf77814219223
+Status: Downloaded newer image for grafana/alloy:v1.10.2
+docker.io/grafana/alloy:v1.10.2
+2e4cf50eeb92: Verifying Checksum
+2e4cf50eeb92: Download complete
+49e5f77b20e6: Verifying Checksum
+49e5f77b20e6: Download complete
+49e5f77b20e6: Pull complete
+2e4cf50eeb92: Pull complete
+56ce5a7a0a8c: Verifying Checksum
+56ce5a7a0a8c: Download complete
+56ce5a7a0a8c: Pull complete
+e1089d61b200: Verifying Checksum
+e1089d61b200: Download complete
+e1089d61b200: Pull complete
+0f8b424aa0b9: Verifying Checksum
+0f8b424aa0b9: Download complete
+0f8b424aa0b9: Pull complete
+d557676654e5: Verifying Checksum
+d557676654e5: Download complete
+d557676654e5: Pull complete
+d82bc7a76a83: Verifying Checksum
+d82bc7a76a83: Download complete
+d82bc7a76a83: Pull complete
+1069fc2daed1: Verifying Checksum
+1069fc2daed1: Download complete
+b40161cd83fc: Verifying Checksum
+b40161cd83fc: Download complete
+d858cbc252ad: Verifying Checksum
+d858cbc252ad: Download complete
+d858cbc252ad: Pull complete
+1069fc2daed1: Pull complete
+b40161cd83fc: Pull complete
+eb8f5749650b: Verifying Checksum
+eb8f5749650b: Download complete
+ffeccacd1a73: Verifying Checksum
+ffeccacd1a73: Download complete
+3f4e2c586348: Verifying Checksum
+3f4e2c586348: Download complete
+3f4e2c586348: Pull complete
+eb8f5749650b: Pull complete
+ffeccacd1a73: Pull complete
+17f3dd0d85e8: Verifying Checksum
+17f3dd0d85e8: Download complete
+38066e8d70f6: Download complete
+f04daeaed6c9: Verifying Checksum
+f04daeaed6c9: Download complete
+29852e282777: Verifying Checksum
+29852e282777: Download complete
+29852e282777: Pull complete
+17f3dd0d85e8: Pull complete
+38066e8d70f6: Pull complete
+f04daeaed6c9: Pull complete
+Digest: sha256:31628519045e7f28692a7ae73b4a3fd293dccb425585ed5d16ceea3b5c9592e6
+Status: Downloaded newer image for grafana/loki:3.5.5
+docker.io/grafana/loki:3.5.5
+e431bff99ece: Verifying Checksum
+e431bff99ece: Download complete
+e431bff99ece: Pull complete
+eae93a3313d3: Verifying Checksum
+eae93a3313d3: Download complete
+df85c9d0ca2e: Verifying Checksum
+df85c9d0ca2e: Download complete
+df85c9d0ca2e: Pull complete
+eae93a3313d3: Pull complete
+Digest: sha256:89107a3a8f4636a396927edf7025bb9614b8da2d92f4cc3f43109e8d115736e2
+Status: Downloaded newer image for otel/opentelemetry-collector-contrib:0.135.0
+docker.io/otel/opentelemetry-collector-contrib:0.135.0
+Checking /etc/prometheus/prometheus.yml
+  SUCCESS: 1 rule files found
+ SUCCESS: /etc/prometheus/prometheus.yml is valid prometheus config file syntax
+
+Checking /etc/prometheus/rules.yml
+  SUCCESS: 15 rules found
+
+  SUCCESS
+
+Checking '/etc/alertmanager.yml'  SUCCESS
+Found:
+ - global config
+ - route
+ - 0 inhibit rules
+ - 1 receivers
+ - 0 templates
+
+time=2026-11-03T03:42:15.906Z level=INFO source=main.go:88 msg="Starting blackbox_exporter" version="(version=0.27.0, branch=HEAD, revision=46ea0224f57b708fdff317f8872765a77ef64034)"
+time=2026-11-03T03:42:15.906Z level=INFO source=main.go:89 msg="(go=go1.24.4, platform=linux/arm64, user=root@2d9f1d02ac3f, date=20250630-12:37:26, tags=unknown)"
+time=2026-11-03T03:42:15.906Z level=INFO source=main.go:97 msg="Config file is ok exiting..."
+level=info ts=2026-11-03T03:42:16.40529652Z caller=main.go:87 msg="config is valid"
+{"schema_version": 1, "success": true, "default_synthetic": {"schema_version": 1, "success": true, "checks": [{"route": "/healthz", "duration_ms": 5.65}, {"route": "/readyz", "duration_ms": 6.98}, {"route": "/api/v1/workspace", "duration_ms": 8.48}, {"route": "/api/v1/print-preview", "duration_ms": 8.21}]}, "recovery_workers_disabled": true, "legacy_data_unchanged": true, "default_backlog_queries": 0, "default_shutdown_exit": 0, "synthetic": {"schema_version": 1, "success": true, "checks": [{"route": "/healthz", "duration_ms": 5.47}, {"route": "/readyz", "duration_ms": 3.99}, {"route": "/api/v1/workspace", "duration_ms": 6.64}, {"route": "/api/v1/print-preview", "duration_ms": 8.21}]}, "database_outage_ready_seconds": 1.006, "shutdown_exit": 0}

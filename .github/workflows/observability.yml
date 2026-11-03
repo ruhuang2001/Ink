@@ -1,7 +1,13 @@
 name: observability
 on:
   pull_request:
-    paths-ignore: ["docs/**", "*.md"]
+    paths:
+      - "server/**"
+      - "monitoring/**"
+      - "docker-compose.observability.yml"
+      - "scripts/**"
+      - "Makefile"
+      - ".github/**"
   push:
     branches: [main]
     paths-ignore: ["docs/**", "*.md"]

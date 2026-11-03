@@ -5,8 +5,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 8.0,
-    "execution": 91.0
+    "setup": 23.0,
+    "execution": 76.0
   },
   {
     "run": 41443523307,
@@ -14,8 +14,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 11.0,
-    "execution": 90.0
+    "setup": 27.0,
+    "execution": 74.0
   },
   {
     "run": 41438171271,
@@ -113,8 +113,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 2.0,
-    "setup": 8.0,
-    "execution": 59.0
+    "setup": 21.0,
+    "execution": 46.0
   },
   {
     "run": 41340205058,
@@ -122,8 +122,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 2.0,
-    "setup": 9.0,
-    "execution": 48.0
+    "setup": 23.0,
+    "execution": 34.0
   },
   {
     "run": 41339970047,
@@ -149,8 +149,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 6.0,
-    "execution": 90.0
+    "setup": 21.0,
+    "execution": 75.0
   },
   {
     "run": 40834989739,
@@ -158,8 +158,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 7.0,
-    "execution": 79.0
+    "setup": 21.0,
+    "execution": 65.0
   },
   {
     "run": 40830102339,
@@ -167,8 +167,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 7.0,
-    "execution": 93.0
+    "setup": 25.0,
+    "execution": 75.0
   },
   {
     "run": 40830102339,
@@ -176,8 +176,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 7.0,
-    "execution": 87.0
+    "setup": 20.0,
+    "execution": 74.0
   },
   {
     "run": 40830102336,
@@ -239,8 +239,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 8.0,
-    "execution": 69.0
+    "setup": 21.0,
+    "execution": 56.0
   },
   {
     "run": 40800910251,
@@ -248,8 +248,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 7.0,
-    "execution": 60.0
+    "setup": 22.0,
+    "execution": 45.0
   },
   {
     "run": 40800910249,
@@ -338,8 +338,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 9.0,
-    "execution": 64.0
+    "setup": 30.0,
+    "execution": 43.0
   },
   {
     "run": 40691568226,
@@ -347,8 +347,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 2.0,
-    "setup": 7.0,
-    "execution": 72.0
+    "setup": 26.0,
+    "execution": 53.0
   },
   {
     "run": 40689283005,
@@ -410,8 +410,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 7.0,
-    "execution": 69.0
+    "setup": 24.0,
+    "execution": 52.0
   },
   {
     "run": 40689282937,
@@ -419,8 +419,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 6.0,
-    "execution": 62.0
+    "setup": 22.0,
+    "execution": 46.0
   },
   {
     "run": 40689282905,
@@ -437,8 +437,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 6.0,
-    "execution": 87.0
+    "setup": 20.0,
+    "execution": 73.0
   },
   {
     "run": 40304286766,
@@ -446,8 +446,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 8.0,
-    "execution": 81.0
+    "setup": 24.0,
+    "execution": 65.0
   },
   {
     "run": 40298388350,
@@ -491,8 +491,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 8.0,
-    "execution": 60.0
+    "setup": 20.0,
+    "execution": 48.0
   },
   {
     "run": 40255999659,
@@ -500,8 +500,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 3.0,
-    "setup": 4.0,
-    "execution": 88.0
+    "setup": 22.0,
+    "execution": 70.0
   },
   {
     "run": 40255993751,
@@ -617,8 +617,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 2.0,
-    "setup": 9.0,
-    "execution": 62.0
+    "setup": 31.0,
+    "execution": 40.0
   },
   {
     "run": 40255795864,
@@ -626,8 +626,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 25.0,
-    "setup": 6.0,
-    "execution": 67.0
+    "setup": 23.0,
+    "execution": 50.0
   },
   {
     "run": 40255795844,
@@ -662,8 +662,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 7.0,
-    "setup": 7.0,
-    "execution": 68.0
+    "setup": 25.0,
+    "execution": 50.0
   },
   {
     "run": 40255795810,
@@ -671,8 +671,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 28.0,
-    "setup": 6.0,
-    "execution": 56.0
+    "setup": 25.0,
+    "execution": 37.0
   },
   {
     "run": 40255795760,
@@ -734,8 +734,8 @@
     "job": "analyze-javascript-typescript",
     "conclusion": "success",
     "queue": 2.0,
-    "setup": 5.0,
-    "execution": 58.0
+    "setup": 24.0,
+    "execution": 39.0
   },
   {
     "run": 40255792268,
@@ -743,8 +743,8 @@
     "job": "analyze-go",
     "conclusion": "success",
     "queue": 2.0,
-    "setup": 8.0,
-    "execution": 68.0
+    "setup": 27.0,
+    "execution": 49.0
   },
   {
     "run": 40255792247,

@@ -2,7 +2,10 @@ name: web-quality
 
 on:
   pull_request:
-    paths-ignore: ["docs/**", "*.md"]
+    paths:
+      - "web/**"
+      - "Makefile"
+      - ".github/**"
   push:
     branches: [main]
     paths-ignore: ["docs/**", "*.md"]
