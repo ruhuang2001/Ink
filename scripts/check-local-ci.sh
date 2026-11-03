@@ -45,13 +45,28 @@ ensure_action_cache() {
 
   rm -rf "$cache_dir"
   echo "==> Seeding $repo@$ref into act cache"
-  git clone --depth 1 --branch "$ref" "git@github.com:$repo" "$cache_dir" >/dev/null
+  git init -q "$cache_dir"
+  git -C "$cache_dir" remote add origin "git@github.com:$repo"
+  git -C "$cache_dir" fetch --depth 1 origin "$ref"
+  git -C "$cache_dir" checkout --detach FETCH_HEAD >/dev/null
 }
 
-ensure_action_cache actions/checkout v7
-ensure_action_cache actions/setup-node v7
-ensure_action_cache actions/setup-go v7
-ensure_action_cache golangci/golangci-lint-action v9
+# Seed the exact action revisions referenced by the workflows, including newly
+# added setup/cache actions. Floating tags do not populate act's SHA cache paths.
+action_refs=$(python3 - <<'PY_ACTIONS'
+from pathlib import Path
+import re
+refs = set()
+for name in ("web-quality", "server-quality"):
+    refs.update(re.findall(r"uses: ([\w.-]+/[\w.-]+)@([\w.-]+)",
+                           Path(f".github/workflows/{name}.yml").read_text()))
+for repo, ref in sorted(refs):
+    print(repo, ref)
+PY_ACTIONS
+)
+printf '%s\n' "$action_refs" | while read -r repo ref; do
+  ensure_action_cache "$repo" "$ref"
+done
 
 run_act() {
   # macOS VPNs can make act select an address that Docker cannot reach.
