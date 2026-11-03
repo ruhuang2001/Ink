@@ -39,7 +39,7 @@ ensure_action_cache() {
   ref="$2"
   cache_dir="$ACT_CACHE_DIR/$(printf '%s@%s' "$(printf '%s' "$repo" | tr '/' '-')" "$ref")"
 
-  if [ -d "$cache_dir/.git" ]; then
+  if [ "$(git -C "$cache_dir" rev-parse HEAD 2>/dev/null || true)" = "$ref" ]; then
     return
   fi
 
