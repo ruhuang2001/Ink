@@ -73,14 +73,18 @@ jobs:
         with:
           ref: ${{ needs.candidate.outputs.sha }}
           persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          package_json_file: web/package.json
+          run_install: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
       - name: verify frontend candidate
         working-directory: web
         run: |
-          corepack enable
-          corepack prepare pnpm@10.28.0 --activate
           pnpm install --frozen-lockfile
           pnpm audit --audit-level moderate
           pnpm check
@@ -99,30 +103,113 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
       - run: make check-api
-      - run: make lint-api
+
+  server-lint:
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        with:
+          version: v2.11.4
+          working-directory: server
+          args: --default=none --enable=errcheck --enable=govet --enable=ineffassign --enable=staticcheck --disable=unused ./...
+
+  server-vulnerabilities:
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ink-tools/govulncheck-v1.7.0
+          key: govulncheck-v1.7.0-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('server/go.mod') }}
+
       - name: scan candidate binaries for reachable vulnerabilities
-        working-directory: server
-        run: |
-          go version
-          go env GOVERSION GOTOOLCHAIN
-          scan_dir="$(mktemp -d)"
-          trap 'rm -rf "$scan_dir"' EXIT
-          GOBIN="$scan_dir" go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
-          for package in $(go list ./cmd/...); do
-            binary="$scan_dir/${package##*/}"
-            go build -o "$binary" "$package"
-            go version -m "$binary"
-            "$scan_dir/govulncheck" -mode=binary "$binary"
-          done
+        run: bash scripts/scan-go-vulnerabilities.sh
+
+  api-smoke:
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: |
+            server/go.sum
+            server/scripts/smoke_api.sh
       - run: make smoke-api
+
+  database-recovery:
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
       - name: verify core and retained legacy database recovery
         run: bash scripts/check-backup-restore.sh
+
+  encrypted-recovery:
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
       - name: verify encrypted AI configuration and retained file recovery
         run: INK_TEST_BACKUP_RECOVERY=1 go -C server test -race ./internal/platform/store/postgres -run TestBackupRestoresEncryptedSecretsAndRetainedFiles -count=1 -v
+
+  monitoring-contracts:
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
       - run: make check-observability
 
   github-release:
-    needs: [candidate, web-candidate, server-candidate]
+    needs: [candidate, web-candidate, server-candidate, server-lint, server-vulnerabilities, api-smoke, database-recovery, encrypted-recovery, monitoring-contracts]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

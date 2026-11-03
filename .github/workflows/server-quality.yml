@@ -2,17 +2,14 @@ name: server-quality
 
 on:
   pull_request:
+    paths-ignore: ["docs/**", "*.md"]
   push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/server-quality.yml"
-      - "Makefile"
-      - "server/**"
+    branches: [main]
+    paths-ignore: ["docs/**", "*.md"]
 
 concurrency:
-  group: server-quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -45,7 +42,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
-          version: v2.11
+          version: v2.11.4
           working-directory: server
           args: --default=none --enable=errcheck --enable=govet --enable=ineffassign --enable=staticcheck --disable=unused ./...
 
@@ -60,20 +57,13 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
 
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ink-tools/govulncheck-v1.7.0
+          key: govulncheck-v1.7.0-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('server/go.mod') }}
+
       - name: scan reachable Go vulnerabilities
-        working-directory: server
-        run: |
-          go version
-          go env GOVERSION GOTOOLCHAIN
-          scan_dir="$(mktemp -d)"
-          trap 'rm -rf "$scan_dir"' EXIT
-          GOBIN="$scan_dir" go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
-          for package in $(go list ./cmd/...); do
-            binary="$scan_dir/${package##*/}"
-            go build -o "$binary" "$package"
-            go version -m "$binary"
-            "$scan_dir/govulncheck" -mode=binary "$binary"
-          done
+        run: bash scripts/scan-go-vulnerabilities.sh
 
   api-smoke:
     runs-on: ubuntu-latest
@@ -98,10 +88,20 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          cache-dependency-path: |
+            server/go.sum
+            server/scripts/smoke_api.sh
 
       - name: run api smoke test
         env:
           INK_SMOKE_BOOTSTRAP_DB: "0"
           DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ink?sslmode=disable
-        run: make smoke-api
+        run: |
+          set -o pipefail
+          make smoke-api 2>&1 | tee api-smoke.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: api-smoke-${{ github.run_attempt }}
+          path: api-smoke.log
+          retention-days: 7

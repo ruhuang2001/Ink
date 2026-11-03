@@ -1,0 +1,803 @@
+[
+  {
+    "run": 41443523307,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 8.0,
+    "execution": 91.0
+  },
+  {
+    "run": 41443523307,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 11.0,
+    "execution": 90.0
+  },
+  {
+    "run": 41438171271,
+    "workflow": "scorecard",
+    "job": "analysis",
+    "conclusion": "success",
+    "queue": 10.0,
+    "setup": 6.0,
+    "execution": 28.0
+  },
+  {
+    "run": 41438171271,
+    "workflow": "scorecard",
+    "job": "validate-pr",
+    "conclusion": "skipped",
+    "queue": 1.0,
+    "setup": 0,
+    "execution": 0
+  },
+  {
+    "run": 41342486233,
+    "workflow": "github_actions in /. - Update #1671020411",
+    "job": "Dependabot",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 4.0,
+    "execution": 207.0
+  },
+  {
+    "run": 41340728485,
+    "workflow": "go_modules in /server - Update #1670983597",
+    "job": "Dependabot",
+    "conclusion": "success",
+    "queue": 4.0,
+    "setup": 4.0,
+    "execution": 61.0
+  },
+  {
+    "run": 41340205085,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "failure",
+    "queue": 2.0,
+    "setup": 8.0,
+    "execution": 1.0
+  },
+  {
+    "run": 41340205083,
+    "workflow": "server-quality",
+    "job": "server-check",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 8.0,
+    "execution": 15.0
+  },
+  {
+    "run": 41340205083,
+    "workflow": "server-quality",
+    "job": "golangci-lint",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 10.0,
+    "execution": 18.0
+  },
+  {
+    "run": 41340205083,
+    "workflow": "server-quality",
+    "job": "govulncheck",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 11.0,
+    "execution": 36.0
+  },
+  {
+    "run": 41340205083,
+    "workflow": "server-quality",
+    "job": "api-smoke",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 24.0,
+    "execution": 50.0
+  },
+  {
+    "run": 41340205078,
+    "workflow": "dependency-review",
+    "job": "dependency-review",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 5.0,
+    "execution": 2.0
+  },
+  {
+    "run": 41340205058,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 8.0,
+    "execution": 59.0
+  },
+  {
+    "run": 41340205058,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 9.0,
+    "execution": 48.0
+  },
+  {
+    "run": 41339970047,
+    "workflow": "npm_and_yarn in /web - Update #1670957724",
+    "job": "Dependabot",
+    "conclusion": "success",
+    "queue": 4.0,
+    "setup": 5.0,
+    "execution": 148.0
+  },
+  {
+    "run": 40834989861,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 9.0,
+    "execution": 21.0
+  },
+  {
+    "run": 40834989739,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 6.0,
+    "execution": 90.0
+  },
+  {
+    "run": 40834989739,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 7.0,
+    "execution": 79.0
+  },
+  {
+    "run": 40830102339,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 7.0,
+    "execution": 93.0
+  },
+  {
+    "run": 40830102339,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 7.0,
+    "execution": 87.0
+  },
+  {
+    "run": 40830102336,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 8.0,
+    "execution": 19.0
+  },
+  {
+    "run": 40800910293,
+    "workflow": "server-quality",
+    "job": "govulncheck",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 9.0,
+    "execution": 34.0
+  },
+  {
+    "run": 40800910293,
+    "workflow": "server-quality",
+    "job": "api-smoke",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 19.0,
+    "execution": 80.0
+  },
+  {
+    "run": 40800910293,
+    "workflow": "server-quality",
+    "job": "server-check",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 8.0,
+    "execution": 18.0
+  },
+  {
+    "run": 40800910293,
+    "workflow": "server-quality",
+    "job": "golangci-lint",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 9.0,
+    "execution": 20.0
+  },
+  {
+    "run": 40800910254,
+    "workflow": "dependency-review",
+    "job": "dependency-review",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 5.0,
+    "execution": 1.0
+  },
+  {
+    "run": 40800910251,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 8.0,
+    "execution": 69.0
+  },
+  {
+    "run": 40800910251,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 7.0,
+    "execution": 60.0
+  },
+  {
+    "run": 40800910249,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 12.0,
+    "execution": 26.0
+  },
+  {
+    "run": 40800910208,
+    "workflow": "observability",
+    "job": "monitoring-contracts",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 8.0,
+    "execution": 46.0
+  },
+  {
+    "run": 40691568324,
+    "workflow": "dependency-review",
+    "job": "dependency-review",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 6.0,
+    "execution": 1.0
+  },
+  {
+    "run": 40691568320,
+    "workflow": "server-quality",
+    "job": "server-check",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 15.0,
+    "execution": 12.0
+  },
+  {
+    "run": 40691568320,
+    "workflow": "server-quality",
+    "job": "api-smoke",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 28.0,
+    "execution": 57.0
+  },
+  {
+    "run": 40691568320,
+    "workflow": "server-quality",
+    "job": "golangci-lint",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 32.0,
+    "execution": 26.0
+  },
+  {
+    "run": 40691568320,
+    "workflow": "server-quality",
+    "job": "govulncheck",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 9.0,
+    "execution": 99.0
+  },
+  {
+    "run": 40691568316,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 9.0,
+    "execution": 26.0
+  },
+  {
+    "run": 40691568237,
+    "workflow": "observability",
+    "job": "monitoring-contracts",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 7.0,
+    "execution": 30.0
+  },
+  {
+    "run": 40691568226,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 9.0,
+    "execution": 64.0
+  },
+  {
+    "run": 40691568226,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 7.0,
+    "execution": 72.0
+  },
+  {
+    "run": 40689283005,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 7.0,
+    "execution": 17.0
+  },
+  {
+    "run": 40689282985,
+    "workflow": "dependency-review",
+    "job": "dependency-review",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 9.0,
+    "execution": 2.0
+  },
+  {
+    "run": 40689282963,
+    "workflow": "server-quality",
+    "job": "api-smoke",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 35.0,
+    "execution": 66.0
+  },
+  {
+    "run": 40689282963,
+    "workflow": "server-quality",
+    "job": "server-check",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 20.0,
+    "execution": 13.0
+  },
+  {
+    "run": 40689282963,
+    "workflow": "server-quality",
+    "job": "govulncheck",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 11.0,
+    "execution": 37.0
+  },
+  {
+    "run": 40689282963,
+    "workflow": "server-quality",
+    "job": "golangci-lint",
+    "conclusion": "success",
+    "queue": 4.0,
+    "setup": 21.0,
+    "execution": 4.0
+  },
+  {
+    "run": 40689282937,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 7.0,
+    "execution": 69.0
+  },
+  {
+    "run": 40689282937,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 6.0,
+    "execution": 62.0
+  },
+  {
+    "run": 40689282905,
+    "workflow": "observability",
+    "job": "monitoring-contracts",
+    "conclusion": "success",
+    "queue": 4.0,
+    "setup": 19.0,
+    "execution": 35.0
+  },
+  {
+    "run": 40304286766,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 6.0,
+    "execution": 87.0
+  },
+  {
+    "run": 40304286766,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 8.0,
+    "execution": 81.0
+  },
+  {
+    "run": 40298388350,
+    "workflow": "scorecard",
+    "job": "analysis",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 7.0,
+    "execution": 32.0
+  },
+  {
+    "run": 40298388350,
+    "workflow": "scorecard",
+    "job": "validate-pr",
+    "conclusion": "skipped",
+    "queue": 0,
+    "setup": 0,
+    "execution": 0
+  },
+  {
+    "run": 40256038713,
+    "workflow": "scorecard",
+    "job": "analysis",
+    "conclusion": "success",
+    "queue": 4.0,
+    "setup": 7.0,
+    "execution": 33.0
+  },
+  {
+    "run": 40256038713,
+    "workflow": "scorecard",
+    "job": "validate-pr",
+    "conclusion": "skipped",
+    "queue": 2.0,
+    "setup": 0,
+    "execution": 0
+  },
+  {
+    "run": 40255999659,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 8.0,
+    "execution": 60.0
+  },
+  {
+    "run": 40255999659,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 4.0,
+    "execution": 88.0
+  },
+  {
+    "run": 40255993751,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "success",
+    "queue": 6.0,
+    "setup": 10.0,
+    "execution": 16.0
+  },
+  {
+    "run": 40255993741,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "cancelled",
+    "queue": 3.0,
+    "setup": 2.0,
+    "execution": 0
+  },
+  {
+    "run": 40255993741,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "cancelled",
+    "queue": 3.0,
+    "setup": 2.0,
+    "execution": 0
+  },
+  {
+    "run": 40255988128,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "cancelled",
+    "queue": 2.0,
+    "setup": 6.0,
+    "execution": 0
+  },
+  {
+    "run": 40255988112,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "cancelled",
+    "queue": 2.0,
+    "setup": 5.0,
+    "execution": 0
+  },
+  {
+    "run": 40255988112,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "cancelled",
+    "queue": 2.0,
+    "setup": 4.0,
+    "execution": 0
+  },
+  {
+    "run": 40255795925,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "success",
+    "queue": 25.0,
+    "setup": 9.0,
+    "execution": 26.0
+  },
+  {
+    "run": 40255795901,
+    "workflow": "dependency-review",
+    "job": "dependency-review",
+    "conclusion": "success",
+    "queue": 23.0,
+    "setup": 7.0,
+    "execution": 1.0
+  },
+  {
+    "run": 40255795888,
+    "workflow": "server-quality",
+    "job": "govulncheck",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 15.0,
+    "execution": 10.0
+  },
+  {
+    "run": 40255795888,
+    "workflow": "server-quality",
+    "job": "server-check",
+    "conclusion": "success",
+    "queue": 23.0,
+    "setup": 15.0,
+    "execution": 12.0
+  },
+  {
+    "run": 40255795888,
+    "workflow": "server-quality",
+    "job": "golangci-lint",
+    "conclusion": "success",
+    "queue": 28.0,
+    "setup": 20.0,
+    "execution": 3.0
+  },
+  {
+    "run": 40255795888,
+    "workflow": "server-quality",
+    "job": "api-smoke",
+    "conclusion": "success",
+    "queue": 29.0,
+    "setup": 33.0,
+    "execution": 46.0
+  },
+  {
+    "run": 40255795864,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 9.0,
+    "execution": 62.0
+  },
+  {
+    "run": 40255795864,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 25.0,
+    "setup": 6.0,
+    "execution": 67.0
+  },
+  {
+    "run": 40255795844,
+    "workflow": "scorecard",
+    "job": "validate-pr",
+    "conclusion": "success",
+    "queue": 11.0,
+    "setup": 5.0,
+    "execution": 11.0
+  },
+  {
+    "run": 40255795844,
+    "workflow": "scorecard",
+    "job": "analysis",
+    "conclusion": "skipped",
+    "queue": 1.0,
+    "setup": 0,
+    "execution": 0
+  },
+  {
+    "run": 40255795814,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 8.0,
+    "execution": 20.0
+  },
+  {
+    "run": 40255795810,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 7.0,
+    "setup": 7.0,
+    "execution": 68.0
+  },
+  {
+    "run": 40255795810,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 28.0,
+    "setup": 6.0,
+    "execution": 56.0
+  },
+  {
+    "run": 40255795760,
+    "workflow": "dependency-review",
+    "job": "dependency-review",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 5.0,
+    "execution": 3.0
+  },
+  {
+    "run": 40255795749,
+    "workflow": "server-quality",
+    "job": "server-check",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 15.0,
+    "execution": 10.0
+  },
+  {
+    "run": 40255795749,
+    "workflow": "server-quality",
+    "job": "api-smoke",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 35.0,
+    "execution": 47.0
+  },
+  {
+    "run": 40255795749,
+    "workflow": "server-quality",
+    "job": "govulncheck",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 20.0,
+    "execution": 11.0
+  },
+  {
+    "run": 40255795749,
+    "workflow": "server-quality",
+    "job": "golangci-lint",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 18.0,
+    "execution": 3.0
+  },
+  {
+    "run": 40255792315,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 10.0,
+    "execution": 26.0
+  },
+  {
+    "run": 40255792268,
+    "workflow": "codeql",
+    "job": "analyze-javascript-typescript",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 5.0,
+    "execution": 58.0
+  },
+  {
+    "run": 40255792268,
+    "workflow": "codeql",
+    "job": "analyze-go",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 8.0,
+    "execution": 68.0
+  },
+  {
+    "run": 40255792247,
+    "workflow": "dependency-review",
+    "job": "dependency-review",
+    "conclusion": "success",
+    "queue": 2.0,
+    "setup": 5.0,
+    "execution": 1.0
+  },
+  {
+    "run": 40255792219,
+    "workflow": "server-quality",
+    "job": "golangci-lint",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 19.0,
+    "execution": 3.0
+  },
+  {
+    "run": 40255792219,
+    "workflow": "server-quality",
+    "job": "govulncheck",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 15.0,
+    "execution": 11.0
+  },
+  {
+    "run": 40255792219,
+    "workflow": "server-quality",
+    "job": "server-check",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 14.0,
+    "execution": 10.0
+  },
+  {
+    "run": 40255792219,
+    "workflow": "server-quality",
+    "job": "api-smoke",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 30.0,
+    "execution": 49.0
+  },
+  {
+    "run": 40255775095,
+    "workflow": "web-quality",
+    "job": "web-quality",
+    "conclusion": "success",
+    "queue": 3.0,
+    "setup": 8.0,
+    "execution": 25.0
+  }
+]
