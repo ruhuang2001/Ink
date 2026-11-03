@@ -2,6 +2,27 @@
 set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 INK_GRAFANA_ADMIN_PASSWORD=configuration-validation-only docker compose -f "$root/docker-compose.observability.yml" --profile tracing --profile logging config --quiet
+# Pull independent validator images concurrently on cold runners. Reuse local
+# images; do not store multi-GB Docker layers in the Actions cache budget.
+pull_pids=()
+for image in \
+  prom/prometheus:v3.5.0 \
+  prom/alertmanager:v0.28.1 \
+  prom/blackbox-exporter:v0.27.0 \
+  otel/opentelemetry-collector-contrib:0.135.0 \
+  grafana/loki:3.5.5 \
+  grafana/alloy:v1.10.2; do
+  (docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image") &
+  pull_pids+=("$!")
+done
+pull_failed=0
+for pid in "${pull_pids[@]}"; do
+  wait "$pid" || pull_failed=1
+done
+if [ "$pull_failed" -ne 0 ]; then
+  echo "A monitoring validator image could not be pulled" >&2
+  exit 1
+fi
 docker run --rm -v "$root/monitoring/prometheus:/etc/prometheus:ro" --entrypoint /bin/promtool prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
 docker run --rm -v "$root/monitoring/prometheus:/etc/prometheus:ro" --entrypoint /bin/promtool prom/prometheus:v3.5.0 test rules /etc/prometheus/rules.test.yml
 docker run --rm -v "$root/monitoring/alertmanager.yml:/etc/alertmanager.yml:ro" --entrypoint /bin/amtool prom/alertmanager:v0.28.1 check-config /etc/alertmanager.yml

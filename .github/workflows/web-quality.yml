@@ -2,19 +2,20 @@ name: web-quality
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
     paths:
-      - ".github/workflows/web-quality.yml"
-      - ".github/workflows/dependency-review.yml"
-      - ".github/dependabot.yml"
-      - "Makefile"
       - "web/**"
+      - "Makefile"
+      - ".github/workflows/web-quality.yml"
+      - ".github/workflows/release.yml"
+      - "!**/*.md"
+      - "!**/docs/**"
+  push:
+    branches: [main]
+    paths-ignore: ["**/docs/**", "**/*.md"]
 
 concurrency:
-  group: web-quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -31,15 +32,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          package_json_file: web/package.json
+          run_install: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
-
-      - name: setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.28.0 --activate
-          pnpm --version
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --audit-level moderate

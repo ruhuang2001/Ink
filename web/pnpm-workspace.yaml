@@ -7,3 +7,5 @@ overrides:
   tinypool: 2.1.2
   undici: 7.30.1
   yaml: 2.8.3
+  js-beautify>glob: 14.0.2
+  editorconfig>minimatch: 11.0.1
