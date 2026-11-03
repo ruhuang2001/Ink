@@ -6,10 +6,13 @@ on:
       - "server/**"
       - "scripts/**"
       - "Makefile"
-      - ".github/**"
+      - ".github/workflows/server-quality.yml"
+      - ".github/workflows/release.yml"
+      - "!**/*.md"
+      - "!**/docs/**"
   push:
     branches: [main]
-    paths-ignore: ["docs/**", "*.md"]
+    paths-ignore: ["**/docs/**", "**/*.md"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}

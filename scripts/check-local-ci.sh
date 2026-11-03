@@ -53,17 +53,15 @@ ensure_action_cache() {
 
 # Seed the exact action revisions referenced by the workflows, including newly
 # added setup/cache actions. Floating tags do not populate act's SHA cache paths.
-action_refs=$(python3 - <<'PY_ACTIONS'
-from pathlib import Path
-import re
-refs = set()
-for name in ("web-quality", "server-quality"):
-    refs.update(re.findall(r"uses: ([\w.-]+/[\w.-]+)@([\w.-]+)",
-                           Path(f".github/workflows/{name}.yml").read_text()))
-for repo, ref in sorted(refs):
-    print(repo, ref)
-PY_ACTIONS
-)
+action_refs=$(awk '
+  /^  [[:alnum:]_-]+:$/ { job = $1; sub(/:$/, "", job) }
+  (job == "web-quality" || job == "server-check" || job == "golangci-lint") &&
+      (($1 == "-" && $2 == "uses:") || $1 == "uses:") {
+    ref = ($1 == "uses:" ? $2 : $3)
+    split(ref, action, "@")
+    print action[1], action[2]
+  }
+' .github/workflows/web-quality.yml .github/workflows/server-quality.yml | sort -u)
 printf '%s\n' "$action_refs" | while read -r repo ref; do
   ensure_action_cache "$repo" "$ref"
 done

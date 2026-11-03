@@ -7,10 +7,13 @@ on:
       - "docker-compose.observability.yml"
       - "scripts/**"
       - "Makefile"
-      - ".github/**"
+      - ".github/workflows/observability.yml"
+      - ".github/workflows/release.yml"
+      - "!**/*.md"
+      - "!**/docs/**"
   push:
     branches: [main]
-    paths-ignore: ["docs/**", "*.md"]
+    paths-ignore: ["**/docs/**", "**/*.md"]
 
 permissions:
   contents: read
