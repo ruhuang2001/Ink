@@ -31,8 +31,7 @@ system Chinese fonts instead of downloading a full CJK web font.
 - `server/internal`: domain services and platform adapters.
 - `server/internal/platform/store/postgres`: PostgreSQL repositories.
 - `server/migrations`: ordered SQL migrations.
-- `server/testdata/plugins`: retained legacy file fixtures for recovery checks.
-- `docs/PLUGIN_SPEC.md`: historical plugin contract, unavailable in 1.0.
+- `server/testdata`: shared SQL fixtures for database integration tests.
 
 ## Runtime components
 

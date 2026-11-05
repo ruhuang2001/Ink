@@ -62,7 +62,7 @@ Default smoke runs use an isolated temporary PostgreSQL container and remove it 
 - feedback: printable feedback submission for the admin workflow
 - preview: server-side 384px PNG rendering without creating a print job
 
-Structured content blocks remain supported by preview/rendering; they are part of the core content model and do not require plugin execution. The [historical plugin specification](../docs/PLUGIN_SPEC.md) is archived reference material, not an available 1.0 endpoint contract.
+Structured content blocks remain supported by preview/rendering; they are part of the core content model and do not require plugin execution.
 
 Set `WORKERS_ENABLED=false` for isolated recovery checks to stop print-status synchronization. Manual API operations remain enabled; also clear provider credentials and isolate outbound networking as described in [Backup and restore](../docs/BACKUP_RESTORE.md#safe-recovery-api-checks).
 

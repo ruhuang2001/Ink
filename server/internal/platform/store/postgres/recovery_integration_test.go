@@ -105,16 +105,24 @@ func TestBackupRestoresEncryptedSecretsAndRetainedFiles(t *testing.T) {
 	}
 	root := t.TempDir()
 	installed := filepath.Join(root, "installed")
-	if err := os.CopyFS(installed, os.DirFS("../../../../testdata/plugins/python-hello-plugin")); err != nil {
-		t.Fatal("copy trusted source plugin fixture")
+	manifest := []byte(`{"schemaVersion":2,"kind":"source","pluginKey":"recovery-source","name":"Synthetic retained source","version":"1.0.0","runtime":{"type":"python"}}`)
+	retainedFiles := map[string]string{
+		"ink-plugin.json":     string(manifest),
+		"fetch.py":            "# Synthetic retained file; never executed.\nprint('retained fixture')\n",
+		"nested/archival.txt": "archival payload\n",
 	}
-	manifest, err := os.ReadFile(filepath.Join(installed, "ink-plugin.json"))
-	if err != nil {
-		t.Fatal("read trusted fixture manifest")
+	for name, content := range retainedFiles {
+		path := filepath.Join(installed, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal("create synthetic retained file directory")
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal("write synthetic retained file")
+		}
 	}
 	if _, err := sourceDB.Exec(ctx, `insert into plugin_installations
 		(id,plugin_key,source_type,display_name,version,runtime_type,manifest_json,current_path,status,created_at,updated_at)
-		values ('recovery-plugin','python-hello-source','upload','Retained source','1.0.0','python',$1,$2,'disabled',now(),now())`, manifest, installed); err != nil {
+		values ('recovery-plugin','recovery-source','upload','Retained source','1.0.0','python',$1,$2,'disabled',now(),now())`, manifest, installed); err != nil {
 		t.Fatal("store synthetic plugin installation")
 	}
 	secretJSON, err := json.Marshal(map[string]string{"apiToken": pluginSecret})
