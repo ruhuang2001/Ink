@@ -44,7 +44,10 @@ Use Node.js 22, pnpm 10 (pinned as `pnpm@10.28.0`), and Go 1.26.10, as documente
 [`CONTRIBUTING.md`](CONTRIBUTING.md) and `server/go.mod`.
 
 Git hooks are installed by `pnpm install`: pre-commit runs `lint-staged` over staged files,
-and pre-push runs `make check-local-ci`, which needs `act` and a running Docker daemon.
+and pre-push runs [`scripts/check-push.sh`](scripts/check-push.sh), which runs the web,
+server and Go lint checks natively for whichever paths changed since `origin/main`. Changes
+that touch `.github/workflows/` fall back to the full `make check-local-ci` run, which needs
+`act` and a running Docker daemon.
 
 ## Coding Style & Naming Conventions
 

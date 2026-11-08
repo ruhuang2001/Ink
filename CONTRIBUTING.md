@@ -192,7 +192,7 @@ Please keep commits readable and consistent with the existing project history.
 
 Before opening a pull request, run the checks relevant to your change.
 
-Run `make check-local-ci` before a commit or push; Docker and `act` are required. It runs the web, server, and Go lint jobs used in CI, followed by the isolated API smoke test. Do not bypass the repository hooks. For database/recovery changes, also run `bash scripts/check-backup-restore.sh`. Release candidates run additional checks against a fixed commit as described in the [release procedure](docs/SELF_HOSTING.md#release-candidates-and-version-policy).
+The pre-push hook runs the checks for the paths you changed: web changes get `make check-web`, server changes get `make check-api` plus `make lint-api`, and auth, persistence, bootstrap or printing changes also run the isolated API smoke test. Pushes that touch `.github/workflows/` fall back to `make check-local-ci`, which requires Docker and `act` and runs the web, server, and Go lint jobs used in CI. You can run the full emulation yourself with `make check-local-ci` before a release, and skip the smoke test with `INK_SKIP_SMOKE=1`. Do not bypass the repository hooks. For database/recovery changes, also run `bash scripts/check-backup-restore.sh`. Release candidates run additional checks against a fixed commit as described in the [release procedure](docs/SELF_HOSTING.md#release-candidates-and-version-policy).
 
 ## License
 
