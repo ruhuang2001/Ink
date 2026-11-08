@@ -26,10 +26,10 @@ while the confirmed reload is in progress. Normal
 network errors offer **Retry**, using the existing revision. There is no
 automatic content merge or forced overwrite.
 
-Deployment requires migration `010_workspace_revision.sql` and the frontend
-that carries revision. Apply migrations before starting the updated API, then
-deploy the frontend with it. Older clients without revision receive 428 rather
-than silently overwriting a newer snapshot; they must reload the updated web
+Deployment requires the database migrations to be applied (`ink-migrate up`) and the
+frontend that carries revision. Apply migrations before starting the updated API, then
+deploy the frontend with it. Older clients without revision receive 428 rather than
+silently overwriting a newer snapshot; they must reload the updated web
 app. Existing snapshot content is preserved by the migration.
 
 ## Local recovery and retained legacy data

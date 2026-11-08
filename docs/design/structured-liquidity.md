@@ -28,7 +28,7 @@ Captured against the local Vite app and development API. Desktop viewport: 1440Ã
 | Page / state | Screenshot |
 | --- | --- |
 | Theme settings | [Structured settings](screenshots/structured-settings.png) |
-| Conversations | [Structured conversations](screenshots/structured-conversations.png) |
+| Conversations | [Structured conversations](../../assets/screenshot.png) |
 | Prints | [Structured prints](screenshots/structured-prints.png) |
 | Print preview | [Structured preview](screenshots/structured-preview.png) |
 | Devices | [Structured devices](screenshots/structured-devices.png) |

@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/design/screenshots/structured-conversations.png" alt="Ink conversation view" width="880" />
+  <img src="assets/screenshot.png" alt="Ink conversation view" width="880" />
 </p>
 
 Ink is a small web app you run yourself. You draft a note in a chat-style editor, ask an

@@ -18,7 +18,7 @@ You can help by:
 
 - `web/` contains the Vue 3 + TypeScript frontend built with Vite.
 - `server/` contains the Go API, PostgreSQL repositories, migrations, and print-status synchronization.
-- `docs/` contains self-hosting, architecture, API and archived plugin documentation.
+- `docs/` contains self-hosting, architecture, API and operations documentation.
 - `Makefile` provides the quickest way to run common local commands.
 
 ## Before you start
