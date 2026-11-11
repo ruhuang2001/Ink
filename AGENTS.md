@@ -40,7 +40,7 @@ Run common workflows from the repo root with `make`.
 - `make check-local-ci`: run the web and server CI jobs locally via `act`, then the smoke test.
 - `make check-observability`: validate the optional monitoring stack configuration.
 
-Use Node.js 22, pnpm 10 (pinned as `pnpm@10.28.0`), and Go 1.26.10, as documented in
+Use Node.js 22, pnpm 10 (pinned as `pnpm@10.28.0`), and Go 1.26.11, as documented in
 [`CONTRIBUTING.md`](CONTRIBUTING.md) and `server/go.mod`.
 
 Git hooks are installed by `pnpm install`: pre-commit runs `lint-staged` over staged files,

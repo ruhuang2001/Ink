@@ -1,6 +1,6 @@
 module github.com/ruhuang/ink/server
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/felixge/httpsnoop v1.1.0

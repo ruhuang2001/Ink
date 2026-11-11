@@ -64,7 +64,7 @@ The API owns authentication, persistence, PNG rendering and all provider calls.
 
 ## Quick start
 
-Requirements: **Node.js 22**, **pnpm 10**, **Go 1.26.10+** and **Docker** (for the
+Requirements: **Node.js 22**, **pnpm 10**, **Go 1.26.11+** and **Docker** (for the
 PostgreSQL 16 development container). A Memobird Open Platform access key is needed only
 for physical printing; everything else runs without one.
 
