@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 
 const props = defineProps<{
@@ -9,173 +9,183 @@ const props = defineProps<{
   size?: "compact" | "wide";
 }>();
 
-const { t } = useI18n();
-// Keep dialogs outside the animated page, which creates a containing block for fixed elements.
-const portalTarget = ref<Element | null>(null);
-onMounted(() => {
-  portalTarget.value = document.querySelector(".ink-page");
-});
-
 const emit = defineEmits<{
   close: [];
 }>();
 
-const dialogRef = ref<HTMLElement | null>(null);
-const closeButtonRef = ref<HTMLButtonElement | null>(null);
-let previousActiveElement: HTMLElement | null = null;
+const { t } = useI18n();
+const dialogRef = ref<HTMLDialogElement | null>(null);
 
-function getFocusableElements() {
-  if (!dialogRef.value) {
-    return [];
-  }
-
-  return Array.from(
-    dialogRef.value.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ),
-  ).filter((element) => !element.hasAttribute("hidden") && element.tabIndex !== -1);
-}
-
-function restoreFocus() {
-  previousActiveElement?.focus();
-  previousActiveElement = null;
-}
-
-function trapFocus(event: KeyboardEvent) {
-  const focusableElements = getFocusableElements();
-  if (focusableElements.length === 0) {
-    event.preventDefault();
-    dialogRef.value?.focus();
+// A modal dialog opens in the browser's top layer. That layer is not clipped by
+// any ancestor transform, so the dialog no longer needs a portal to escape the
+// animated page, and focus trapping, background inertness, Escape, and focus
+// restoration all come from the platform.
+function syncOpen(open: boolean) {
+  const dialog = dialogRef.value;
+  if (!dialog) {
     return;
   }
 
-  const first = focusableElements[0];
-  const last = focusableElements.at(-1);
-  if (!last) {
+  if (open) {
+    if (!dialog.open) {
+      dialog.showModal();
+    }
     return;
   }
 
-  const activeElement = document.activeElement;
-  if (event.shiftKey && activeElement === first) {
-    event.preventDefault();
-    last.focus();
-    return;
-  }
-
-  if (!event.shiftKey && activeElement === last) {
-    event.preventDefault();
-    first.focus();
+  if (dialog.open) {
+    dialog.close();
   }
 }
 
-function handleKeydown(event: KeyboardEvent) {
-  if (!props.open) {
-    return;
-  }
+// The browser closes a modal on Escape by itself. Closing through the owner
+// instead keeps its state and the DOM in step, so the dialog cannot be left
+// closed while the app still believes it is open.
+function handleCancel(event: Event) {
+  event.preventDefault();
+  emit("close");
+}
 
-  const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
-  const topDialog = dialogs.item(dialogs.length - 1);
-  if (topDialog && topDialog !== dialogRef.value) return;
-
-  if (event.key === "Escape") {
-    event.preventDefault();
+// ::backdrop is not a node, so a click outside the panel lands on the dialog
+// element itself. Anything inside the panel targets the panel or its children.
+function handlePointerDown(event: PointerEvent) {
+  if (event.target === dialogRef.value) {
     emit("close");
-    return;
-  }
-
-  if (event.key === "Tab") {
-    trapFocus(event);
   }
 }
 
-watch(
-  () => props.open,
-  async (open, wasOpen) => {
-    if (typeof document === "undefined") {
-      return;
-    }
+watch(() => props.open, syncOpen, { flush: "post" });
 
-    if (open) {
-      previousActiveElement =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      document.addEventListener("keydown", handleKeydown);
-      await nextTick();
-      closeButtonRef.value?.focus();
-      return;
-    }
-
-    document.removeEventListener("keydown", handleKeydown);
-    if (wasOpen) {
-      restoreFocus();
-    }
-  },
-  { immediate: true },
-);
+// A watcher cannot apply the initial state: a dialog that mounts already open
+// has no element to call showModal() on until mount finishes.
+onMounted(() => syncOpen(props.open));
 
 onBeforeUnmount(() => {
-  if (typeof document !== "undefined") {
-    document.removeEventListener("keydown", handleKeydown);
+  if (dialogRef.value?.open) {
+    dialogRef.value.close();
   }
-
-  restoreFocus();
 });
 </script>
 
 <template>
-  <Teleport :to="portalTarget ?? 'body'">
-    <Transition name="dialog-fade">
-      <div
-        v-if="open"
-        class="fixed inset-0 z-50 flex items-end justify-center bg-stone-950/35 px-0 py-0 backdrop-blur-sm sm:px-4 sm:py-6"
-        :class="{ 'sm:items-center': size === 'wide' }"
-        @click.self="emit('close')"
+  <dialog
+    ref="dialogRef"
+    class="app-dialog"
+    :aria-label="title"
+    @cancel="handleCancel"
+    @pointerdown="handlePointerDown"
+  >
+    <section
+      data-app-dialog-panel
+      data-impeccable-ignore="hard-offset-shadow"
+      class="max-h-[calc(100dvh-env(safe-area-inset-top)-0.5rem)] w-full overflow-y-auto rounded-t-[1.75rem] border border-stone-200 bg-[var(--app-surface)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl shadow-stone-900/10 sm:max-h-[min(42rem,calc(100dvh-3rem))] sm:rounded-3xl"
+      :class="size === 'wide' ? 'preview-dialog sm:max-w-xl' : 'sm:max-w-md sm:p-6'"
+    >
+      <button
+        v-if="size === 'wide'"
+        type="button"
+        class="preview-dialog-close"
+        :aria-label="t('common.actions.closeWindow')"
+        @click="emit('close')"
       >
-        <section
-          ref="dialogRef"
-          data-impeccable-ignore="hard-offset-shadow"
-          class="max-h-[calc(100dvh-env(safe-area-inset-top)-0.5rem)] w-full overflow-y-auto rounded-t-[1.75rem] border border-stone-200 bg-[var(--app-surface)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl shadow-stone-900/10 sm:max-h-[min(42rem,calc(100dvh-3rem))] sm:rounded-3xl"
-          :class="size === 'wide' ? 'preview-dialog sm:max-w-xl' : 'sm:max-w-md sm:p-6'"
-          role="dialog"
-          aria-modal="true"
-          :aria-label="title"
-          tabindex="-1"
+        ×
+      </button>
+      <div v-else class="flex items-start justify-between gap-4">
+        <div class="min-w-0">
+          <h3 class="text-lg font-semibold text-stone-900">{{ title }}</h3>
+          <p v-if="description" class="mt-1 text-sm text-stone-600">{{ description }}</p>
+        </div>
+        <button
+          type="button"
+          class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-600 transition-colors hover:border-stone-300 hover:text-stone-900"
+          :aria-label="t('common.actions.closeWindow')"
+          @click="emit('close')"
         >
-          <button
-            v-if="size === 'wide'"
-            ref="closeButtonRef"
-            type="button"
-            class="preview-dialog-close"
-            :aria-label="t('common.actions.closeWindow')"
-            @click="emit('close')"
-          >
-            ×
-          </button>
-          <div v-else class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <h3 class="text-lg font-semibold text-stone-900">{{ title }}</h3>
-              <p v-if="description" class="mt-1 text-sm text-stone-600">{{ description }}</p>
-            </div>
-            <button
-              ref="closeButtonRef"
-              type="button"
-              class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-600 transition-colors hover:border-stone-300 hover:text-stone-900"
-              :aria-label="t('common.actions.closeWindow')"
-              @click="emit('close')"
-            >
-              ×
-            </button>
-          </div>
-
-          <div :class="size === 'wide' ? 'preview-dialog-body' : 'mt-5'">
-            <slot />
-          </div>
-        </section>
+          ×
+        </button>
       </div>
-    </Transition>
-  </Teleport>
+
+      <div :class="size === 'wide' ? 'preview-dialog-body' : 'mt-5'">
+        <slot />
+      </div>
+    </section>
+  </dialog>
 </template>
 
 <style scoped>
+.app-dialog {
+  /* The dialog is a full-screen frame; the panel inside it is the card. */
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0;
+  transition:
+    opacity 180ms var(--ease-out-quart),
+    display 180ms allow-discrete,
+    overlay 180ms allow-discrete;
+}
+
+.app-dialog[open] {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  opacity: 1;
+}
+
+/* Starting from transparent lets the entry fade in even though the dialog is
+   only displayed once it is open. */
+@starting-style {
+  .app-dialog[open] {
+    opacity: 0;
+  }
+}
+
+.app-dialog::backdrop {
+  background: var(--app-overlay);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition:
+    opacity 180ms var(--ease-out-quart),
+    display 180ms allow-discrete,
+    overlay 180ms allow-discrete;
+}
+
+.app-dialog[open]::backdrop {
+  opacity: 1;
+}
+
+@starting-style {
+  .app-dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+@media (min-width: 40rem) {
+  .app-dialog[open] {
+    align-items: center;
+    padding: 1.5rem 1rem;
+  }
+}
+
+.app-dialog > section {
+  margin-inline: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-dialog,
+  .app-dialog::backdrop {
+    transition-duration: 0.01ms;
+  }
+}
+
 .preview-dialog {
   position: relative;
   padding: 0;

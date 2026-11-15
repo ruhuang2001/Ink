@@ -5,52 +5,88 @@ import { nextTick } from "vue";
 import AppDialog from "@/components/AppDialog.vue";
 
 afterEach(() => {
-  document.querySelector(".ink-page")?.remove();
+  document.body.innerHTML = "";
 });
 
-it("places nested dialogs outside the animated page and closes only the top dialog on Escape", async () => {
-  const shell = document.createElement("div");
-  shell.className = "ink-page";
-  const page = document.createElement("main");
-  page.style.transform = "translateY(0)";
-  shell.append(page);
-  document.body.append(shell);
-  const editor = mount(AppDialog, { attachTo: page, props: { open: true, title: "编辑" } });
+it("opens each dialog as a modal element and nests content inside it", async () => {
+  const editor = mount(AppDialog, {
+    attachTo: document.body,
+    props: { open: true, title: "编辑" },
+  });
   const preview = mount(AppDialog, {
-    attachTo: page,
+    attachTo: document.body,
     props: { open: true, title: "预览", size: "wide" },
     slots: { default: '<button id="last-preview-control">缩放</button>' },
   });
   await nextTick();
-  const dialogs = shell.querySelectorAll('[role="dialog"]');
-  expect(dialogs.length).toBe(2);
-  expect(page.querySelector('[role="dialog"]')).toBeNull();
-  const close = dialogs[1]!.querySelector("button")!;
-  expect(document.activeElement).toBe(close);
-  document.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, cancelable: true }),
-  );
-  expect(document.activeElement?.id).toBe("last-preview-control");
-  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
-  expect(preview.emitted("close")).toHaveLength(1);
-  expect(editor.emitted("close")).toBeUndefined();
+
+  const dialogs = document.querySelectorAll("dialog");
+  expect(dialogs).toHaveLength(2);
+  expect([...dialogs].map((dialog) => dialog.open)).toEqual([true, true]);
+
+  // The top-layer modal needs no portal: the rendered tree stays inside the
+  // component that opened it, and content is reachable inside the dialog.
+  const previewDialog = dialogs[1]!;
+  expect(previewDialog.contains(document.querySelector("#last-preview-control"))).toBe(true);
+  expect(previewDialog.getAttribute("aria-label")).toBe("预览");
+
   preview.unmount();
   editor.unmount();
 });
 
-it("teleports to body without a shell and restores focus after closing", async () => {
-  const host = document.createElement("div");
-  host.style.transform = "translateY(0)";
-  const trigger = document.createElement("button");
-  host.append(trigger);
-  document.body.append(host);
-  trigger.focus();
-  const wrapper = mount(AppDialog, { attachTo: host, props: { open: true, title: "Fallback" } });
+it("reports a close request from the browser and leaves the element to the owner", async () => {
+  const wrapper = mount(AppDialog, {
+    attachTo: document.body,
+    props: { open: true, title: "编辑" },
+  });
   await nextTick();
-  expect(host.querySelector('[role="dialog"]')).toBeNull();
-  expect(document.body.querySelector('[aria-label="Fallback"]')).not.toBeNull();
-  await wrapper.setProps({ open: false });
-  expect(document.activeElement).toBe(trigger);
+  const dialog = document.querySelector("dialog") as HTMLDialogElement;
+
+  // The platform fires cancel for Escape. The component declines the default
+  // close so the owner decides, which keeps its state and the DOM in step.
+  dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+
+  expect(wrapper.emitted("close")).toHaveLength(1);
+  expect(dialog.open).toBe(true);
+
   wrapper.unmount();
-  host.remove();
+});
+
+it("applies the open prop to the element instead of mounting and unmounting", async () => {
+  const wrapper = mount(AppDialog, {
+    attachTo: document.body,
+    props: { open: true, title: "Fallback" },
+  });
+  await nextTick();
+  const dialog = document.querySelector("dialog") as HTMLDialogElement;
+  expect(dialog.open).toBe(true);
+
+  await wrapper.setProps({ open: false });
+  await nextTick();
+  expect(dialog.open).toBe(false);
+  expect(document.querySelector("dialog")).not.toBeNull();
+
+  wrapper.unmount();
+  expect(document.querySelector("dialog")).toBeNull();
+});
+
+it("closes on a pointer down outside the panel but not inside it", async () => {
+  const wrapper = mount(AppDialog, {
+    attachTo: document.body,
+    props: { open: true, title: "Backdrop" },
+    slots: { default: '<button id="inside">inside</button>' },
+  });
+  await nextTick();
+  const dialog = document.querySelector("dialog") as HTMLDialogElement;
+
+  // ::backdrop is not a node, so an outside click targets the dialog element.
+  dialog
+    .querySelector("#inside")
+    ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  expect(wrapper.emitted("close")).toBeUndefined();
+
+  dialog.dispatchEvent(new PointerEvent("pointerdown"));
+  expect(wrapper.emitted("close")).toHaveLength(1);
+
+  wrapper.unmount();
 });

@@ -12,6 +12,7 @@ import type {
   logoutWithApi,
   refreshAuthSession,
 } from "@/services/auth";
+import { resetConfirmsForTests, settleConfirm } from "@/services/confirm";
 import type { submitFeedbackToAdmin } from "@/services/feedback";
 import type {
   bindPrinter,
@@ -197,10 +198,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
   window.sessionStorage.clear();
-  vi.stubGlobal(
-    "confirm",
-    vi.fn(() => true),
-  );
+  resetConfirmsForTests();
 });
 
 async function createWorkspaceContext(path = "/status", authenticated = true) {
@@ -457,7 +455,11 @@ describe("workspace views", () => {
       .findAll("button")
       .find((button) => button.text() === "删除对话")
       ?.trigger("click");
+    await flushPromises();
+    expect(store.conversations).toHaveLength(previousLength);
 
+    settleConfirm(true);
+    await flushPromises();
     expect(store.conversations).toHaveLength(previousLength - 1);
     expect(store.activeConversation).not.toBeNull();
   });
@@ -828,7 +830,7 @@ describe("workspace views", () => {
       .filter((button) => button.text() === "打印预览");
     await previewButtons[0]!.trigger("click");
     expect(wrapper.find('[role="status"]').text()).toBe("正在加载…");
-    await wrapper.find('[role="dialog"] button').trigger("click");
+    await wrapper.find("dialog [data-app-dialog-panel] button").trigger("click");
     await previewButtons[1]!.trigger("click");
     let resolveImage!: (image: string) => void;
     vi.mocked(printerService.renderPrintPreview).mockReturnValueOnce(

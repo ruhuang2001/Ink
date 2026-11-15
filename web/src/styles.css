@@ -371,8 +371,13 @@
   }
 
   .ui-btn-primary:disabled,
-  .ui-btn-secondary:disabled {
+  .ui-btn-secondary:disabled,
+  .ui-btn-danger:disabled {
     @apply cursor-not-allowed opacity-60 shadow-none;
+  }
+
+  .ui-btn-danger {
+    @apply inline-flex min-h-10 items-center justify-center rounded-md bg-[#b64040] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#9d3333] focus-visible:ring-2 focus-visible:ring-rose-700 focus-visible:ring-offset-2 focus-visible:outline-none;
   }
 
   .ink-page .ui-btn-primary {
@@ -416,6 +421,7 @@
 
   .ink-page[data-design="quiet"] .ui-btn-primary,
   .ink-page[data-design="quiet"] .ui-btn-secondary,
+  .ink-page[data-design="quiet"] .ui-btn-danger,
   .ink-page[data-design="quiet"] .ink-composer {
     border-radius: 0;
   }
@@ -467,7 +473,8 @@
   }
 
   .ui-btn-primary,
-  .ui-btn-secondary {
+  .ui-btn-secondary,
+  .ui-btn-danger {
     min-height: 44px;
   }
 }
@@ -492,21 +499,8 @@
   display: none;
 }
 
-.dialog-fade-enter-active,
-.dialog-fade-leave-active {
-  transition:
-    opacity 180ms var(--ease-out-quart),
-    transform 180ms var(--ease-out-quart);
-}
-
 .page-swap-enter-from {
   opacity: 0;
-}
-
-.dialog-fade-enter-from,
-.dialog-fade-leave-to {
-  opacity: 0;
-  transform: translateY(10px) scale(0.98);
 }
 
 .ink-toast {
@@ -612,8 +606,6 @@
   .ink-page main fieldset > section,
   .page-swap-enter-active,
   .page-swap-leave-active,
-  .dialog-fade-enter-active,
-  .dialog-fade-leave-active,
   .toast-enter-active,
   .toast-leave-active,
   .ui-list-row,
@@ -623,13 +615,12 @@
   .ui-tab-link,
   .ui-tab-link::after,
   .ui-btn-primary,
-  .ui-btn-secondary {
+  .ui-btn-secondary,
+  .ui-btn-danger {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
 
-  .dialog-fade-enter-from,
-  .dialog-fade-leave-to,
   .toast-enter-from,
   .toast-leave-to {
     opacity: 1;

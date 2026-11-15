@@ -82,6 +82,34 @@ if (!hasStorageApi(window.sessionStorage)) {
   });
 }
 
+// jsdom exposes HTMLDialogElement but not showModal() or close(). Without them a
+// component that opens a native dialog fails on first use, so the test
+// environment gets just enough behavior to exercise the open state and events.
+function reflectDialogOpen(dialog: HTMLDialogElement, open: boolean) {
+  if (open) {
+    dialog.setAttribute("open", "");
+    return;
+  }
+
+  dialog.removeAttribute("open");
+}
+
+if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    reflectDialogOpen(this, true);
+  };
+  HTMLDialogElement.prototype.show = function show(this: HTMLDialogElement) {
+    reflectDialogOpen(this, true);
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    if (!this.open) {
+      return;
+    }
+    reflectDialogOpen(this, false);
+    this.dispatchEvent(new Event("close"));
+  };
+}
+
 beforeEach(() => {
   setI18nLocale("zh-CN");
   window.localStorage.clear();

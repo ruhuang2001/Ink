@@ -281,7 +281,7 @@
   display: none;
 }
 
-.ink-page[data-design="structured"] [role="dialog"] {
+.ink-page[data-design="structured"] [data-app-dialog-panel] {
   border: 2px solid var(--sl-edge);
   border-radius: 0;
   box-shadow: var(--sl-shadow);

@@ -1,10 +1,16 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
+import { afterEach } from "vitest";
 
 import { translate } from "@/i18n";
 import AppShell from "@/layouts/AppShell.vue";
 import { createTestRouter, navigationItems } from "@/router";
+import { activeConfirm, resetConfirmsForTests, settleConfirm } from "@/services/confirm";
 import { useWorkspaceStore } from "@/stores/workspace";
+
+afterEach(() => {
+  resetConfirmsForTests();
+});
 
 async function mountShellAt(path: string, authenticated = true) {
   const pinia = createPinia();
@@ -67,7 +73,6 @@ describe("AppShell", () => {
       },
       serviceBinding: { providerName: null, modelName: "Ink AI", bound: false },
     };
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const restore = vi.spyOn(store, "restoreRecoveredWorkspaceDraft").mockReturnValue(true);
     const discard = vi.spyOn(store, "discardRecoveredWorkspaceDraft").mockReturnValue(true);
     await flushPromises();
@@ -81,14 +86,23 @@ describe("AppShell", () => {
       .findAll("button")
       .find((button) => button.text() === translate("shell.draftRecovery.restore"))!;
     await restoreButton.trigger("click");
+    await flushPromises();
     expect(restore).not.toHaveBeenCalled();
-    confirm.mockReturnValue(true);
+    settleConfirm(false);
+    await flushPromises();
+    expect(restore).not.toHaveBeenCalled();
     await restoreButton.trigger("click");
+    await flushPromises();
+    settleConfirm(true);
+    await flushPromises();
     expect(restore).toHaveBeenCalledOnce();
     await wrapper
       .findAll("button")
       .find((button) => button.text() === translate("shell.draftRecovery.discard"))!
       .trigger("click");
+    await flushPromises();
+    settleConfirm(true);
+    await flushPromises();
     expect(discard).toHaveBeenCalledOnce();
     wrapper.unmount();
     store.$dispose();
@@ -189,10 +203,6 @@ describe("AppShell", () => {
   it("requires an explicit choice before discarding conflicted local edits", async () => {
     const { wrapper, store } = await mountShellAt("/settings/devices");
     const reload = vi.spyOn(store, "reloadConflictedWorkspace").mockResolvedValue(true);
-    const confirm = vi
-      .spyOn(window, "confirm")
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
     store.workspaceSyncError = "其他位置已更新";
     store.workspaceConflict = true;
     await flushPromises();
@@ -200,11 +210,16 @@ describe("AppShell", () => {
     const action = wrapper.get('[role="alert"] button');
     expect(action.text()).toBe("重新加载工作区");
     await action.trigger("click");
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("丢弃当前未保存的改动"));
+    await flushPromises();
+    expect(activeConfirm.value?.message).toContain("丢弃当前未保存的改动");
+    settleConfirm(false);
+    await flushPromises();
     expect(reload).not.toHaveBeenCalled();
     await action.trigger("click");
+    await flushPromises();
+    settleConfirm(true);
+    await flushPromises();
     expect(reload).toHaveBeenCalledOnce();
-    confirm.mockRestore();
   });
 
   it.each(["/conversations", "/prints"])(

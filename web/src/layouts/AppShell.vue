@@ -7,6 +7,7 @@ import AppDialog from "@/components/AppDialog.vue";
 import InkIcon from "@/components/InkIcon.vue";
 import { navigationItems } from "@/router";
 import { DEFAULT_LOGIN_REDIRECT } from "@/router/authRedirect";
+import { requestConfirm } from "@/services/confirm";
 import { useDesignStore } from "@/stores/design";
 import { useWorkspaceStore } from "@/stores/workspace";
 
@@ -76,27 +77,55 @@ function isNavigationItemActive(path: string) {
   return path === "/settings" ? route.path.startsWith("/settings") : route.path === path;
 }
 
-function restoreRecoveredDraft() {
-  if (window.confirm(t("shell.draftRecovery.confirmRestore")))
+async function restoreRecoveredDraft() {
+  if (
+    await requestConfirm({
+      message: t("shell.draftRecovery.confirmRestore"),
+      confirmLabel: t("shell.draftRecovery.restore"),
+    })
+  )
     workspaceStore.restoreRecoveredWorkspaceDraft();
 }
 
-function discardRecoveredDraft() {
-  if (window.confirm(t("shell.draftRecovery.confirmDiscard")))
+async function discardRecoveredDraft() {
+  if (
+    await requestConfirm({
+      message: t("shell.draftRecovery.confirmDiscard"),
+      confirmLabel: t("shell.draftRecovery.discard"),
+      tone: "danger",
+    })
+  )
     workspaceStore.discardRecoveredWorkspaceDraft();
 }
 
-function acknowledgePrintOutcome() {
-  if (window.confirm(t("shell.printOutcome.confirm"))) workspaceStore.acknowledgePrintOutcome();
+async function acknowledgePrintOutcome() {
+  if (
+    await requestConfirm({
+      message: t("shell.printOutcome.confirm"),
+      confirmLabel: t("shell.printOutcome.checked"),
+    })
+  )
+    workspaceStore.acknowledgePrintOutcome();
 }
 
-function acknowledgeFeedbackOutcome() {
-  if (window.confirm(t("shell.feedbackOutcome.confirm")))
+async function acknowledgeFeedbackOutcome() {
+  if (
+    await requestConfirm({
+      message: t("shell.feedbackOutcome.confirm"),
+      confirmLabel: t("shell.feedbackOutcome.checked"),
+    })
+  )
     workspaceStore.acknowledgeFeedbackOutcome();
 }
 
-function discardDamagedDraft(key: string) {
-  if (window.confirm(t("shell.draftRecovery.confirmDiscardDamaged")))
+async function discardDamagedDraft(key: string) {
+  if (
+    await requestConfirm({
+      message: t("shell.draftRecovery.confirmDiscardDamaged"),
+      confirmLabel: t("shell.draftRecovery.discard"),
+      tone: "danger",
+    })
+  )
     workspaceStore.discardDamagedWorkspaceDraft(key);
 }
 
@@ -116,7 +145,12 @@ async function handleLogout() {
 
 async function recoverSynchronization() {
   if (workspaceStore.workspaceConflict) {
-    if (!window.confirm(t("shell.syncErrors.confirmReload"))) return;
+    const confirmed = await requestConfirm({
+      message: t("shell.syncErrors.confirmReload"),
+      confirmLabel: t("shell.syncErrors.reload"),
+      tone: "danger",
+    });
+    if (!confirmed) return;
     await workspaceStore.reloadConflictedWorkspace();
     return;
   }

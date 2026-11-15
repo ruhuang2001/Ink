@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
 import { useRoute } from "vue-router";
 
+import ConfirmDialog from "@/components/ConfirmDialog.vue";
 import { translate } from "@/i18n";
 import { retryRouteLoad, routeLoadFailure } from "@/router/chunkRecovery";
 import { useDesignStore } from "@/stores/design";
@@ -95,4 +96,5 @@ watchEffect(() => {
     </button>
   </div>
   <RouterView />
+  <ConfirmDialog />
 </template>

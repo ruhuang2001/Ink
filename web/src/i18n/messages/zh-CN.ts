@@ -43,6 +43,7 @@ const zhCN = {
       back: "返回",
       cancel: "取消",
       closeWindow: "关闭窗口",
+      confirm: "确认",
       delete: "删除",
       dismissNotice: "关闭提示",
       hide: "隐藏",
@@ -54,6 +55,7 @@ const zhCN = {
       submit: "提交",
     },
     labels: {
+      confirmTitle: "请确认",
       notSet: "未设置",
       workspace: "纸条工作区",
     },

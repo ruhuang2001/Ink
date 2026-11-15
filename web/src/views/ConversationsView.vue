@@ -6,6 +6,7 @@ import { RouterLink } from "vue-router";
 import ConversationComposer from "@/components/ConversationComposer.vue";
 import ConversationMessages from "@/components/ConversationMessages.vue";
 import InkIcon from "@/components/InkIcon.vue";
+import { requestConfirm } from "@/services/confirm";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspaceStore = useWorkspaceStore();
@@ -54,13 +55,17 @@ function toggleSelection() {
 function selectConversation(event: Event) {
   workspaceStore.selectConversation((event.target as HTMLSelectElement).value);
 }
-function deleteConversation() {
+async function deleteConversation() {
   closeActions();
   const current = workspaceStore.activeConversation;
   if (!current) return;
   if (
     (current.messages.length || current.draft.trim()) &&
-    !window.confirm(t("conversations.confirmDelete", { title: current.title }))
+    !(await requestConfirm({
+      message: t("conversations.confirmDelete", { title: current.title }),
+      confirmLabel: t("common.actions.delete"),
+      tone: "danger",
+    }))
   )
     return;
   workspaceStore.deleteConversation(current.id);

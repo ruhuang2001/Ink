@@ -44,6 +44,7 @@ const enUS = {
       back: "Back",
       cancel: "Cancel",
       closeWindow: "Close dialog",
+      confirm: "Confirm",
       delete: "Delete",
       dismissNotice: "Dismiss notification",
       hide: "Hide",
@@ -55,6 +56,7 @@ const enUS = {
       submit: "Submit",
     },
     labels: {
+      confirmTitle: "Please confirm",
       notSet: "Not set",
       workspace: "Notes workspace",
     },
