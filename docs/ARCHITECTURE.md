@@ -91,6 +91,17 @@ and saved. The `print_jobs` table remains the source of print content and
 history; anonymous browser workspaces retain their local full-content jobs.
 See [Print API](PRINT_API.md) and [performance measurements](PRINT_PERFORMANCE.md).
 
+## Errors
+
+Failures return `{ "code": "...", "message": "...", "requestId": "..." }` with the
+HTTP status. `code` is the contract: it is a stable identifier that clients map to
+their own text. `message` repeats the code rather than carrying prose, so the API
+holds no localized copy and adding a language never requires a server change.
+Print-job failures follow the same rule in stored history: `error_message` holds a
+code, and the client renders it. Unknown codes fall back to a generic localized
+message, so an unmapped value never shows a raw identifier and never reveals
+provider detail.
+
 ## Authentication and security boundaries
 
 - Access tokens are JWTs tied to persisted refresh sessions.

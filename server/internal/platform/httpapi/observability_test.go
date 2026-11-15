@@ -40,7 +40,7 @@ func TestHTTPObservationUsesTemplatesAndRedactsData(t *testing.T) {
 		if r.Context().Value(requestIDKey) != requestID || w.Header().Get("X-Request-ID") != requestID {
 			t.Fatal("request correlation differs")
 		}
-		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "invalid")
+		writeError(w, requestID, http.StatusBadRequest, "invalid_request")
 	}))
 	handler := s.observeHTTP(mux)
 	ids := make(map[string]bool)

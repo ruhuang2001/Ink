@@ -6,12 +6,18 @@ import { RouterLink } from "vue-router";
 import AppDialog from "@/components/AppDialog.vue";
 import InkIcon from "@/components/InkIcon.vue";
 import PrintPreview from "@/components/PrintPreview.vue";
+import { getLocalizedPrintJobErrorKey } from "@/i18n/errors";
 import { renderPrintPreview } from "@/services/printers";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { getPrintStatusBadgeClass } from "@/utils/workspace";
 
 const workspaceStore = useWorkspaceStore();
 const { t } = useI18n();
+
+function printJobErrorMessage(errorMessage?: string) {
+  const key = getLocalizedPrintJobErrorKey(errorMessage);
+  return key ? t(key) : "";
+}
 
 const activePrintGroups = computed(() =>
   [
@@ -300,8 +306,12 @@ async function submitPrintDialog() {
               <div class="print-history-row">
                 <div class="print-history-copy">
                   <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
-                  <p v-if="item.errorMessage" class="mt-1 text-sm text-red-700" role="alert">
-                    {{ item.errorMessage }}
+                  <p
+                    v-if="printJobErrorMessage(item.errorMessage)"
+                    class="mt-1 text-sm text-red-700"
+                    role="alert"
+                  >
+                    {{ printJobErrorMessage(item.errorMessage) }}
                   </p>
                   <p class="mt-0.5 text-sm text-stone-600">
                     {{ workspaceStore.getDeviceName(item.deviceId) }} ·

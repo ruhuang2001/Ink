@@ -5,13 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	memobird "github.com/ruhuang2001/memobird-go/memobird"
 )
 
 const (
 	statusCheckInterval      = 10 * time.Second
 	statusBatchBudget        = 15 * time.Second
 	defaultStatusMaxAttempts = 6
-	SubmissionOutcomeUnknown = "提交结果未知，请先检查设备是否已打印，再手动创建新任务。"
+	// Failure codes are the only values persisted in print_jobs.error_message.
+	// The API returns them as errorMessage and the web client localizes them, so
+	// they are stable across locales rather than user-facing prose.
+	SubmissionOutcomeUnknown = "print_submission_unknown"
+	ProviderPrintIDUnknown   = "print_provider_print_id_unknown"
 )
 
 // StatusSyncJob excludes the rendered content and carries the version checked
@@ -33,6 +39,13 @@ type StatusCheckResult struct {
 	CheckedAt    time.Time
 	NextCheck    time.Time
 	Attempts     int
+}
+
+// StatusCheckOutcome is one provider observation. Unknown means the provider
+// has no record of the job, which is terminal but is not a completion.
+type StatusCheckOutcome struct {
+	Printed bool
+	Unknown bool
 }
 
 type StatusSyncError struct {
@@ -114,14 +127,22 @@ func (s *StatusSynchronizer) SyncDue(ctx context.Context, limit int) (int, error
 		// Each started check gets its full configured timeout. Yield between
 		// checks instead of counting an exhausted batch budget as provider failure.
 		checkCtx, finish := s.service.StatusObserver.Start(ctx)
-		completed, providerErr := s.check(checkCtx, job, s.timeout)
+		outcome, providerErr := s.check(checkCtx, job, s.timeout)
 		if ctx.Err() != nil {
 			finish(ctx.Err())
 			return processed, syncError(ctx.Err())
 		}
 		now := s.service.clock.Now()
-		result := StatusCheckResult{Completed: completed, CheckedAt: now, NextCheck: now.Add(s.recheckInterval)}
-		if !completed {
+		result := StatusCheckResult{Completed: outcome.Printed, CheckedAt: now, NextCheck: now.Add(s.recheckInterval)}
+		switch {
+		case outcome.Unknown:
+			// The provider has no record of this job, so no later check can
+			// succeed. Fail on the first observation instead of backing off for
+			// the full attempt budget.
+			result.Failed = true
+			result.ErrorMessage = ProviderPrintIDUnknown
+			result.NextCheck = now
+		case !outcome.Printed:
 			// A successful "not printed" response also backs off. Keep an
 			// accepted job queued: failing or resubmitting it can print twice.
 			result.Attempts = min(max(job.Attempts+1, 1), s.maxAttempts)
@@ -138,7 +159,16 @@ func (s *StatusSynchronizer) SyncDue(ctx context.Context, limit int) (int, error
 		}
 		updated, err := s.service.repo.SaveStatusCheck(ctx, job, result)
 		outcomeErr := errors.Join(providerErr, err)
-		if result.Failed {
+		switch {
+		case outcome.Unknown:
+			outcomeErr = errors.Join(outcomeErr, fmt.Errorf("print job %s: %w", job.ID, memobird.ErrUnknownPrintID))
+			// The job is settled even when the provider answered cleanly, so the
+			// caller sees why it failed rather than an unexplained drop.
+			if err == nil {
+				failedJobs++
+				failures = append(failures, outcomeErr)
+			}
+		case result.Failed:
 			outcomeErr = errors.Join(outcomeErr, errors.New("print status attempts exhausted"))
 		}
 		finish(outcomeErr)
@@ -156,16 +186,19 @@ func (s *StatusSynchronizer) SyncDue(ctx context.Context, limit int) (int, error
 	return processed, syncError(nil)
 }
 
-func (s *StatusSynchronizer) check(ctx context.Context, job StatusSyncJob, timeout time.Duration) (bool, error) {
+func (s *StatusSynchronizer) check(ctx context.Context, job StatusSyncJob, timeout time.Duration) (StatusCheckOutcome, error) {
 	client, err := s.service.newClient(job.Binding)
 	if err != nil {
-		return false, err
+		return StatusCheckOutcome{}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	response, err := client.GetPrintStatus(ctx, job.ProviderPrintID)
 	if err != nil {
-		return false, err
+		return StatusCheckOutcome{}, err
 	}
-	return response.IsPrinted(), nil
+	return StatusCheckOutcome{
+		Printed: response.IsPrinted(),
+		Unknown: response.IsUnknown(),
+	}, nil
 }

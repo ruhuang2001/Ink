@@ -130,6 +130,38 @@ func TestStatusSyncUsesConfiguredBackoffForUnprintedJobs(t *testing.T) {
 	}
 }
 
+func TestStatusSyncFailsUnknownProviderPrintIDImmediately(t *testing.T) {
+	var calls atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		_, _ = w.Write([]byte(`{"showapi_res_code":1,"printflag":-1}`))
+	}))
+	defer provider.Close()
+	now := time.Now().UTC()
+	repo := statusFixture(now, 1)
+	job := repo.jobs["job-00"]
+	job.StatusCheckAttempts = defaultStatusMaxAttempts - 1
+	repo.jobs["job-00"] = job
+	service := NewService(repo, nil, nil, fakeClock{now: now}, "key", provider.URL, time.Second)
+	syncer := NewStatusSynchronizer(service, time.Second)
+
+	processed, err := syncer.SyncDue(t.Context(), 1)
+	if !errors.Is(err, memobirdapi.ErrUnknownPrintID) {
+		t.Fatalf("SyncDue() error = %v, want ErrUnknownPrintID", err)
+	}
+	if processed != 1 {
+		t.Fatalf("processed = %d, want 1", processed)
+	}
+	job = repo.jobs["job-00"]
+	if job.Status != workspace.PrintStatusFailed || job.ErrorMessage == nil || *job.ErrorMessage != ProviderPrintIDUnknown {
+		t.Fatalf("job = %+v, want failed with the unknown-ID message", job)
+	}
+	// An unknown ID cannot become known, so one observation must settle it.
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("provider calls = %d, want 1", got)
+	}
+}
+
 func TestStatusSyncStopsAfterConfiguredAttemptsWithoutResubmitting(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprint(w, `{"showapi_res_code":1,"printflag":0}`)
@@ -236,6 +268,10 @@ func TestUnknownSubmissionIsNotAutomaticallyPrintedAgain(t *testing.T) {
 	}
 	if mapJob(repo.jobs["uncertain"]).ErrorMessage != SubmissionOutcomeUnknown {
 		t.Fatal("recovery instruction was hidden")
+	}
+	unknownID := Job{ErrorMessage: new(ProviderPrintIDUnknown)}
+	if mapJob(unknownID).ErrorMessage != ProviderPrintIDUnknown {
+		t.Fatal("unknown print ID instruction was hidden")
 	}
 	if mapJob(Job{ErrorMessage: new("https://provider.example?ak=private-key")}).ErrorMessage != "" {
 		t.Fatal("internal provider error was exposed")

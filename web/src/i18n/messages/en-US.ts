@@ -575,6 +575,12 @@ const enUS = {
     loading: "Loading…",
     historyEmpty: "No print history yet",
     loadMore: "Load more",
+    errors: {
+      print_submission_unknown:
+        "The print submission result is unknown. Check the device before sending again to avoid duplicate prints. The saved task is available in print history.",
+      print_provider_print_id_unknown:
+        "The print service no longer has a record of this task. Check the device for a duplicate, then create a new print.",
+    },
     recentPrints: "Recent prints",
     moreSettings: "More settings",
     actions: {
@@ -676,7 +682,17 @@ const enUS = {
       request_failed: "Request failed. Please try again later.",
       invalid_session_payload: "The login session is invalid. Please sign in again.",
       invalid_credentials: "The account or password is incorrect.",
+      current_password_incorrect: "The current password is incorrect.",
+      invalid_password: "Use a password of at least 8 characters.",
+      invalid_profile: "Enter valid account details.",
+      email_taken: "An account with that email already exists.",
+      user_disabled: "This account is disabled.",
+      unauthorized: "Your session has expired. Please sign in again.",
       forbidden: "Your account does not have permission for this action.",
+      rate_limited: "Too many attempts. Try again shortly.",
+      request_too_large: "The submission is too large. Trim it and try again.",
+      invalid_request: "The request format is invalid. Refresh the page and try again.",
+      internal_error: "The service is temporarily unavailable. Please try again later.",
       ai_not_configured: "AI is not configured yet.",
       ai_secret_missing: "The server AI encryption key is missing.",
       invalid_ai_config: "Enter a valid AI configuration.",

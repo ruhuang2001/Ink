@@ -92,6 +92,20 @@ printer is not mistaken for a safe duplicate-print retry. After
 `PRINT_STATUS_MAX_ATTEMPTS` unsuccessful checks, the job is marked failed with
 a fixed instruction to check the device; it is never automatically resubmitted.
 
+A provider that reports no record of the submitted job settles it on the first
+check, with a separate instruction to create a new job. That status cannot
+change, so waiting out the attempt budget would only delay a failure the user
+can already act on. Failures are stored and returned as codes, not prose:
+`print_submission_unknown` and `print_provider_print_id_unknown`. The web client
+owns the wording in both languages; any other stored message is withheld from
+responses so provider detail never reaches a client.
+
+Keep the printer's power and connectivity state out of the failure decision.
+A device that is off or offline keeps its job pending at the provider and prints
+it after it reconnects, so the job stays queued until the provider reports
+completion; treating an offline device as a failed job would invite a duplicate
+submission once power returns.
+
 The worker updates only the same observed queued provider job/version.
 Cancellation or resubmission while a provider call is outstanding prevents
 the old result from overwriting the newer state. Persisted next-check times
@@ -113,11 +127,12 @@ timeout or request cancellation after submission starts, a truncated or invalid
 response, and an HTTP error without a complete explicit provider rejection.
 These failed jobs retain their content and are never automatically resubmitted.
 Create, submit and feedback-print requests with an uncertain submission return
-HTTP 502 with `code: "print_submission_unknown"` and a fixed instruction to
-check the device before deciding whether to create a replacement. This also
-applies when the provider accepted the request but saving its result failed.
-Clients should refresh job history, retain the draft and avoid offering an
-immediate retry for this error. Provider response details remain private.
+HTTP 502 with `code: "print_submission_unknown"` and no prose; the client shows
+its localized instruction to check the device before deciding whether to create
+a replacement. This also applies when the provider accepted the request but
+saving its result failed. Clients should refresh job history, retain the draft
+and avoid offering an immediate retry for this error. Provider response details
+remain private.
 Errors before the print POST (configuration, rendering, or image conversion)
 and complete HTTP 200 or 4xx responses containing an explicit, valid provider
 rejection remain retryable. A status code alone does not establish rejection;

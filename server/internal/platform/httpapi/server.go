@@ -222,10 +222,10 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, requestID string, dst an
 func writeJSONDecodeError(w http.ResponseWriter, requestID string, err error) {
 	var maxBytesError *http.MaxBytesError
 	if errors.As(err, &maxBytesError) {
-		writeError(w, requestID, http.StatusRequestEntityTooLarge, "request_too_large", "请求体过大。")
+		writeError(w, requestID, http.StatusRequestEntityTooLarge, "request_too_large")
 		return
 	}
-	writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+	writeError(w, requestID, http.StatusBadRequest, "invalid_request")
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
@@ -241,7 +241,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, requestID s
 
 	meta := s.clientMetaFromRequest(r)
 	if !s.rateLimiter.Allow("ip:"+meta.IPAddress, "account:"+auth.NormalizeEmail(payload.Email)) {
-		writeError(w, requestID, http.StatusTooManyRequests, "rate_limited", "登录尝试过于频繁，请稍后再试。")
+		writeError(w, requestID, http.StatusTooManyRequests, "rate_limited")
 		return
 	}
 
@@ -286,7 +286,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request, requestID
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -315,7 +315,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request, requestID 
 func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -341,7 +341,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, re
 func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -366,7 +366,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, reques
 func (s *Server) handleGetWorkspace(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -382,7 +382,7 @@ func (s *Server) handleGetWorkspace(w http.ResponseWriter, r *http.Request, requ
 func (s *Server) handleSaveWorkspace(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -395,9 +395,9 @@ func (s *Server) handleSaveWorkspace(w http.ResponseWriter, r *http.Request, req
 	if err != nil {
 		switch {
 		case errors.Is(err, workspace.ErrRevisionRequired):
-			writeError(w, requestID, http.StatusPreconditionRequired, "workspace_revision_required", "请重新加载工作区后再保存。")
+			writeError(w, requestID, http.StatusPreconditionRequired, "workspace_revision_required")
 		case errors.Is(err, workspace.ErrConflict):
-			writeError(w, requestID, http.StatusConflict, "workspace_conflict", "工作区已在其他位置更新，请重新加载后再保存。")
+			writeError(w, requestID, http.StatusConflict, "workspace_conflict")
 		default:
 			s.writeAuthError(w, requestID, err)
 		}
@@ -410,7 +410,7 @@ func (s *Server) handleSaveWorkspace(w http.ResponseWriter, r *http.Request, req
 func (s *Server) handleGetAIConfig(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -426,7 +426,7 @@ func (s *Server) handleGetAIConfig(w http.ResponseWriter, r *http.Request, reque
 func (s *Server) handleSaveAIConfig(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -453,7 +453,7 @@ func (s *Server) handleSaveAIConfig(w http.ResponseWriter, r *http.Request, requ
 func (s *Server) handleGenerateAIReply(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -474,7 +474,7 @@ func (s *Server) handleGenerateAIReply(w http.ResponseWriter, r *http.Request, r
 func (s *Server) handleListPrinters(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -490,7 +490,7 @@ func (s *Server) handleListPrinters(w http.ResponseWriter, r *http.Request, requ
 func (s *Server) handleBindPrinter(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -515,7 +515,7 @@ func (s *Server) handleBindPrinter(w http.ResponseWriter, r *http.Request, reque
 func (s *Server) handleDeletePrinter(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -530,7 +530,7 @@ func (s *Server) handleDeletePrinter(w http.ResponseWriter, r *http.Request, req
 func (s *Server) handleSubmitFeedback(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -552,7 +552,7 @@ func (s *Server) handleSubmitFeedback(w http.ResponseWriter, r *http.Request, re
 func (s *Server) handleListPrintJobs(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -579,7 +579,7 @@ func (s *Server) handleListPrintJobs(w http.ResponseWriter, r *http.Request, req
 func (s *Server) handlePrintJobStatuses(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	var input printer.JobStatusesInput
@@ -612,7 +612,7 @@ func (s *Server) handlePrintJobStatuses(w http.ResponseWriter, r *http.Request, 
 func (s *Server) handleGetPrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	job, err := s.printer.GetPrintJob(r.Context(), accessToken, r.PathValue("jobID"))
@@ -626,7 +626,7 @@ func (s *Server) handleGetPrintJob(w http.ResponseWriter, r *http.Request, reque
 func (s *Server) handleCreatePrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -653,7 +653,7 @@ func (s *Server) handleCreatePrintJob(w http.ResponseWriter, r *http.Request, re
 func (s *Server) handlePrintPreview(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	if _, err := s.auth.GetCurrentUser(r.Context(), accessToken); err != nil {
@@ -681,7 +681,7 @@ func (s *Server) handlePrintPreview(w http.ResponseWriter, r *http.Request, requ
 func (s *Server) handleSubmitPrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -697,7 +697,7 @@ func (s *Server) handleSubmitPrintJob(w http.ResponseWriter, r *http.Request, re
 func (s *Server) handleCancelPrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -713,7 +713,7 @@ func (s *Server) handleCancelPrintJob(w http.ResponseWriter, r *http.Request, re
 func (s *Server) handleUpdatePrintJobDevice(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
-		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -738,10 +738,14 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
-func writeError(w http.ResponseWriter, requestID string, status int, code string, message string) {
+// writeError sends a machine-readable code. The API carries no localized prose:
+// the web client owns user-facing text, and other clients pair the code with
+// their own messages. message repeats the code so a client that prints the field
+// verbatim still shows something identifiable instead of an empty string.
+func writeError(w http.ResponseWriter, requestID string, status int, code string) {
 	writeJSON(w, status, errorEnvelope{
 		Code:      code,
-		Message:   message,
+		Message:   code,
 		RequestID: requestID,
 	})
 }

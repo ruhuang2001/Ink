@@ -619,6 +619,56 @@ describe("workspace views", () => {
     expect(queuedArticle?.find("select").attributes("disabled")).toBeDefined();
   });
 
+  it("shows a localized failure for a print job error code", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/prints");
+    store.remotePrintJobs = [
+      {
+        id: "print-unknown-id",
+        title: "过期任务",
+        source: "对话",
+        deviceId: "device-desk",
+        status: "failed",
+        createdAt: "2026-11-15T00:00:00Z",
+        updatedAt: "2026-11-15T00:00:00Z",
+        errorMessage: "print_provider_print_id_unknown",
+      },
+    ];
+    const wrapper = mount(PrintsView, {
+      global: {
+        stubs: { teleport: true },
+        plugins: [pinia, router],
+      },
+    });
+
+    expect(wrapper.text()).toContain("打印服务已经没有这个任务的记录了");
+    expect(wrapper.text()).not.toContain("print_provider_print_id_unknown");
+  });
+
+  it("hides a print job message that is not a known code", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/prints");
+    store.remotePrintJobs = [
+      {
+        id: "print-provider-error",
+        title: "日志泄露检查",
+        source: "对话",
+        deviceId: "device-desk",
+        status: "failed",
+        createdAt: "2026-11-15T00:00:00Z",
+        updatedAt: "2026-11-15T00:00:00Z",
+        errorMessage: "https://provider.example?ak=private-key",
+      },
+    ];
+    const wrapper = mount(PrintsView, {
+      global: {
+        stubs: { teleport: true },
+        plugins: [pinia, router],
+      },
+    });
+
+    expect(wrapper.text()).not.toContain("private-key");
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+  });
+
   it("updates shared settings state through the settings panel", async () => {
     const { pinia, router, store } = await createWorkspaceContext("/settings");
     const wrapper = mount(SettingsView, {

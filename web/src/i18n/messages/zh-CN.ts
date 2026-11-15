@@ -557,6 +557,12 @@ const zhCN = {
     loading: "正在加载…",
     historyEmpty: "暂无打印记录",
     loadMore: "加载更多",
+    errors: {
+      print_submission_unknown:
+        "打印提交结果未知。请先核对设备是否已经打印，避免重复发送。已保存的任务可在打印记录中查看。",
+      print_provider_print_id_unknown:
+        "打印服务已经没有这个任务的记录了。请先确认设备上没有重复内容，再新建一次打印。",
+    },
     recentPrints: "最近打印",
     moreSettings: "更多设置",
     actions: {
@@ -654,7 +660,17 @@ const zhCN = {
       request_failed: "请求失败，请稍后重试。",
       invalid_session_payload: "登录会话无效，请重新登录。",
       invalid_credentials: "账号或密码不正确。",
+      current_password_incorrect: "当前密码不正确。",
+      invalid_password: "密码至少 8 位。",
+      invalid_profile: "请输入有效的账号信息。",
+      email_taken: "该账号已存在。",
+      user_disabled: "账号已被禁用。",
+      unauthorized: "登录状态已失效，请重新登录。",
       forbidden: "当前账号没有该操作权限。",
+      rate_limited: "操作过于频繁，请稍后再试。",
+      request_too_large: "提交的内容过大，请精简后再试。",
+      invalid_request: "请求格式不正确，请刷新页面后重试。",
+      internal_error: "服务暂时不可用，请稍后重试。",
       ai_not_configured: "当前还没有配置 AI 服务。",
       ai_secret_missing: "服务端尚未配置 AI 加密密钥。",
       invalid_ai_config: "请输入有效的 AI 服务配置。",

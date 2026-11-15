@@ -604,8 +604,8 @@ func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (subm
 	if resp.PrintContentID != 0 {
 		job.ProviderPrintContentID = new(resp.PrintContentID)
 	}
-	if strings.TrimSpace(resp.SmartGuid) != "" {
-		job.ProviderSmartGUID = new(strings.TrimSpace(resp.SmartGuid))
+	if strings.TrimSpace(resp.SmartGUID) != "" {
+		job.ProviderSmartGUID = new(strings.TrimSpace(resp.SmartGUID))
 	}
 
 	job.NextStatusCheckAt = new(s.clock.Now())
@@ -647,10 +647,19 @@ func mapJob(job Job) workspace.PrintJob {
 	}
 }
 
+// ServedFailureMessages maps stored failure messages to the fixed strings the
+// API may return. Provider errors can contain request URLs and credentials, so
+// anything not listed here is withheld from print-job responses.
+var ServedFailureMessages = map[string]struct{}{
+	SubmissionOutcomeUnknown: {},
+	ProviderPrintIDUnknown:   {},
+}
+
 func derefErrorMessage(message *string) string {
-	// Provider errors can contain request URLs and credentials. Only the
-	// fixed recovery instruction is safe to expose in print-job responses.
-	if message == nil || *message != SubmissionOutcomeUnknown {
+	if message == nil {
+		return ""
+	}
+	if _, ok := ServedFailureMessages[*message]; !ok {
 		return ""
 	}
 	return *message
