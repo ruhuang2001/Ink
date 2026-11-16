@@ -74,7 +74,9 @@
 .settings-workspace .settings-section-nav {
   border-color: var(--settings-line);
 }
-.settings-workspace select {
+/* Same specificity as the structured theme's `select` rule, so the settings line
+   color and radius apply in every design, as `.print-page select` already does. */
+.ink-page .settings-workspace select {
   max-width: 100%;
   border: 1px solid var(--settings-line);
   border-radius: 8px;

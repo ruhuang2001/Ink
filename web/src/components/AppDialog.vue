@@ -77,7 +77,6 @@ onBeforeUnmount(() => {
   >
     <section
       data-app-dialog-panel
-      data-impeccable-ignore="hard-offset-shadow"
       class="max-h-[calc(100dvh-env(safe-area-inset-top)-0.5rem)] w-full overflow-y-auto rounded-t-[1.75rem] border border-stone-200 bg-[var(--app-surface)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl shadow-stone-900/10 sm:max-h-[min(42rem,calc(100dvh-3rem))] sm:rounded-3xl"
       :class="size === 'wide' ? 'preview-dialog sm:max-w-xl' : 'sm:max-w-md sm:p-6'"
     >

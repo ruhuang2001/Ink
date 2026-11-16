@@ -206,7 +206,6 @@ async function recoverSynchronization() {
     </AppDialog>
 
     <header
-      data-impeccable-ignore="hard-offset-shadow"
       class="ink-topbar ink-rule sticky top-0 z-40 border-b bg-[color:var(--app-surface-floating)] px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur sm:px-5 lg:px-8 lg:py-3"
     >
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 lg:hidden">

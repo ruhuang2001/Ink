@@ -562,7 +562,7 @@ void closeAccountCreationDialog;
               <select
                 :value="workspaceStore.defaultDeviceId"
                 :disabled="workspaceStore.devices.every((device) => device.status === 'offline')"
-                class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
+                class="ui-select"
                 @change="handleDefaultDeviceChange"
               >
                 <option

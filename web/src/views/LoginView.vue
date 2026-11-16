@@ -69,7 +69,6 @@ async function handleSubmit() {
 
     <main class="mx-auto flex w-full max-w-2xl flex-1 items-center py-20 sm:py-16">
       <div
-        data-impeccable-ignore="hard-offset-shadow"
         class="ink-login-card grid w-full lg:grid-cols-[15rem_minmax(0,1fr)] lg:overflow-hidden lg:border lg:border-stone-200 lg:bg-[color:var(--app-surface-raised)] lg:shadow-[0_18px_50px_rgba(28,25,23,0.06)]"
       >
         <section
@@ -165,7 +164,6 @@ async function handleSubmit() {
 
               <button
                 type="submit"
-                data-impeccable-ignore="hard-offset-shadow"
                 class="ui-btn-primary min-h-12 w-full px-6 text-base"
                 :disabled="workspaceStore.authLoading"
               >

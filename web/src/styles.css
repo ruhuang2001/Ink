@@ -370,6 +370,103 @@
     @apply inline-flex shrink-0 items-center justify-center rounded-full px-2.5 py-0.5 text-center text-xs leading-none font-medium whitespace-nowrap;
   }
 
+  /* A quiet field that opens a themed list under itself. Browsers without the
+     customizable select keep a native list but share the same closed look. */
+  .ui-select {
+    --ui-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%237a7a74' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
+    appearance: none;
+    min-width: 8rem;
+    min-height: 2.25rem;
+    padding: 0 2rem 0 0.75rem;
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    background: var(--app-surface-raised) var(--ui-select-chevron) no-repeat right 0.7rem center;
+    color: var(--app-text);
+    font-size: 14px;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: border-color 150ms;
+  }
+
+  .ui-select:hover:not(:disabled) {
+    border-color: var(--app-border-strong);
+  }
+
+  .ui-select:focus-visible {
+    outline: 2px solid var(--app-ring);
+    outline-offset: 2px;
+  }
+
+  .ui-select:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  @supports (appearance: base-select) {
+    .ui-select,
+    .ui-select::picker(select) {
+      appearance: base-select;
+    }
+
+    .ui-select {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding-right: 0.65rem;
+      background-image: none;
+    }
+
+    /* The browser's default arrow is a filled triangle; reuse the fallback's chevron
+       so the field looks the same in every browser. */
+    .ui-select::picker-icon {
+      content: var(--ui-select-chevron);
+      width: 12px;
+      height: 12px;
+      transition: rotate 150ms;
+    }
+
+    .ui-select:open::picker-icon {
+      rotate: 180deg;
+    }
+
+    .ui-select:open {
+      border-color: var(--app-border-strong);
+    }
+
+    .ui-select::picker(select) {
+      min-width: anchor-size(width);
+      margin-block: 4px;
+      padding: 4px;
+      /* Match the field's own edge, which each page sets to its quiet line color. */
+      border: 1px solid;
+      border-color: inherit;
+      border-radius: 10px;
+      background: var(--app-surface-raised);
+      color: var(--app-text);
+      box-shadow: var(--app-shadow-card);
+    }
+
+    .ui-select option {
+      padding: 0.45rem 0.6rem;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .ui-select option:hover,
+    .ui-select option:focus-visible {
+      outline: none;
+      background: var(--app-surface-soft);
+    }
+
+    .ui-select option:checked {
+      font-weight: 600;
+    }
+
+    .ui-select option::checkmark {
+      color: var(--app-muted);
+    }
+  }
+
   .ui-btn-primary:disabled,
   .ui-btn-secondary:disabled,
   .ui-btn-danger:disabled {
