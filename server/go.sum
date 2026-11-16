@@ -47,8 +47,8 @@ github.com/prometheus/common v0.72.0 h1:tAYsE+sPJxIncDAobm4H5aQjmox9ZxEIIqPbiffa
 github.com/prometheus/common v0.72.0/go.mod h1:77NWqAQ2tXT7BIK40qjJdw5Acrsrg1TlHAnsQi3i6mk=
 github.com/prometheus/procfs v0.22.0 h1:6q9+/JL9IKAPbCmBrv9n5O5Ty3NKnciV5X7YGw0oics=
 github.com/prometheus/procfs v0.22.0/go.mod h1:CvmFr/GVhIjIvWJZW3tgkODBQMRIf0EyWMQLHCHab58=
-github.com/ruhuang2001/memobird-go v0.0.4 h1:KY2M3p1f86kjhadD2hSALtfevzBG7N9IhgbyGKDmhpA=
-github.com/ruhuang2001/memobird-go v0.0.4/go.mod h1:4MmByBHU8N6nCYE8qL8OvExvLAv5rlUq4md+Nuo4BXE=
+github.com/ruhuang2001/memobird-go v0.0.5 h1:GWqA62svsHepxZ/IBBVb9RcwZHClKJaDGbb+L2eqXmA=
+github.com/ruhuang2001/memobird-go v0.0.5/go.mod h1:6y746rAfxWzd8gtrxyaDDZhmqrgbw/9RU+pWuDwYzak=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=

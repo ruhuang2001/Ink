@@ -8,7 +8,7 @@ require (
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/joho/godotenv v1.5.1
 	github.com/prometheus/client_golang v1.25.0
-	github.com/ruhuang2001/memobird-go v0.0.4
+	github.com/ruhuang2001/memobird-go v0.0.5
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
